@@ -51,6 +51,25 @@ def main(argv=None) -> int:
     sp = sub.add_parser("reconcile", help="完整性检测（断链/hash/漂移/缺失/orphan）")
     sp.set_defaults(func=cmd_reconcile)
 
+    # ---- P1-A Evented Freeze ----
+    sp = sub.add_parser("freeze-report", help="P1-A: 冻结 CURRENT → REPORT-NNN + Event + receipt（单一事务）")
+    sp.add_argument("--idempotency-key", dest="idempotency_key", required=True)
+    sp.add_argument("--actor", required=True)
+    sp.add_argument("--authorization-ref", dest="authorization_ref", required=True)
+    sp.add_argument("--reason-refs", dest="reason_refs", default="")
+    sp.add_argument("--crash-after", dest="crash_after", default=None,
+                    help="故障注入点（测试用）：after-plan/after-staging/after-report-install/...")
+    sp.set_defaults(func=cmd_freeze_report)
+
+    sp = sub.add_parser("tx-reconcile", help="P1-A: 崩溃恢复 / 半提交判定 / canonical 重建")
+    sp.set_defaults(func=cmd_tx_reconcile)
+
+    sp = sub.add_parser("tx-status", help="P1-A: 列出事务目录状态（plan/state/marker/staging）")
+    sp.set_defaults(func=cmd_tx_status)
+
+    sp = sub.add_parser("tx-reset-guard", help="P1-A: 检查 .index reset 是否被 unresolved WAL 阻止")
+    sp.set_defaults(func=cmd_tx_reset_guard)
+
     args = p.parse_args(argv)
     if args.db is None:
         args.db = os.path.join(args.root, DEFAULT_DB)
@@ -85,6 +104,43 @@ def cmd_index(args):
 
 def cmd_reconcile(args):
     return run_reconcile(args.root, args.db, args.gitdir)
+
+
+# ---- P1-A 命令 ----------------
+
+def cmd_freeze_report(args):
+    from .tx.freeze import freeze_report
+    reason_refs = [r for r in args.reason_refs.split(",") if r] if args.reason_refs else []
+    return freeze_report(
+        root=args.root, db_path=args.db,
+        idempotency_key=args.idempotency_key,
+        actor=args.actor, authorization_ref=args.authorization_ref,
+        reason_refs=reason_refs, crash_after=args.crash_after,
+    )
+
+
+def cmd_tx_reconcile(args):
+    from .tx.recover import reconcile_tx
+    return reconcile_tx(args.root, args.db)
+
+
+def cmd_tx_status(args):
+    import os as _os
+    txdir = _os.path.join(args.root, ".index", "tx")
+    entries = []
+    if _os.path.isdir(txdir):
+        for name in sorted(_os.listdir(txdir)):
+            full = _os.path.join(txdir, name)
+            entries.append({"name": name, "size": _os.path.getsize(full)})
+    return {"query_id": "tx-status", "query_type": "tx-status", "status": "success",
+            "authority": "derived", "source_watermark": {},
+            "results": [{"tx_dir": txdir, "entries": entries}],
+            "warnings": [], "errors": [], "error_semantic": None}
+
+
+def cmd_tx_reset_guard(args):
+    from .tx.recover import reset_index_guard
+    return reset_index_guard(args.root, args.db)
 
 
 if __name__ == "__main__":

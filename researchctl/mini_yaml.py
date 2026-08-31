@@ -23,6 +23,10 @@ def _parse_scalar(raw: str) -> Any:
         return True
     if raw.lower() == "false":
         return False
+    if raw == "[]":
+        return []
+    if raw == "{}":
+        return {}
     if (raw.startswith('"') and raw.endswith('"')) or (raw.startswith("'") and raw.endswith("'")):
         return raw[1:-1]
     # 数字（整数 / 浮点 / 带符号）
@@ -58,9 +62,10 @@ def _lines(text: str) -> List[Tuple[int, str]]:
 
 
 class _Parser:
-    def __init__(self, lines: List[Tuple[int, str]]):
+    def __init__(self, lines: List[Tuple[int, str]], strict: bool = False):
         self.lines = lines
         self.i = 0
+        self.strict = strict
 
     def _peek(self) -> Tuple[int, str]:
         if self.i < len(self.lines):
@@ -95,6 +100,8 @@ class _Parser:
             self._consume()
             key, _, value_raw = content.partition(":")
             key = key.strip()
+            if self.strict and key in result:
+                raise ValueError(f"duplicate key: {key}")
             value_raw = value_raw.strip()
             if value_raw == "":
                 # 嵌套块或空值
@@ -143,11 +150,79 @@ class _Parser:
         return result
 
 
-def load(text: str) -> Any:
-    """解析 YAML 文本，返回 Python 对象。"""
-    return _Parser(_lines(text)).parse()
+def load(text: str, strict: bool = False) -> Any:
+    """解析 YAML 文本，返回 Python 对象。strict=True 时检测重复 key 并抛 ValueError。"""
+    return _Parser(_lines(text), strict=strict).parse()
 
 
-def load_file(path: str) -> Any:
+def load_file(path: str, strict: bool = False) -> Any:
     with open(path, encoding="utf-8") as f:
-        return load(f.read())
+        return load(f.read(), strict=strict)
+
+
+def _scalar_str(v: Any) -> str:
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    s = str(v)
+    if s == "" or s.startswith(('"', "'")) or s.endswith(('"', "'")):
+        return '"' + s + '"'
+    return s
+
+
+def _dump_value(v: Any, indent: int, lines: List[str]) -> None:
+    """把 v 追加到 lines，缩进为 indent。格式与本解析器 load 可回读一致。"""
+    pad = "  " * indent
+    if isinstance(v, dict):
+        for k in v.keys():
+            item = v[k]
+            if item is None:
+                lines.append(f"{pad}{k}: null")
+            elif isinstance(item, list) and not item:
+                lines.append(f"{pad}{k}: []")
+            elif isinstance(item, dict) and not item:
+                lines.append(f"{pad}{k}: {{}}")
+            elif isinstance(item, (dict, list)):
+                lines.append(f"{pad}{k}:")
+                _dump_value(item, indent + 1, lines)
+            else:
+                lines.append(f"{pad}{k}: {_scalar_str(item)}")
+    elif isinstance(v, list):
+        for item in v:
+            if isinstance(item, dict):
+                # list item 首行: "- key: value"，其余子字段缩进 +1（parser 期望 > list indent）
+                for i, (k, val) in enumerate(item.items()):
+                    if i == 0:
+                        prefix = f"{pad}- {k}"
+                        sub_indent = indent + 1
+                    else:
+                        prefix = f"{pad}  {k}"
+                        sub_indent = indent + 1
+                    if val is None:
+                        lines.append(f"{prefix}: null")
+                    elif isinstance(val, list) and not val:
+                        lines.append(f"{prefix}: []")
+                    elif isinstance(val, dict) and not val:
+                        lines.append(f"{prefix}: {{}}")
+                    elif isinstance(val, (dict, list)):
+                        lines.append(f"{prefix}:")
+                        _dump_value(val, sub_indent + 1, lines)
+                    else:
+                        lines.append(f"{prefix}: {_scalar_str(val)}")
+            elif isinstance(item, list):
+                lines.append(f"{pad}-")
+                _dump_value(item, indent + 1, lines)
+            else:
+                lines.append(f"{pad}- {_scalar_str(item)}")
+    else:
+        lines.append(f"{pad}{_scalar_str(v)}")
+
+
+def dump(doc: Any) -> str:
+    """序列化为本解析器可回读的 YAML 文本（§6.1：磁盘为 YAML，hash 用 canonical JSON）。"""
+    lines: List[str] = []
+    _dump_value(doc, 0, lines)
+    return "\n".join(lines) + "\n"

@@ -5,3 +5,6 @@ researchctl/__pycache__/
 *.pyc
 .DS_Store
 *.sqlite
+
+# 项目记忆内部数据
+.project-memory/
