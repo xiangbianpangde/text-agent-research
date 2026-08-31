@@ -1,0 +1,7 @@
+# 顶层仓库忽略
+fixture/
+researchctl/__pycache__/
+**/__pycache__/
+*.pyc
+.DS_Store
+*.sqlite

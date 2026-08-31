@@ -1,0 +1,10 @@
+{
+  "name": "researchctl",
+  "version": "0.1.0",
+  "description": "Text Agent 检索内核（P0-B）：只读检索，不写入 T0–T3",
+  "requires-python": ">=3.8",
+  "dependencies": [],
+  "scripts": {
+    "researchctl": "python3 -m researchctl"
+  }
+}

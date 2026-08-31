@@ -1,0 +1,13 @@
+# researchctl — P0-B 只读检索内核
+#
+# 零第三方依赖：仅使用 Python 标准库（sqlite3 / hashlib / argparse / re）。
+# 已内置 mini_yaml 子集解析器（researchctl/mini_yaml.py）替代 PyYAML。
+#
+# 运行要求：Python >= 3.8
+#
+# 运行：
+#   python3 -m researchctl --root fixture index
+#   python3 -m researchctl --root fixture query
+#   python3 -m researchctl --root fixture sources CURRENT
+#   python3 -m researchctl --root fixture trace CURRENT
+#   python3 -m researchctl --root fixture history
