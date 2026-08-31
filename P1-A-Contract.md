@@ -2,9 +2,10 @@
 
 > 文档性质：P1-A 实施合同（frozen contract）。内容经确认后，作为 Evented Freeze 闭环的唯一边界依据。
 >
-> 依据：P0-Contract.md（§13 P1-01/02/07）及 2026-08-30 P1 边界裁决 + 五轮阻断项修订。
+> 依据：P0-Contract.md（§13 P1-01/02/07）、2026-08-30 P1 边界裁决、五轮阻断项修订
+> 及 Sol 审核（2026-08-31，NO-GO → 修订版 8 按 P1-1~P1-3 + P2-1~P2-10 修订）。
 >
-> 当前状态：起草中（修订版 6），冻结前不开始实现。
+> 当前状态：起草中（修订版 8），冻结前不开始实现。
 
 ---
 
@@ -16,7 +17,7 @@
 event append / transaction 基础
   → freeze-report（CURRENT → REPORT-NNN + sources manifest）
   → ReportFrozen event（与 freeze 同一事务）
-  → 崩溃恢复 / 幂等 / 并发 / 零写入测试
+  → 崩溃恢复 / 幂等 / 并发 / zero canonical mutation 测试
 ```
 
 **关键裁决**：
@@ -37,9 +38,9 @@ event append / transaction 基础
 |---|---|---|
 | **Event 真源（canonical）** | `fixture/events/EV-000001.yaml` … | Git 管理、append-only、每事件一文件、不可修改 |
 | **Commit receipt（canonical，不可变）** | `fixture/events/EV-000001.commit` | CURRENT 提交的**可验证 canonical commit evidence**；CURRENT rename 完成后写入；不可删除 |
-| **Plan snapshot（派生，不可变）** | `fixture/.index/tx/<tx_id>.plan.yaml` | 事务计划**不可变快照**（写后不修改）；可从事件+receipt+文件一致性重建（§5.5） |
+| **Plan snapshot（派生，不可变）** | `fixture/.index/tx/<tx_id>.plan.yaml` | **in-flight WAL / recovery journal**：事务计划不可变快照（写后不修改）；committed 后完成使命，删除 `.index/` 后**不恢复原始 plan**（§5.5 只重建 derived marker，P2-2） |
 | **Runtime state（派生，可变）** | `fixture/.index/tx/<tx_id>.state.yaml` | 可变运行状态（proposed…needs_reconcile），**不参与 plan_hash** |
-| **Transaction marker（派生，不可变）** | `fixture/.index/tx/<tx_id>.marker` | COMMITTED 标志（只 hash plan snapshot + receipt）；可从事件+receipt+文件一致性重建（§5.5） |
+| **Transaction marker（派生，不可变）** | `fixture/.index/tx/<tx_id>.marker` | **derived committed cache**：COMMITTED 缓存标志（只 hash plan snapshot + receipt）；`committed` 真值由 canonical receipt 承载，marker 丢失 ≠ 事务回退（P2-1）；可从事件+receipt+文件一致性重建（§5.5） |
 | **staging** | `fixture/.index/tx/staging/` | 临时文件区，可清理 |
 | **SQLite events 表（投影）** | `.index/research.sqlite` | 永远派生，可重建，不成为真源 |
 | **Agent Execution Log** | 不属于 Event 真源 | 严格分离，不写入 events/ |
@@ -50,6 +51,9 @@ event append / transaction 基础
 > 2. **plan 与运行时状态分离**：`plan.yaml` 是不可变快照（marker 只 hash 它）；`state.yaml` 是可变状态（`needs_reconcile` 等），**不参与任何 hash**。改变 state 不会使 marker 失效。
 > 3. receipt 是"报告/Event/CURRENT 全部提交"的**可验证 canonical commit evidence**：它在 CURRENT rename 完成后写入；半提交时不存在。
 > 4. 只有 report + manifest + receipt 三者一致才能重建 committed marker（§5.5）；半提交永不提升（T30）。
+> 5. **Canonical COMMITTED 真值 = 有效 receipt + Event/report/manifest canonical 校验通过**；marker 只是 derived committed cache
+>    （丢失后事务仍 committed，仅 `materialized_marker=false`，P2-1）。
+> 6. **plan = in-flight WAL**：事务 committed 后完成使命；删除 `.index/` 后重建的是 derived marker，不声称恢复原始 plan bytes（P2-2）。
 
 ### 1.2 与现有 Worklog 的关系
 
@@ -60,7 +64,8 @@ event append / transaction 基础
 ### 1.3 编号规则
 
 - `event_id`: `EV-000001` 起，按 `events/` 目录现有最大编号 +1 分配。
-- `transaction_id`: `TX-000001` 起，同一规则。
+- `transaction_id`: `TX-000001` 起；**next = max(transaction_id in canonical `events/EV-*.yaml` + `events/EV-*.commit`) + 1**；
+  `.index/` 永远不参与 ID authority——删 `.index/` 后不得重新分配已用编号（P2-8，T44）。
 - 编号分配在事务 prepare 阶段完成，与写入同锁。
 
 ---
@@ -82,7 +87,7 @@ schema_version: 1
 transaction_id: TX-000001
 tx_state: committed             # 固定值；物理确认由 receipt + marker 承载
 idempotency_key: freeze-2026-08-30-01   # 必填
-request_fingerprint: "sha256:..."       # canonical 请求指纹（§6.1）
+request_fingerprint: "sha256:..."       # 请求身份指纹（仅调用方参数，§6.1）
 actor: text-agent               # 执行者；非授权者
 authorization_ref: AUTH-0001    # 显式授权引用（§6.3）
 reason_refs: []                 # 触发原因引用（如 D021）；既参与 fingerprint，也持久化作审计
@@ -102,7 +107,8 @@ input_refs:                     # 结构化：每项含 role + path + content_ha
     reference_scope: current
   - role: source
     path: organized/EXP-017/result.md
-    content_hash: "sha256:..."      # 每个 source 的 pinned hash（冻结前）
+    source_type: file               # file | directory（继承 P0 Source Reference verifier，§4.2/§6.1，P2-5）
+    content_hash: "sha256:..."      # 每个 source 的 pinned hash（冻结前；directory 为 SHA256(sorted manifest)）
     reference_scope: current
 
 output_refs:                    # 结构化：每项含 role + path + content_hash
@@ -138,13 +144,16 @@ committed_at: 2026-08-30T12:00:01+08:00
 ```
 
 - receipt 通过"临时文件 → fsync → 原子 rename"写入（§3.2 步骤 12）。
-- **receipt 的 canonical bytes/hash 必须在 plan 阶段（步骤 7）预先计算并写入 plan 的 files[receipt].content_hash；
-  步骤 12 必须生成与预计算完全一致的 receipt**（reconcile 校验：若不一致 → HASH_MISMATCH）。
+- **receipt 的 hash 不在 plan 阶段预计算**（receipt 含 `committed_at` 真实提交时间，计划时未知——P2-3 闭合）：
+  plan 的 files[receipt] 只含 role/path/action；步骤 12 生成实际 receipt 后，其 content_hash 由 marker 的 `receipt_hash` 绑定；
+  reconcile 对 receipt 实际内容重新计算并比对。
 - receipt **不可删除、不可改写**（canonical 不可变层）。
 - **receipt 是"报告/Event/CURRENT 全部提交"的可验证 canonical commit evidence**：它只在 CURRENT rename 完成后写入；半提交（CURRENT 未 rename）时 receipt 不存在。
 - **信任模型**：本证据在"所有 canonical 写入必须经 researchctl 受控写入路径"的信任模型下可验证；普通 YAML 文件本身**不是密码学防伪证据**。P1-A 不引入签名/权限模型，故措辞为"**可验证的 canonical commit evidence**"，而非"不可伪造"。
   - 因此**能检测**：结构不一致、与 Event/report/manifest 绑定不匹配的篡改（T34）。
-  - **不能宣称检测**：对 `current_after_hash` 与 `output_digest` 的一致性同步篡改（无签名，无外部锚点）。
+  - **能检测**：意外损坏（accidental corruption）、局部/不一致篡改（partial/incoherent mutation）。
+  - **不能检测**：拥有 canonical filesystem 写权限的主体对 Event/report/manifest/receipt 及其中全部 hash 的
+    **一致重写（coherent rewrite）**——无签名、无 append-only 外部锚点（P2-9）。
 
 ### 2.4 事件闭集（P1-A）
 
@@ -182,29 +191,32 @@ WRITING / COMMITTED 中途崩溃 → 恢复后判定为 NEEDS_RECONCILE 或补�
 | PROPOSED | 输入已收集（actor/授权/sources/目标 REPORT 号），未做任何写入 |
 | VALIDATED | 全部 gate 通过（§4.2），准备写入 |
 | WRITING | plan/staging/rename 进行中（可崩溃，可恢复） |
-| COMMITTED | **receipt 已写**（CURRENT 已提交）**且 marker 已写**；报告 + sources manifest + Event + CURRENT 全部就位且 hash 匹配 plan snapshot |
+| COMMITTED | **receipt 已写且绑定验证通过（§5.5 a–h）** = canonical commit 真值；Event/report/manifest canonical 校验通过；marker 为 derived cache（存在则写入，缺失不回退真值，P2-1） |
 | MATERIALIZED | SQLite 派生索引与 INDEX.md 已更新 |
 | NEEDS_RECONCILE | hook/恢复无法自动判定（记录在 state.yaml，不影响 plan/marker hash） |
 
 ### 3.2 单事务内操作顺序（固定）
 
 ```text
-1. 获取锁（.index/tx/lock）
+1. 获取锁（`.researchctl/locks/freeze.lock`，§6.2）
 2. 读取 basis_git_commit = git rev-parse HEAD；读取 CURRENT.md + CURRENT.sources.yaml before hash
-3. 计算 candidate request_fingerprint（canonical JSON，§6.1）
-4. 幂等检查（idempotency_key + candidate fingerprint；同 key 有 staging/半提交 → TX_INCOMPLETE）
+3. **幂等检查（先查 key，再建 basis，P1-1）**：按 idempotency_key 查 canonical Event/receipt（§6.1）——
+   已 committed 且 request_fingerprint 相同 → 直接返回原事务/事件结果；
+   已 committed 但 request_fingerprint 不同 → IDEMPOTENCY_CONFLICT，REJECT；
+   存在 staging/半提交 → TX_INCOMPLETE，REJECT；均未命中才继续
+4. 计算 candidate request_fingerprint（请求身份，仅调用方参数，§6.1）与 basis_digest（执行内容摘要，§6.1）
 5. PRE-GATE 全部校验（§4.2）
 6. 分配 event_id / transaction_id
 7. 写 plan snapshot（.index/tx/<tx_id>.plan.yaml，schema 见 §3.7，写后不可变）
    + 写 runtime state 初始（.index/tx/<tx_id>.state.yaml，state: validated）
 8. staging 写入：REPORT-NNN.md、REPORT-NNN.sources.yaml、EV-NNNNNN.yaml、CURRENT.md@new
 9. 校验 staging 各文件 hash 与 plan snapshot 一致
-10. 最终 CAS 检查（rename 前）：重新读取 CURRENT.md/CURRENT.sources.yaml hash 与 basis_git_commit，
-    任一与步骤 2/3 记录不一致 → STALE_BASIS，ABORT（清理 staging/plan/state）
-11. 原子 rename 顺序：**报告/Event → CURRENT.md**（CURRENT 最后 rename）
-12. 写 commit receipt（events/EV-NNNNNN.commit，临时文件 → fsync → 原子 rename）——CURRENT 已提交的证据；
-    **receipt 的 canonical bytes/hash 必须在 plan 阶段（步骤 7）预先计算并写入 plan 的 files[receipt].content_hash；
-    步骤 12 必须生成与预计算完全一致的 receipt**（否则 plan_hash 不匹配，reconcile 报 HASH_MISMATCH）
+10. 最终 **optimistic stale-basis 检查**（rename 前，§6.2 cooperative writer 模型）：重新读取 CURRENT.md/CURRENT.sources.yaml hash
+    与 basis_git_commit，任一与步骤 2/4 记录的 basis_digest 不一致 → STALE_BASIS，ABORT（清理 staging/plan/state）
+11. 原子 rename 顺序：**报告/Event → CURRENT.md**（CURRENT 最后 rename）；
+    所有 `action: create` 使用 **atomic no-clobber install**（§4.3）：目标已存在 → TARGET_OCCUPIED / TX_INCOMPLETE，绝不覆盖（P1-2）
+12. 写 commit receipt（events/EV-NNNNNN.commit，临时文件 → fsync → 原子 no-clobber rename）——CURRENT 已提交的证据；
+    receipt 的 hash 在**生成后**计算（含真实 committed_at），由 marker 的 receipt_hash 绑定（P2-3，不在 plan 预计算）
 13. marker 写入：写临时 marker 文件 → fsync → 原子 rename 到 .index/tx/<tx_id>.marker
 14. post-commit hook：materialize（SQLite events 表 + 派生索引 + INDEX.md）
 15. 释放锁
@@ -213,7 +225,7 @@ WRITING / COMMITTED 中途崩溃 → 恢复后判定为 NEEDS_RECONCILE 或补�
 ### 3.3 COMMITTED 边界与原子性语义
 
 - **CURRENT.md 属于 COMMITTED 边界**，且其提交证据是 **receipt**（§2.3），不是 hash 记录。
-- COMMITTED = receipt 存在 + marker 存在 + 报告/manifest/Event/CURRENT hash 匹配 plan snapshot。
+- COMMITTED = **有效 receipt（绑定验证 §5.5 a–h 通过）+ Event/report/manifest canonical 校验通过**；marker 为 derived cache（P2-1）。
 - 步骤 1–10 失败：零写入（或仅派生 staging/plan/state 残留，可清理），ABORTED/REJECTED。
 - 步骤 11 后、12 前崩溃（CURRENT 已 rename 或未 rename）：**receipt 不存在 → 半提交判定**（§5.2），reindex 永不提升为 committed（T30）。
 - 步骤 12 后、13 前崩溃：receipt 存在、marker 缺失 → 可恢复：补 marker（§5.2/§5.5）。
@@ -228,6 +240,9 @@ WRITING / COMMITTED 中途崩溃 → 恢复后判定为 NEEDS_RECONCILE 或补�
 - 不引入其他独立 hook 阶段。
 
 ### 3.5 marker schema（不可变，写入即 committed；只 hash immutable snapshot）
+
+**marker 定位（P2-1 闭合）**：marker 是 **derived committed cache**——`committed` 真值来自 canonical receipt；
+marker 丢失 → 事务仍 committed（`committed=true, materialized_marker=false`），reconcile/reindex 按 §5.5 重建缓存。
 
 ```yaml
 # .index/tx/<tx_id>.marker
@@ -267,6 +282,7 @@ transaction_id: TX-000001
 event_id: EV-000001
 idempotency_key: freeze-2026-08-30-01
 request_fingerprint: "sha256:..."
+basis_digest: "sha256:..."         # 执行内容摘要（§6.1：basis_commit + CURRENT before + sources pin）
 actor: text-agent
 authorization_ref: AUTH-0001
 reason_refs: []                 # 持久化（与事件一致）
@@ -293,7 +309,7 @@ files:
   - role: receipt
     path: events/EV-000001.commit
     action: create
-    content_hash: "sha256:..."    # receipt bytes hash
+    # content_hash 不在此预计算（receipt 含真实 committed_at，P2-3）；提交后由 marker.receipt_hash 绑定
   - role: current.md
     path: reports/CURRENT.md
     action: update
@@ -332,7 +348,7 @@ researchctl freeze-report \
 - 命令必须显式提供 `--authorization-ref`，否则 REJECT（§6.3）。
 - `--reason-refs` 既参与 fingerprint，也持久化于事件与 plan snapshot（§2.2/§3.7）。
 
-### 4.2 PRE-GATE（全部通过才写入；任一失败 → 零写入 REJECT）
+### 4.2 PRE-GATE（全部通过才写入；任一失败 → zero canonical mutation REJECT）
 
 | Gate | 失败语义 |
 |---|---|
@@ -340,13 +356,16 @@ researchctl freeze-report \
 | idempotency_key 未使用或可重放 | `IDEMPOTENCY_CONFLICT` / 幂等重放（§6.1） |
 | 同 key 存在 staging/半提交 | `TX_INCOMPLETE` |
 | CURRENT.md + CURRENT.sources.yaml 存在且可解析 | `SOURCE_MISSING` |
-| 每个 source：path 存在、bytes hash 匹配（current scope） | `SOURCE_MISSING` / `HASH_MISMATCH` |
+| 每个 source：path 存在、hash 匹配（current scope；**继承 P0 Source Reference verifier**：file → SHA256(raw bytes)，directory → SHA256(sorted manifest)，P2-5） | `SOURCE_MISSING` / `HASH_MISMATCH` |
 | CURRENT 与 sources.yaml 无冲突 | `CURRENT_CONFLICT` |
 | 授权存在且格式合法且作用域匹配 | `AUTH_NOT_FOUND` / `AUTH_INVALID` / `AUTH_SCOPE_DENIED` |
 | 工作树无未提交变更（fixture git clean） | `DIRTY_WORKTREE` |
 | 目标 REPORT 号未被占用 | `TARGET_OCCUPIED` |
 
 **失败时零写入**：不创建任何报告/事件/正式文件；仅允许派生 plan/staging/state 残留（可清理），且必须清理。
+
+**create 目标保护（P1-2）**：PRE-GATE 的 `TARGET_OCCUPIED` 只是预检查；正式保护由 **atomic no-clobber install** 承担（步骤 8→11）：
+gate 后、rename 前若目标被外部创建 → no-clobber 失败 → `TARGET_OCCUPIED` / `TX_INCOMPLETE`，**绝不覆盖**（T42）。
 
 ### 4.3 CURRENT 与 Historical 的原子关系
 
@@ -371,7 +390,29 @@ researchctl freeze-report \
 - reconcile 检测 freeze-marker 区块是否与最新 marker/事件一致（人工篡改 → `HASH_MISMATCH`）。
 - 冻结不是删除 CURRENT：CURRENT 继续存在供下一轮维护，其叙事主体保持人读。
 - CURRENT rename 顺序：报告/Event 先 rename → CURRENT 最后 rename（§3.2 步骤 11）。
-- 若 CURRENT 在 gate 后被改动（含最终 CAS 检查，§3.2 步骤 10）→ `STALE_BASIS`，REJECT 零写入。
+- 若 CURRENT 在 gate 后被改动（含最终 optimistic stale-basis 检查，§3.2 步骤 10）→ `STALE_BASIS`，REJECT 零写入。
+
+**确定性冻结变换（P2-4 闭合，T46）**：
+
+```text
+report_bytes = CURRENT_before 的 bytes，去除末尾唯一合法的 researchctl:freeze-marker 区块
+              （含 `<!-- researchctl:freeze-marker -->` … `<!-- /researchctl:freeze-marker -->` 完整标记）后的内容
+historical_source_ref = 每个 current source_ref 复制：
+    reference_scope := historical
+    git_commit := basis_git_commit
+    除上述两字段外不得静默修改任何 source identity 字段
+```
+
+- 若 CURRENT_before 不含 managed 区块 → report_bytes = 原始 bytes（首次冻结）。
+- 若含多个/非法 managed 区块 → 不静默 strip，reconcile 报 `HASH_MISMATCH`，人工处置。
+- **第二次 freeze 的 REPORT-NNN 不得携带上一次的 freeze-marker**（T46）。
+
+**CURRENT 并发模型（P1-2 闭合，cooperative writer）**：
+
+> freeze 期间所有 CURRENT canonical mutation 必须经 researchctl 同一事务锁（§6.2）。
+> **非 cooperating editor 与 researchctl 的并发编辑不在 P1-A 保证范围**。
+> 在此模型下，步骤 10 的检查称 **optimistic stale-basis check**（非原子 CAS）：锁内无并发写者，检查–rename 窗口内 CURRENT 不会变化；
+> 模型外（人工在检查与 rename 之间编辑）不承诺检测/保护（T41 验证边界语义）。
 
 ### 4.4 Git pin 规则（闭合）
 
@@ -379,7 +420,7 @@ researchctl freeze-report \
 - Historical manifest（REPORT-NNN.sources.yaml）中每个 source 的 `git_commit` **使用该 basis commit**（工作树 clean + hash 匹配 ⇒ source 内容与 HEAD 一致）。
 - **P1-A 不自动创建 Git commit**。
 - freeze 后工作树必然变 dirty（新增 REPORT/Event/receipt、CURRENT 修改）→ **下一次 freeze 前必须由外部流程完成 Git commit**，否则 gate 报 `DIRTY_WORKTREE`。
-- rename 前最终 CAS 检查再次比对 `basis_git_commit`，HEAD 在 gate 后变化 → `STALE_BASIS`（§3.2 步骤 10）。
+- rename 前最终 optimistic stale-basis 检查再次比对 `basis_git_commit`，HEAD 在 gate 后变化 → `STALE_BASIS`（§3.2 步骤 10）。
 
 ---
 
@@ -392,8 +433,8 @@ researchctl freeze-report \
 | prepare/validate 前 | 无写入 | 直接 ABORT，清理锁 |
 | plan/state 写入后、staging 前 | plan/state 存在，无 staging 正式文件 | 删除 plan/state，ABORT |
 | staging 中 | plan + staging 存在，无正式文件 | 删除 staging + plan/state，ABORT |
-| rename 中（报告/Event 已 rename、CURRENT 未 rename） | plan + 部分正式文件，无 receipt，无 marker | 半提交判定（§5.2）：**CURRENT 未提交 → 不补 CURRENT**（除非 CAS 通过，见 §5.2） |
-| CURRENT 已 rename、receipt 未写 | 报告/Event/CURRENT 已就位，receipt 缺失 | 半提交判定：CAS 通过 → 补 receipt（幂等）；否则 NEEDS_RECONCILE |
+| rename 中（报告/Event 已 rename、CURRENT 未 rename） | plan + 部分正式文件，无 receipt，无 marker | 半提交判定（§5.2 三态）：**CURRENT 未提交 → 不补 CURRENT**（除非 case 1 通过，见 §5.2） |
+| CURRENT 已 rename、receipt 未写 | 报告/Event/CURRENT 已就位，receipt 缺失 | **三态判定（§5.2 B，P1-3）**：case 2（live == planned after）→ 补 receipt + marker，**不改 CURRENT**；否则 NEEDS_RECONCILE |
 | receipt 写入中（临时文件未 rename 完成） | 损坏/缺失 receipt | 视同无 receipt，半提交判定 |
 | receipt 已写、marker 未写 | receipt 存在，marker 缺失 | 补 marker（幂等）；**receipt 有效则不改 CURRENT**（CURRENT 可能已被人工修改，T38） |
 | marker 写入中（临时文件未 rename 完成） | 损坏 marker（校验失败） | 视同无 marker，按半提交判定 |
@@ -405,15 +446,18 @@ researchctl freeze-report \
 
 ```text
 以 plan snapshot 为基准：逐一比对 plan 中每个文件（role/path/hash）与正式路径实际 hash。
-A. receipt 存在且绑定验证通过（§5.5 a–g）：
+A. receipt 存在且绑定验证通过（§5.5 a–h）：
    → CURRENT 已提交（receipt 是证据）；**不再比较 CURRENT live hash**（CURRENT 可能在提交后被人工修改，T22/T38）
    → 验证 report/manifest 文件存在且 hash 匹配；
    → 直接补写 marker（含 event_hash/receipt_hash/plan_snapshot_hash），不改 CURRENT，进入 MATERIALIZED（幂等完成）
    → report/manifest 缺失或 hash 不匹配 → NEEDS_RECONCILE
-B. receipt 缺失（CURRENT 未提交或 receipt 半写）：
-   报告/Event 已就位、CURRENT 未就位 → 尝试补 CURRENT rename，但补写前必须 CAS 校验（见下）
-   CAS 通过 → 补 CURRENT rename → 写 receipt → 补 marker（幂等）
-   CAS 失败 → NEEDS_RECONCILE / STALE_BASIS，不得覆盖
+B. receipt 缺失（CURRENT 未提交或 receipt 半写）→ **三态判定（P1-3，T9a/T39）**：
+   case 1: live CURRENT == plan.current_before_hash 且 CURRENT.sources == before 且 HEAD == basis
+     → CURRENT 尚未提交 → optimistic stale-basis 校验通过 → 补 CURRENT rename → 写 receipt → 补 marker（幂等）
+   case 2: live CURRENT == plan.current_after_hash 且 CURRENT.sources == before 且报告/Event/manifest 全部匹配 plan 且 HEAD == basis
+     → CURRENT rename 已完成 → **不再改 CURRENT** → 直接补 receipt → 补 marker（幂等）
+   case 3: live CURRENT != before 且 != planned after（或 sources/HEAD 不匹配）
+     → 人或其他进程已修改 → STALE_BASIS / NEEDS_RECONCILE，**绝不覆盖**
 C. 其他部分一致 → NEEDS_RECONCILE：保留现场，不自动删除、不自动回滚
 D. 无 plan 且无 marker → 使用 §5.5 重建规则
 ```
@@ -422,16 +466,16 @@ D. 无 plan 且无 marker → 使用 §5.5 重建规则
 
 > 一旦 receipt 有效（绑定验证通过），CURRENT 的提交已被证明；此后 CURRENT 的任何人修改都是正常可变状态（T22）。
 > 恢复**只验证 receipt、Event、report、manifest 的绑定**，**不比较 CURRENT live hash，不改 CURRENT**（T38）。
-> 只有在 receipt 缺失（CURRENT 未提交）时才需要 CAS 保护性补写 CURRENT（T31）。
+> 只有在 receipt 缺失（CURRENT 未提交）时才需要 stale-basis 保护性补写 CURRENT（T31）。
 
-**恢复补写 CURRENT 前的 CAS 保护（仅 receipt 缺失场景）**：
+**恢复补写 CURRENT 前的 optimistic stale-basis 保护（仅 receipt 缺失场景）**：
 
 > 崩溃恢复补写 CURRENT 时，必须重新比对：
 > `current_before_hash`、`current_sources_before_hash`、`basis_git_commit` 三项与 plan snapshot 记录一致。
 > **任一不一致（例如人在恢复前修改了 CURRENT）→ `STALE_BASIS` / `NEEDS_RECONCILE`，不得覆盖人的新内容**（T31）。
 
 - **禁止**在无明确一致性证据时删除正式文件或自动回滚。
-- 恢复动作只允许：清理 staging/plan/state（未提交时）、补 CURRENT rename（CAS 通过）、补 receipt、补 marker、重放 materialize/hook。
+- 恢复动作只允许：清理 staging/plan/state（未提交时）、补 CURRENT rename（三态 case 1 通过）、补 receipt、补 marker、重放 materialize/hook。
 
 ### 5.3 已提交内容不可回滚
 
@@ -445,7 +489,7 @@ D. 无 plan 且无 marker → 使用 §5.5 重建规则
 CURRENT rename 前崩溃          → 直接读取旧 CURRENT（报告/Event 可能已存在，无 receipt，无 marker）
 CURRENT rename 后、有效 receipt 前 → 直接读取完整的新 CURRENT（文件已就位），
                                    但 researchctl 查询必须 fail_closed + TX_INCOMPLETE
-有效 receipt + marker 后        → 视为 committed，正常可见
+有效 receipt（marker 为 derived cache，缺失不影响 committed 真值）→ 视为 committed，正常可见
 ```
 
 - `researchctl sources CURRENT` / freeze 相关查询在"无有效 receipt 且有半提交残留"时返回 `fail_closed` + `TX_INCOMPLETE`，不返回半提交状态。
@@ -466,10 +510,11 @@ CURRENT rename 后、有效 receipt 前 → 直接读取完整的新 CURRENT（�
      e. receipt.report_hash == 事件 output_refs 的 report hash 且 == 报告文件实际 hash
      f. receipt.manifest_hash == 事件 output_refs 的 manifest hash 且 == manifest 文件实际 hash
      g. receipt.output_digest == canonical(receipt.report_hash, receipt.manifest_hash, receipt.current_after_hash)
-     h. receipt.current_after_hash == 事件 output_refs 中 current.md 的 content_hash（审计绑定，确保 receipt 与事件同源）
-  3. 上述 a–h 全部通过 → 补写 marker（plan snapshot 从事件 output_refs + receipt 派生；
-     event_hash 从事件实际内容计算；receipt_hash 从 receipt 实际内容计算；plan_snapshot_hash 重新计算），
-     标记为 committed
+     h. receipt.current_after_hash == 事件 output_refs 中 current.md 的 content_hash（**内部历史绑定**：receipt↔Event 同源验证；
+        绝不与 live CURRENT.md bytes 比较，P2-10）
+  3. 上述 a–h 全部通过 → 补写 **derived marker**（P2-2：不声称恢复原始 plan——plan 是 in-flight WAL，committed 后即完成使命；
+     marker 的 plan_snapshot_hash 基于重建的等价 plan 快照重新计算；event_hash 从事件实际内容计算；
+     receipt_hash 从 receipt 实际内容计算），标记为 committed（committed 真值来自 receipt，不依赖 marker）
   4. 任一不满足（含 receipt 缺失/篡改）→ 标记 NEEDS_RECONCILE（不索引该事件，不提升为 committed）
 ```
 
@@ -479,7 +524,7 @@ CURRENT rename 后、有效 receipt 前 → 直接读取完整的新 CURRENT（�
 > 2. 重建的充分必要证据 = **report + sources_manifest + receipt 三者一致**，且 receipt 内部绑定（event/transaction/hash）全部通过。
 >    receipt 的存在性是 CURRENT 曾完成提交的可验证证据——半提交（CURRENT 未 rename）时 receipt 不存在，
 >    因此**永远不会把半提交提升为 committed**（T30）。
-> 3. `current_after_hash` 仅作历史审计记录，不参与重建判定。
+> 3. `current_after_hash` 参与 receipt ↔ Event 的**内部历史绑定**（§5.5 h），但**绝不与 live CURRENT.md bytes 比较**（P2-10）。
 
 - 反例验证：freeze → CURRENT=A → 人工修改 CURRENT=B → 删 `.index/` → reindex 重建 marker 成功（report+manifest+receipt 均不可变）→ 旧 Event 完整恢复。
 - 这与 P0"删除 .index/ 后可完整 reindex"完全一致。
@@ -519,10 +564,10 @@ reconcile 新增检查：
 
 ```text
 1. 键按 UTF-8 字节字典序排序（递归）
-2. 数组保持原始顺序（source_refs 按 path 排序后写入）
-3. null 值字段省略（不写入 JSON）
+2. 数组保持原始顺序（source_refs 按 (path, role, reference_scope) 字典序全序排序后写入，P2-6 total ordering）
+3. null 值字段省略（不写入 JSON）；**schema 约定「缺字段 ≡ 显式 null」**（禁止 schema 区分二者，消除歧义，P2-6）
 4. 空数组保留为 []
-5. 字符串 UTF-8 编码，无尾随空白
+5. 字符串 UTF-8 编码；**不修改字符串内容**（不 trim 内部/首尾空白；「无尾随空白」仅指 serializer 输出层不产生多余空白）
 6. 布尔 true/false、数字不带引号
 7. 文件末尾无尾随换行
 ```
@@ -543,18 +588,35 @@ reconcile 新增检查：
 
 > report.md 与 CURRENT.md 按**原始文件 bytes** 计算 SHA-256（人维护，字节身份重要），不使用 canonical JSON。
 
-- `request_fingerprint = sha256(canonical JSON)`，覆盖：
-  `idempotency_key`、`actor`、`authorization_ref`、`reason_refs`、`basis_git_commit`、
-  `input_refs`（每个 input_ref 的 role/path/content_hash/reference_scope）。
-- `reason_refs` 既参与 fingerprint，也持久化于事件/plan（§2.2/§3.7）。
-- 判定规则：
-  - 同 key、同 fingerprint、已 COMMITTED（receipt + marker）→ 返回原事务/事件结果，不重复写入；
-  - 同 key、不同 fingerprint → `IDEMPOTENCY_CONFLICT`，REJECT 零写入；
-  - 同 key 但存在 staging/半提交（无有效 receipt/marker）→ `TX_INCOMPLETE`，**不得新建事务，也不得直接返回成功**。
+**请求身份与执行内容分离（P1-1 闭合，T3/T4）**：
+
+```text
+request_fingerprint（请求身份，重试不变） = sha256(canonical JSON of {
+  command_version, actor, authorization_ref, reason_refs })
+basis_digest（执行内容，本次实际冻结了什么） = sha256(canonical JSON of {
+  basis_git_commit,
+  current_before_hash(current_md, current_sources),
+  input_refs(role/path/source_type/content_hash/reference_scope) })
+```
+
+- `reason_refs` 既参与 request_fingerprint，也持久化于事件/plan（§2.2/§3.7）。
+- **关键：request_fingerprint 不含任何「事务执行后必然改变」的 server 状态**（不含 CURRENT before/after hash、
+  不含 basis_git_commit、不含 input_refs）。第一次 freeze 成功后 CURRENT 已变（H0→H1）、外部 commit 后 HEAD 也变，
+  但同一 idempotency_key 重试的 request_fingerprint 保持不变 → 「提交成功但客户端不知道结果」的幂等重放可达（T3）。
+- `basis_digest` 记录本次实际冻结状态（冻结前 CURRENT hash、basis commit、sources pin），用于 stale-basis 校验（§3.2 步骤 10）与审计。
+- 判定规则（顺序执行，§3.2 步骤 3）：
+  1. 按 idempotency_key 查 canonical Event/receipt（`events/EV-*.yaml` + `events/EV-*.commit`）；
+  2. 已 committed 且 request_fingerprint 相同 → 返回原事务/事件结果，不重复写入；
+  3. 已 committed 但 request_fingerprint 不同 → `IDEMPOTENCY_CONFLICT`，REJECT 零写入；
+  4. 存在 staging/半提交（无有效 receipt）→ `TX_INCOMPLETE`，不得新建事务，也不得直接返回成功；
+  5. 未命中 → 继续建 basis（读取 CURRENT/HEAD）并执行事务。
 
 ### 6.2 并发
 
-- freeze 全程持有 `.index/tx/lock`（文件锁，非阻塞获取）。
+- freeze 全程持有 **`.researchctl/locks/freeze.lock`**（文件锁，非阻塞获取；**锁不属于可删的 `.index/`**，P2-7，T43）。
+- **reindex / `.index/` reset 必须先获取同一 global mutation lock**——防止 freeze 持锁期间 `.index/` 被删导致互斥失效（P2-7，T43）。
+- **cooperative writer 模型（P1-2）**：所有 CURRENT canonical mutation（freeze、reconcile 补写）必须经上述同一锁；
+  模型外的并发编辑不在 P1-A 保证范围（§4.3）。
 - 第二个 freeze 到达 → `TX_LOCKED`，REJECT（不排队等待）。
 - 同一时刻只允许一个 freeze 事务；P1-A 不做多事务并发调度。
 
@@ -597,16 +659,21 @@ reconcile 新增检查：
 | `AUTH_SCOPE_DENIED` | grantee/scope/valid 不匹配 | REJECT 零写入 |
 | `IDEMPOTENCY_CONFLICT` | 同 key 不同 fingerprint | REJECT 零写入 |
 | `TX_INCOMPLETE` | 同 key 存在 staging/半提交 | REJECT，不得新建或返回成功 |
-| `STALE_BASIS` | CURRENT/HEAD 在 gate 或 CAS 后变化 | REJECT 零写入 |
+| `STALE_BASIS` | CURRENT/HEAD 在 gate 或 stale-basis 检查后变化 | REJECT 零写入 |
 | `DIRTY_WORKTREE` | 工作树未提交变更 | REJECT 零写入 |
 | `TX_LOCKED` | 并发 freeze | REJECT 零写入 |
 | `TARGET_OCCUPIED` | 目标 REPORT 号已占用 | REJECT 零写入 |
 | `NEEDS_RECONCILE` | hook/半提交无法自动判定 | 进入 reconcile / 人工（写 state.yaml） |
 | `PROVENANCE_BROKEN` | marker/receipt 存在但事件缺失等 | fail_closed（reconcile） |
 | `CURRENT_CONFLICT` | CURRENT 与 sources 冲突 | REJECT 零写入（沿用 P0） |
-| `SOURCE_MISSING` / `HASH_MISMATCH` | source 缺失/不匹配 | REJECT 零写入（沿用 P0） |
+| `SOURCE_MISSING` | source 缺失 | REJECT 零写入（沿用 P0） |
+| `HASH_MISMATCH` | source/绑定 hash 不匹配 | REJECT 零写入（沿用 P0） |
+| `REVIEW_REQUIRED` | 半提交/恢复涉及语义判断 | 不自动处置，报人工（resolution action，非 error semantic） |
 
-全部写入类命令失败语义：**fail-closed，零写入**。`NEEDS_RECONCILE`、`PROVENANCE_BROKEN`、`review_required` 完整进入 envelope（errors/warnings + error_semantic）。
+**错误闭集 = 上述 16 个 error code**（`SOURCE_MISSING` 与 `HASH_MISMATCH` 分行计数）+ `REVIEW_REQUIRED`（resolution action，不计入 error 数）。
+全部写入类命令失败语义：**fail-closed，zero canonical mutation**——不得修改 reports/、不得提交 events/、不得修改 CURRENT canonical state；
+允许产生事务 journal/staging/plan/state（派生，失败后尽力清理；残留必须可被 `TX_INCOMPLETE`/reconcile 检测）。
+`NEEDS_RECONCILE`、`PROVENANCE_BROKEN`、`REVIEW_REQUIRED` 完整进入 envelope（errors/warnings + error_semantic）。
 
 ---
 
@@ -620,13 +687,13 @@ reconcile 新增检查：
 | T1b | 正常 freeze — post-commit materialize | materialize 最终成功，SQLite events 表+INDEX.md 更新，last_event_id 推进 |
 | T1c | materialize 失败 → NEEDS_RECONCILE | marker 仍有效（plan_snapshot_hash 不变），state.yaml=needs_reconcile；重放后恢复 |
 | T2 | 冻结后 CURRENT 仍存在且指向最新 REPORT | 状态正确，current_before/after_hash 可校验，叙事主体未被覆盖 |
-| T3 | 同 key 同 fingerprint 重复 freeze | 返回同一结果，不重复写入 |
-| T4 | 同 key 不同 fingerprint 重复 freeze | `IDEMPOTENCY_CONFLICT`，零写入 |
+| T3 | 同 key 同 request_fingerprint 重复 freeze（**含成功后重试：第一次已 committed、CURRENT 已变 H0→H1**） | 返回原结果，不重复写入（P1-1：fingerprint 不含执行后状态） |
+| T4 | 同 key 不同 request_fingerprint（如 actor 不同）重复 freeze | `IDEMPOTENCY_CONFLICT`，零写入 |
 | T5 | 缺授权 freeze | `AUTH_REQUIRED`，零写入 |
 | T6 | source 缺失 freeze | `SOURCE_MISSING`，零写入 |
 | T7 | source hash 不匹配 freeze | `HASH_MISMATCH`，零写入 |
 | T8 | CURRENT 与 sources 冲突 freeze | `CURRENT_CONFLICT`，零写入 |
-| T9a | 崩溃注入（报告/Event rename 后、CURRENT rename 前 → receipt 前） | 半提交判定：CAS 通过 → 补 CURRENT+receipt+marker；CAS 失败 → NEEDS_RECONCILE |
+| T9a | 崩溃注入（报告/Event rename 后、CURRENT rename 前 → receipt 前） | 三态判定：case 1（live==before）→ 补 CURRENT+receipt+marker；否则 case 3 → NEEDS_RECONCILE |
 | T9b | 崩溃注入（marker 写入中 → 损坏 marker） | 损坏 marker 视同无 marker，按半提交判定 |
 | T9c | 崩溃注入（receipt 后 marker 前） | 补 marker，幂等恢复 |
 | T9d | 崩溃注入（marker 后 materialize 前） | 重放 materialize，幂等恢复 |
@@ -647,33 +714,45 @@ reconcile 新增检查：
 | T24 | Event self-hash 循环验证 | 事件文件不含 `role: event` 自身 hash；event_hash 由 plan/marker 保存且可校验 |
 | T25 | 人工修改 CURRENT 后删除 .index 重建 | 旧 Event 仍恢复（§5.5 不比较 live CURRENT，依赖 receipt） |
 | T26 | plan/marker 损坏 | 损坏 marker 视同无 marker（半提交判定）；损坏 plan 按 §5.5 重建 |
-| T27 | Git HEAD 在 gate 后变化（最终 CAS） | `STALE_BASIS`，REJECT 零写入 |
-| T28 | CURRENT.md gate 后、CAS 前被修改 | `STALE_BASIS`，REJECT 零写入 |
+| T27 | Git HEAD 在 gate 后变化（最终 stale-basis 检查） | `STALE_BASIS`，REJECT 零写入 |
+| T28 | CURRENT.md gate 后、stale-basis 检查前被修改 | `STALE_BASIS`，REJECT 零写入 |
 | T29 | freeze-marker 区块被人工篡改 | reconcile 检出 `HASH_MISMATCH` |
 | T30 | 报告/Event 已 rename、CURRENT 未 rename → 删 .index → reindex | **不得提升为 committed（receipt 缺失）→ NEEDS_RECONCILE，不索引** |
-| T31 | 崩溃恢复补写 CURRENT 前，人已修改 CURRENT | **CAS 失败 → STALE_BASIS / NEEDS_RECONCILE，不覆盖人的新内容** |
+| T31 | 崩溃恢复补写 CURRENT 前，人已修改 CURRENT | **stale-basis 校验失败（case 3）→ STALE_BASIS / NEEDS_RECONCILE，不覆盖人的新内容** |
 | T32 | 两次 freeze → 修改 CURRENT → 删 .index → reindex | **两个旧 Event 均恢复（receipt 均在）；旧 Event 不被 live CURRENT 判定损坏** |
 | T33 | receipt 缺失/损坏时重建 | **不提升 committed；reconcile 报 NEEDS_RECONCILE / PROVENANCE_BROKEN** |
-| T34 | 篡改导致结构不一致，或与 Event/report/manifest 绑定不匹配（如改 receipt 的 report_hash 但不改 Event） | 可检测：HASH_MISMATCH / PROVENANCE_BROKEN，不提升 committed。（**文档化限制**：无签名模型下，对 `current_after_hash` 与 `output_digest` 的同步篡改不可检测——§2.3/§9 已声明这是可验证 evidence 而非密码学防伪） |
+| T34 | 篡改导致结构不一致，或与 Event/report/manifest 绑定不匹配（如改 receipt 的 report_hash 但不改 Event） | 可检测：HASH_MISMATCH / PROVENANCE_BROKEN，不提升 committed。（**文档化限制**：能检测意外损坏与局部/不一致篡改；不能检测对 canonical 写权限主体的 coherent rewrite——§2.3/§9，P2-9） |
 | T35 | state 变化不影响 marker（materialize 失败后 marker 仍有效） | T1c 基础上：marker.plan_snapshot_hash 不变，marker 不被判损坏 |
 | T36 | 跨序列化：同文档以不同 YAML 风格生成，canonical hash 一致 | canonical JSON bytes hash 相同（§6.1） |
 | T37 | reason_refs 持久化 | 事件与 plan 中均含 reason_refs，且参与 fingerprint |
 | T38 | receipt 后、marker 前崩溃 → 人修改 CURRENT → 恢复 | receipt 有效 → 直接补 marker，不比较 CURRENT live hash、不改 CURRENT；恢复后 committed，CURRENT 保持人的新内容 |
+| T39 | 崩溃注入（**CURRENT rename 成功 → kill → receipt 尚未 rename**） | 三态 case 2（live==planned after）→ 补 receipt+marker，**不改 CURRENT**（P1-3 边界测试） |
+| T40 | 崩溃注入（receipt 临时文件 fsync 后、rename 前 kill） | 视同无 receipt → 三态判定（case 2 场景：补 receipt+marker） |
+| T41 | race-cas-current：最终 stale-basis 检查后、CURRENT rename 前模拟外部修改 | cooperative writer 模型（§6.2）下锁内不会发生；模型外不承诺检测/保护（文档化边界，不静默宣称原子 CAS） |
+| T42 | race-target-create：TARGET_OCCUPIED gate 后、正式 rename 前外部创建目标 | atomic no-clobber install 检出已存在 → TARGET_OCCUPIED / TX_INCOMPLETE，**绝不覆盖**（P1-2） |
+| T43 | concurrent-index-delete：freeze 持锁时删除/rebuild `.index/` | 锁在 `.researchctl/locks/` 不受影响；reindex 先取同一锁 → 互斥不失效（P2-7） |
+| T44 | tx-id-after-reindex：删除 `.index/` 后新事务 | TX ID 从 canonical events/receipts 取 max+1，不重复（P2-8） |
+| T45 | directory-source-freeze：P0 directory source（SHA256(sorted manifest)）正常冻结 | 继承 P0 Source Reference verifier，Event input_ref 含 source_type: directory（P2-5） |
+| T46 | second-freeze-transform：第二次 freeze 的 REPORT-NNN 不携带上一次 freeze-marker | 确定性 transform（§4.3）生效：strip 唯一 managed 区块，其余 bytes 原样（P2-4） |
+| T47 | auth-change-after-gate：gate 后 auth registry 改变 | gate 时验证并写入 plan 的 authorization_ref；进行中事务不受 registry 变化影响；下次 freeze 重新验证（确定语义） |
 
 ### 8.2 退出条件
 
-1. T1a–T38 全部通过（fixture 副本 + 故障注入）；
+1. T1a–T47 全部通过（fixture 副本 + 故障注入）；
 2. 冻结闭环端到端可用（含崩溃恢复、幂等、授权、Git pin、index 重建）；
-3. 零写入语义在所有 REJECT 场景验证通过；
+3. **zero canonical mutation** 语义在所有 REJECT 场景验证通过（允许派生 journal/staging 残留且可被 TX_INCOMPLETE/reconcile 检测）；
 4. 无 receipt 的 Event 永不被当作已提交事件（§5.5 强制要求 receipt + 内部绑定验证）；
 5. 删除 `.index/` 后 reindex 完整恢复（含已提交 Event，不依赖 live CURRENT，不伪造半提交）；
-6. 崩溃恢复不得覆盖人工修改的 CURRENT（CAS 保护）；
+6. 崩溃恢复不得覆盖人工修改的 CURRENT（optimistic stale-basis 三态保护：before/after/other，P1-3）；
 7. 旧 Event 不受可变 CURRENT / 最新 freeze-marker 影响；
 8. Event 文件无 self-hash 循环；
 9. plan snapshot 与 runtime state 分离，state 变化不使 marker 失效；
 10. 全部机器生成文件使用 canonical hash（跨序列化一致）；
 11. fixture 原始工作树与 P0 Git 历史完全不变；
 12. 未接 Pi、未碰真实目录。
+13. **冻结门槛四项**：crash-current-after（T39）、crash-receipt-temp（T40）、race-cas-current（T41）、race-target-create（T42）通过；
+14. TX ID 从 canonical history 分配，删 `.index/` 后不重复（T44）；
+15. 连续两次 freeze 不互相污染（确定性 transform，T46）。
 
 ---
 
@@ -686,7 +765,8 @@ reconcile 新增检查：
 - 多事务并发调度、事务队列、分布式锁
 - 自动 Git commit、自动解决 merge 冲突
 - 自动科学结论更新、自动 reviewer
-- 密码学签名 / 防伪权限模型（receipt 是可验证 evidence，非防伪凭证）
+- 密码学签名 / 防伪权限模型（receipt 是可验证 evidence：能检测意外损坏与局部/不一致篡改；
+  不能检测对 canonical 写权限主体的 coherent rewrite，§2.3/§9，P2-9）
 - 掉电恢复保证（P1-A 只保证进程崩溃；掉电依赖底层 FS/OS）
 - 修改 P0 基线、P0 合同、现有 Git 历史
 - 接入真实研究目录、Pi Extension、Worker
