@@ -3,9 +3,9 @@
 > 文档性质：P1-A 实施合同（frozen contract）。内容经确认后，作为 Evented Freeze 闭环的唯一边界依据。
 >
 > 依据：P0-Contract.md（§13 P1-01/02/07）、2026-08-30 P1 边界裁决、五轮阻断项修订
-> 及 Sol 审核（2026-08-31 NO-GO → rev8；窄范围 NO-GO → rev9/rev10 → rev11 按 WAL cleanup 收紧 + P2 残留修订）。
+> 及 Sol 审核（2026-08-31：NO-GO → rev8；窄范围 NO-GO → rev9/rev10 → rev11 GO）。
 >
-> 当前状态：起草中（修订版 11），冻结前不开始实现。
+> 当前状态：**已确认（冻结，rev11，2026-08-31）**。后续修订须经变更流程；实现按 §3.2 固定步骤进行。
 
 ---
 
@@ -224,7 +224,7 @@ WRITING / COMMITTED 中途崩溃 → 恢复后判定为 NEEDS_RECONCILE 或补�
 11. 校验 staging 各文件 hash 与 plan snapshot 一致
 12. 最终 **optimistic stale-basis 检查**（rename 前，§6.2 cooperative writer 模型）：重新读取 CURRENT.md/CURRENT.sources.yaml hash
     与 basis_git_commit，任一与步骤 5/6 记录的 basis_digest 不一致 → STALE_BASIS，ABORT（清理 staging/plan/state）
-13. 原子 rename 顺序：**报告/Event → CURRENT.md**（CURRENT 最后 rename）；
+13. 原子 rename 顺序：**report + sources_manifest + Event → CURRENT.md**（CURRENT 最后 rename）；
     所有 `action: create` 使用 **atomic no-clobber install**（§4.3）：目标已存在 → TARGET_OCCUPIED / TX_INCOMPLETE，绝不覆盖（P1-2）；
     **多文件 install 中途失败语义见 §3.3（两阶段，Sol P1-2）**
 14. 写 commit receipt（events/EV-NNNNNN.commit，临时文件 → fsync → 原子 no-clobber rename）——CURRENT 已提交的证据；
@@ -412,7 +412,7 @@ gate 后、rename 前若目标被外部创建 → no-clobber 失败 → `TARGET_
 - researchctl 只在 CURRENT.md **末尾追加/更新** `researchctl:freeze-marker` 区块；人维护的叙事主体不被改写。
 - reconcile 检测 freeze-marker 区块是否与最新 marker/事件一致（人工篡改 → `HASH_MISMATCH`）。
 - 冻结不是删除 CURRENT：CURRENT 继续存在供下一轮维护，其叙事主体保持人读。
-- CURRENT rename 顺序：报告/Event 先 rename → CURRENT 最后 rename（§3.2 步骤 13）。
+- CURRENT rename 顺序：report + sources_manifest + Event 先 rename → CURRENT 最后 rename（§3.2 步骤 13）。
 - 若 CURRENT 在 gate 后被改动（含最终 optimistic stale-basis 检查，§3.2 步骤 12）→ `STALE_BASIS`，REJECT 零写入。
 
 **确定性冻结变换（P2-4 闭合，T46）**：
@@ -518,7 +518,7 @@ D. 无 plan 且无 marker → 使用 §5.5 重建规则
   只要存在 **partial canonical output 且 transaction 尚未 committed**，WAL/recovery authority **禁止删除**；
   `NEEDS_RECONCILE` 必须保留 plan/state/所需 staging，直到确定性完成或显式人工处置。
 
-**全局不变量（Sol 三核心，冻结门槛）**：
+**全局不变量（Sol 四条，冻结门槛）**：
 
 > **A. 幂等 replay 必须在读取 mutable basis 之前完成**——同 key 同 fp 已 committed → 返回原结果，不依赖当前 CURRENT/HEAD 可否读取（T49）。
 > **B. CURRENT/receipt 永远不得先于完整且 verified 的 immutable output set**（report + manifest + event 全部就位且 hash 匹配 plan 后才能碰 CURRENT/receipt；§5.2 step 0）。
