@@ -3,9 +3,9 @@
 > 文档性质：P1-A 实施合同（frozen contract）。内容经确认后，作为 Evented Freeze 闭环的唯一边界依据。
 >
 > 依据：P0-Contract.md（§13 P1-01/02/07）、2026-08-30 P1 边界裁决、五轮阻断项修订
-> 及 Sol 审核（2026-08-31 NO-GO → rev8；窄范围 NO-GO → rev9；rev9 复查 → rev10 按 WAL 生命周期 + P2 残留修订）。
+> 及 Sol 审核（2026-08-31 NO-GO → rev8；窄范围 NO-GO → rev9/rev10 → rev11 按 WAL cleanup 收紧 + P2 残留修订）。
 >
-> 当前状态：起草中（修订版 10），冻结前不开始实现。
+> 当前状态：起草中（修订版 11），冻结前不开始实现。
 
 ---
 
@@ -41,16 +41,16 @@ event append / transaction 基础
 | **Plan snapshot（派生，不可变）** | `fixture/.index/tx/<tx_id>.plan.yaml` | **in-flight WAL / recovery journal**：事务计划不可变快照（写后不修改）；committed 后完成使命，删除 `.index/` 后**不恢复原始 plan**（§5.5 只重建 derived marker，P2-2） |
 | **Runtime state（派生，可变）** | `fixture/.index/tx/<tx_id>.state.yaml` | 可变运行状态（proposed…needs_reconcile），**不参与 plan_hash** |
 | **Transaction marker（派生，不可变）** | `fixture/.index/tx/<tx_id>.marker` | **derived committed cache**：COMMITTED 缓存标志（绑定 Event/receipt/output_refs 的 canonical-derived fields，**不绑定 plan**）；`committed` 真值由 canonical receipt 承载，marker 丢失 ≠ 事务回退；可从事件+receipt+文件一致性重建（§5.5） |
-| **staging** | `fixture/.index/tx/staging/` | 临时文件区，可清理 |
+| **staging** | `fixture/.index/tx/staging/` | 临时事务数据；pre-canonical abort 或 committed 后可清理；**partial-canonical unresolved 时属于 recovery authority，不得清理**（Sol rev10 P2-4） |
 | **SQLite events 表（投影）** | `.index/research.sqlite` | 永远派生，可重建，不成为真源 |
 | **Agent Execution Log** | 不属于 Event 真源 | 严格分离，不写入 events/ |
 
 **关键规则（修订版 6）**：
 
 > 1. `commit receipt` 是 **canonical 且不可变**的 CURRENT 提交证据，位于 `events/`（Git 管理），**不随 `.index/` 删除而丢失**。
-> 2. **plan 与运行时状态分离**：`plan.yaml` 是不可变快照（marker 只 hash 它）；`state.yaml` 是可变状态（`needs_reconcile` 等），**不参与任何 hash**。改变 state 不会使 marker 失效。
+> 2. **plan 与运行时状态分离**：`plan.yaml` 是不可变 WAL 快照（**marker 不绑定 plan**）；`state.yaml` 是可变状态（`needs_reconcile` 等），**不参与任何 canonical hash**。改变 state 不影响 canonical commit / marker derived fields。
 > 3. receipt 是"报告/Event/CURRENT 全部提交"的**可验证 canonical commit evidence**：它在 CURRENT rename 完成后写入；半提交时不存在。
-> 4. 只有 **Event + report + manifest + receipt 四者一致**（receipt 内部绑定 a–h 含 event_hash 验证）才能重建 committed marker（§5.5）；半提交永不提升（T30）。
+> 4. 只有 **Event + report + manifest + receipt 四者一致**（receipt 内部绑定 a–h 含 event_hash 验证）才能重建 committed marker（§5.5）；半提交永不提升（T30b）。
 > 5. **Canonical COMMITTED 真值 = 有效 receipt + Event/report/manifest canonical 校验通过**；marker 只是 derived committed cache
 >    （丢失后事务仍 committed，仅 `materialized_marker=false`，P2-1）。
 > 6. **plan = in-flight WAL**：事务 committed 后完成使命；删除 `.index/` 后重建的是 derived marker，不声称恢复原始 plan bytes（P2-2）。
@@ -131,7 +131,10 @@ caused_by: []                   # 触发原因的事件引用（可空）
 
 **self-hash 循环消除（关键规则）**：
 
-> Event 文件**不包含自身 hash**。`output_refs` 中不存在 `role: event` 条目。Event 文件的 bytes hash 由 **plan snapshot 与 marker** 保存（`event_hash` 字段），reconcile/重建时对 `events/EV-NNNNNN.yaml` 实际内容计算 canonical hash 并与 plan/marker 比对。事件内容不依赖自身 hash，无循环定义。
+> Event 文件**不包含自身 hash**。`output_refs` 中不存在 `role: event` 条目。Event 文件的 bytes hash 的绑定：
+> in-flight 由 **plan.event_hash** 保存；committed 后由 **receipt.event_hash** 承担 canonical binding（删 .index 后 plan/marker 都不存在，
+> 实际正是 receipt 提供 Event hash binding）；derived cache 由 **marker.event_hash** 保存（Sol rev10 P2-6）。
+> reconcile/重建时对 `events/EV-NNNNNN.yaml` 实际内容计算 canonical hash 并与上述 binding 比对。事件内容不依赖自身 hash，无循环定义。
 
 ### 2.3 Commit receipt schema（canonical，不可变，完整绑定）
 
@@ -240,7 +243,7 @@ WRITING / COMMITTED 中途崩溃 → 恢复后判定为 NEEDS_RECONCILE 或补�
   - 冲突发生在**任一 canonical output 安装之前** → `TARGET_OCCUPIED`，zero canonical mutation（正常 REJECT）；
   - 至少一个 canonical output 已成功安装后，后续 no-clobber 失败（如 Event 目标被外部创建）→ **`TX_INCOMPLETE`**：
     保留 plan/staging/正式现场，**不再写 CURRENT、不写 receipt**，进入 reconcile——不得伪装成普通 REJECT。
-- 步骤 13 后、14 前崩溃（CURRENT 已 rename 或未 rename）：**receipt 不存在 → 半提交判定**（§5.2），reindex 永不提升为 committed（T30）。
+- 步骤 13 后、14 前崩溃（CURRENT 已 rename 或未 rename）：**receipt 不存在 → 半提交判定**（§5.2），reindex 永不提升为 committed（T30b）。
 - 步骤 14 后、15 前崩溃：receipt 存在、marker 缺失 → 可恢复：补 marker（§5.2/§5.5）。
 - 步骤 14 中崩溃（receipt 临时文件未 rename 完成）：损坏/缺失 receipt → 半提交判定。
 - 步骤 16 失败：事务已 COMMITTED，hook 可重放；持续失败 → state.yaml 记录 NEEDS_RECONCILE（**不影响 marker 有效性**）。
@@ -468,7 +471,7 @@ historical_source_ref = 每个 current source_ref 复制：
 | materialize 中 | marker 存在，索引半更新 | 重新 materialize |
 | hook（INDEX.md）失败 | marker 存在，INDEX.md 未更新 | state.yaml 记 NEEDS_RECONCILE，可重放 hook |
 
-### 5.2 半提交判定规则（无有效 receipt 或 marker 但正式文件存在）
+### 5.2 半提交判定（无有效 receipt）与 valid receipt / marker 缺失的恢复规则
 
 ```text
 以 plan snapshot 为基准：逐一比对 plan 中每个文件（role/path/hash）与正式路径实际 hash。
@@ -508,13 +511,20 @@ D. 无 plan 且无 marker → 使用 §5.5 重建规则
 > **任一不一致（例如人在恢复前修改了 CURRENT）→ `STALE_BASIS` / `NEEDS_RECONCILE`，不得覆盖人的新内容**（T31）。
 
 - **禁止**在无明确一致性证据时删除正式文件或自动回滚。
-- 恢复动作只允许：清理 staging/plan/state（未提交时）、补 CURRENT rename（immutable set 完整 + case 1 通过）、补 receipt、补 marker、重放 materialize/hook。
+- 恢复动作只允许：补 CURRENT rename（immutable set 完整 + case 1 通过）、补 receipt、补 marker、重放 materialize/hook。
+- **WAL 清理生命周期（Sol rev10 P1，不变量 D）**：plan/state/staging 仅可在以下两种情况下自动清理：
+  ① 已证明**尚未发生任何 canonical mutation** 的 aborted/pre-canonical transaction（staging/plan 残留）；
+  ② transaction 已 **validly COMMITTED**（valid receipt + 四件套验证通过），WAL 已完成使命。
+  只要存在 **partial canonical output 且 transaction 尚未 committed**，WAL/recovery authority **禁止删除**；
+  `NEEDS_RECONCILE` 必须保留 plan/state/所需 staging，直到确定性完成或显式人工处置。
 
 **全局不变量（Sol 三核心，冻结门槛）**：
 
 > **A. 幂等 replay 必须在读取 mutable basis 之前完成**——同 key 同 fp 已 committed → 返回原结果，不依赖当前 CURRENT/HEAD 可否读取（T49）。
 > **B. CURRENT/receipt 永远不得先于完整且 verified 的 immutable output set**（report + manifest + event 全部就位且 hash 匹配 plan 后才能碰 CURRENT/receipt；§5.2 step 0）。
 > **C. P1-A 任一时刻最多一个未决事务**——存在任意 unresolved journal 或 canonical half-commit 时（无论 key 是否相同）不得分配新 TX（§3.2 步骤 4，T48）。
+> **D. Partial canonical mutation 必须保留 WAL 直到 resolve**——存在 partial canonical output 且 transaction 尚未 committed 时，
+> plan/state/必要 staging 是唯一 recovery authority，禁止自动清理（§5.2 WAL 清理生命周期，T51）。
 
 ### 5.3 已提交内容不可回滚
 
@@ -562,7 +572,7 @@ CURRENT rename 后、有效 receipt 前 → 直接读取完整的新 CURRENT（�
 > 1. 重建 committed marker **不比较当前 CURRENT.md live bytes**（CURRENT 可变，T22/T32）。
 > 2. 重建的充分必要证据 = **Event + report + sources_manifest + receipt 四者完整且内部绑定一致**（receipt 内部绑定含 event/transaction/hash，§5.5 a–h 的 d 项验证 event_hash）。
 >    receipt 的存在性是 CURRENT 曾完成提交的可验证证据——半提交（CURRENT 未 rename）时 receipt 不存在，
->    因此**永远不会把半提交提升为 committed**（T30）。
+>    因此**永远不会把半提交提升为 committed**（T30b）。
 > 3. `current_after_hash` 参与 receipt ↔ Event 的**内部历史绑定**（§5.5 h），但**绝不与 live CURRENT.md bytes 比较**（P2-10）。
 
 - 反例验证：freeze → CURRENT=A → 人工修改 CURRENT=B → 删 `.index/` → reindex 重建 marker 成功（Event+report+manifest+receipt 均不可变）→ 旧 Event 完整恢复。
@@ -665,6 +675,10 @@ basis_digest（执行内容，本次实际冻结了什么） = sha256(canonical 
       reset / reindex（quiescent/committed-state deletion）
   ```
   —— 未提交阶段的 plan/staging 是唯一 recovery authority，禁止在存在 unresolved transaction 时删除 `.index/`。
+- **reset-blocking unresolved 的定义（Sol rev10 P2-5）**：仅指**尚未达到 canonical COMMITTED** 的 transaction
+  （无 valid receipt 或四件套验证未通过）。若 valid receipt + 四件套验证通过（transaction 已 canonical COMMITTED），
+  即使 state=needs_reconcile（仅 materialize/hook 未完成），WAL 已完成使命，**不阻止 `.index/` rebuild**——
+  不把 canonical transaction state 与 derived materialization state 重新混合。
 - **cooperative writer 模型（P1-2）**：所有 CURRENT canonical mutation（freeze、reconcile 补写）必须经上述同一锁；
   模型外的并发编辑不在 P1-A 保证范围（§4.3）。
 - 第二个 freeze 到达 → `TX_LOCKED`，REJECT（不排队等待）。
@@ -766,13 +780,14 @@ basis_digest（执行内容，本次实际冻结了什么） = sha256(canonical 
 | T21 | CURRENT.sources.yaml 在 gate 后变化 | `STALE_BASIS`，REJECT 零写入 |
 | T22 | 已完成 freeze 后 CURRENT 正常人工修改 | CURRENT 可编辑（非冻结），不触发回滚 |
 | T23 | 半提交期间 sources CURRENT 查询 | `fail_closed` + `TX_INCOMPLETE`（不返回半提交状态） |
-| T24 | Event self-hash 循环验证 | 事件文件不含 `role: event` 自身 hash；event_hash 由 plan/marker 保存且可校验 |
+| T24 | Event self-hash 循环验证 | 事件文件不含 `role: event` 自身 hash；event_hash 的绑定：in-flight 由 plan.event_hash、committed 由 receipt.event_hash、derived cache 由 marker.event_hash（§2.2，Sol rev10 P2-6） |
 | T25 | 人工修改 CURRENT 后删除 .index 重建 | 旧 Event 仍恢复（§5.5 不比较 live CURRENT，依赖 receipt） |
 | T26 | plan/marker 损坏 | 损坏 marker = cache invalid → 删除/重建（§5.5），valid receipt + outputs 则仍 committed；**已 committed 事务的 plan 损坏/丢失 → 不重建 plan**（完成使命），canonical validation + derived marker/reindex；**unresolved 事务的 plan 损坏 → recovery authority 丢失 → NEEDS_RECONCILE / REVIEW_REQUIRED，不伪造 plan**（Sol P2-2） |
 | T27 | Git HEAD 在 gate 后变化（最终 stale-basis 检查） | `STALE_BASIS`，REJECT 零写入 |
 | T28 | CURRENT.md gate 后、stale-basis 检查前被修改 | `STALE_BASIS`，REJECT 零写入 |
 | T29 | freeze-marker 区块被人工篡改 | reconcile 检出 `HASH_MISMATCH` |
-| T30 | 报告/Event 已 rename、CURRENT 未 rename → 删 .index → reindex | **不得提升为 committed（receipt 缺失）→ NEEDS_RECONCILE，不索引** |
+| T30 | 半提交时尝试 controlled `.index/` reset（报告/Event 已 rename、CURRENT 未 rename） | **`TX_INCOMPLETE`，不删除 WAL，不提升 committed**（与 §6.2/T50 的 reset guard 一致，Sol rev10 P2-1） |
+| T30b | **out-of-contract 灾难场景**：模拟绕过 researchctl 的外部强制丢失 `.index/`（Event 有、receipt 无）→ reindex | **仍不得提升 committed**（receipt 缺失）→ NEEDS_RECONCILE，不索引（defense-in-depth，非正常 reset 语义） |
 | T31 | 崩溃恢复补写 CURRENT 前，人已修改 CURRENT | **stale-basis 校验失败（case 3）→ STALE_BASIS / NEEDS_RECONCILE，不覆盖人的新内容** |
 | T32 | 两次 freeze → 修改 CURRENT → 删 .index → reindex | **两个旧 Event 均恢复（receipt 均在）；旧 Event 不被 live CURRENT 判定损坏** |
 | T33 | receipt 缺失/损坏时重建 | **不提升 committed；reconcile 报 NEEDS_RECONCILE / PROVENANCE_BROKEN** |
@@ -794,10 +809,11 @@ basis_digest（执行内容，本次实际冻结了什么） = sha256(canonical 
 | T48 | different-key 到达时存在旧 unresolved journal（K1 crash after plan/staging but before Event） | 全局 unresolved 检查（不变量 C）→ `TX_INCOMPLETE`，不分配/不覆盖 TX ID，K1 plan 保持原样（Sol P1-4） |
 | T49 | 成功后 CURRENT 被改坏/删除或 repo dirty → 同 key 同 fp 重试 | 幂等 replay 先于 basis 读取（不变量 A）→ 返回原 committed 结果，不访问新 basis（Sol P1-1 强测试） |
 | T50 | K1 crash after REPORT-only install（plan/staging 尚在）→ 尝试 `.index/` reset | 未决 WAL 存在 → `TX_INCOMPLETE`，不删除 plan/staging/report；reconcile 能恢复 K1（Sol P1-1 WAL 生命周期） |
+| T51 | REPORT-only crash → staging 中缺一个无法自动补的文件 → reconcile | `NEEDS_RECONCILE`；plan/state/剩余 staging **必须仍存在**，不得因「未提交」自动 cleanup（不变量 D，Sol rev10 P1） |
 
 ### 8.2 退出条件
 
-1. T1a–T50 全部通过（fixture 副本 + 故障注入）；
+1. T1a–T51 全部通过（fixture 副本 + 故障注入）；
 2. 冻结闭环端到端可用（含崩溃恢复、幂等、授权、Git pin、index 重建）；
 3. **zero canonical mutation** 语义在所有 REJECT 场景验证通过（允许派生 journal/staging 残留且可被 TX_INCOMPLETE/reconcile 检测）；
 4. 无 receipt 的 Event 永不被当作已提交事件（§5.5 强制要求 receipt + 内部绑定验证）；
@@ -812,8 +828,8 @@ basis_digest（执行内容，本次实际冻结了什么） = sha256(canonical 
 13. **冻结门槛四项**：crash-current-after（T39）、crash-receipt-temp（T40）、race-cas-current（T41）、race-target-create（T42a/T42b）通过；
 14. TX ID 从 canonical history 分配，删 `.index/` 后不重复（T44）；
 15. 连续两次 freeze 不互相污染（确定性 transform，T46）；
-16. **三条核心不变量（Sol）**：A. 幂等 replay 先于 mutable basis 读取（T49）；B. CURRENT/receipt 不先于完整 immutable set（T9e/T9f/T42b）；C. 任一时刻最多一个未决事务（T48）。
-17. **WAL 生命周期**：`.index/` reset/delete/rebuild 仅在无 unresolved transaction 时允许（T50）；未提交 plan/staging 是唯一 recovery authority，不因可删语义丢失（Sol P1-1）。
+16. **四条核心不变量（Sol）**：A. 幂等 replay 先于 mutable basis 读取（T49）；B. CURRENT/receipt 不先于完整 immutable set（T9e/T9f/T42b）；C. 任一时刻最多一个未决事务（T48）；D. partial canonical mutation 必须保留 WAL 直到 resolve（T51）。
+17. **WAL 生命周期**：`.index/` reset/delete/rebuild 仅在无 unresolved transaction 时允许（T50）；未提交 plan/staging 是唯一 recovery authority，不因可删语义丢失；reconcile 不得在未提交时清理 WAL（不变量 D，T51）。
 
 ---
 
