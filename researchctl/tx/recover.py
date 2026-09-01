@@ -420,3 +420,206 @@ def reset_index_guard(root: str, db_path: str) -> dict:
         return {"allowed": False, "error_semantic": "TX_INCOMPLETE",
                 "detail": "存在 unresolved WAL；禁止 .index reset（保留 recovery authority）"}
     return {"allowed": True}
+
+
+# ---- P1-B DefinitionRevised 半提交恢复（§5.1/§5.2） ----
+
+def _p1b_immutable_set_status(root: str, plan: dict) -> dict:
+    """step 0（P1-B）: definition + event 两个 create output。
+
+    返回 {role: {ok, installed?, reason, path, staging?}}。
+    """
+    from .canonical import file_canonical_hash
+    staging_dir = os.path.join(root, ".index", "tx", "staging")
+    result = {}
+    files = {f["role"]: f for f in plan.get("files", [])}
+    for role in ("definition", "event"):
+        f = files.get(role)
+        if not f:
+            result[role] = {"ok": False, "reason": "no-plan-entry"}
+            continue
+        target = os.path.join(root, f["path"])
+        if os.path.exists(target):
+            actual = file_canonical_hash(target)
+            if actual != f["content_hash"]:
+                result[role] = {"ok": False, "reason": "hash-mismatch", "path": f["path"]}
+            else:
+                result[role] = {"ok": True, "installed": True}
+        else:
+            sname = os.path.basename(f["path"])
+            sp = os.path.join(staging_dir, sname)
+            if os.path.exists(sp):
+                result[role] = {"ok": False, "reason": "staged", "path": f["path"],
+                                "staging": sp}
+            else:
+                result[role] = {"ok": False, "reason": "missing", "path": f["path"]}
+    return result
+
+
+def _p1b_install_from_staging(root: str, plan: dict, step0: dict, actions: list) -> bool:
+    """补装缺失的 definition/event（no-clobber）。"""
+    files = {f["role"]: f for f in plan.get("files", [])}
+    ok = True
+    for role, st in step0.items():
+        if st.get("reason") != "staged":
+            continue
+        f = files.get(role)
+        try:
+            with open(st["staging"], "rb") as fh:
+                data = fh.read()
+            if not install_no_clobber(os.path.join(root, f["path"]), data):
+                ok = False
+                actions.append(f"staging install blocked: {role}")
+                continue
+            actions.append(f"{role} installed from staging")
+            st["ok"] = True
+            st["installed"] = True
+        except OSError as e:
+            ok = False
+            actions.append(f"staging install error {role}: {e}")
+    return ok
+
+
+def _p1b_recovery_basis_check(root: str, plan: dict) -> bool:
+    """recovery basis check（§5.2 P1-2）：HEAD == plan.basis_git_commit AND
+    actual previous_definition_hash == plan.definition_before_hash。"""
+    import subprocess as _sp
+    try:
+        head = _sp.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
+    except Exception:
+        return False
+    if head != plan.get("basis_git_commit"):
+        return False
+    from .canonical import file_canonical_hash
+    prev_path = os.path.join(root, "definitions", plan.get("definition", ""),
+                             f"{plan.get('previous', '')}.yaml")
+    actual = file_canonical_hash(prev_path)
+    return actual == plan.get("definition_before_hash")
+
+
+def recover_definition_tx(root: str, db_path: str, tx_id: str) -> dict:
+    """P1-B 半提交判定（§5.2）：step 0（definition+event）→ step 1（APPROVED 三态）。"""
+    from .canonical import file_canonical_hash
+    from ..mini_yaml import load_file as _yaml_load
+    from .receipt import verify_definition_receipt, build_definition_receipt, receipt_path as _rcpath
+    from .marker import marker_valid as _mk_valid
+    from .event import serialize_event
+    from .plan import serialize_plan
+
+    actions = []
+    plan = load_plan(root, tx_id)
+    if plan is None:
+        return {"tx_id": tx_id, "status": "needs_reconcile",
+                "actions": ["no-plan; use canonical rebuild"]}
+
+    ev_id = plan.get("event_id")
+    rc = verify_definition_receipt(root, ev_id) if ev_id else {"valid": False}
+
+    # A. receipt valid → committed（补 marker + materialize）
+    if rc["valid"]:
+        if not _mk_valid(root, tx_id):
+            from .receipt import receipt_path as _rp
+            rc_doc = _yaml_load(_rp(root, ev_id), strict=True) or {}
+            mk = build_marker(transaction_id=tx_id, event_id=ev_id,
+                              event_hash=rc["event_hash"],
+                              receipt_hash=file_canonical_hash(_rp(root, ev_id)),
+                              output_refs_manifest=_out_manifest(plan),
+                              committed_at=rc_doc.get("committed_at", _now()))
+            write_atomic(marker_path(root, tx_id), serialize_marker(mk))
+            actions.append("marker written")
+        replay_materialize(root, db_path)
+        write_state(root, tx_id, "committed", _now())
+        cleanup_staging(root)
+        actions.append("materialize replayed")
+        return {"tx_id": tx_id, "status": "committed", "actions": actions}
+
+    # B. receipt 缺失 → step 0 immutable set（definition + event）
+    step0 = _p1b_immutable_set_status(root, plan)
+    has_canonical = any(s.get("installed") for s in step0.values())
+    if not has_canonical:
+        return _abort_precanonical(root, tx_id, actions)
+    _p1b_install_from_staging(root, plan, step0, actions)
+    incomplete = [r for r, s in step0.items() if not s["ok"]]
+    if incomplete:
+        return {"tx_id": tx_id, "status": "needs_reconcile",
+                "actions": actions + [f"immutable set incomplete: {incomplete} (WAL retained)"]}
+
+    # recovery basis check（Sol rev5 P1-2）
+    if not _p1b_recovery_basis_check(root, plan):
+        return {"tx_id": tx_id, "status": "needs_reconcile",
+                "actions": ["STALE_BASIS: HEAD != plan.basis or previous hash changed; not recovered"]}
+
+    # step 1: APPROVED 三态
+    from .definition import read_approved_hash, approved_path
+    live_approved = read_approved_hash(root, plan.get("definition", ""))
+    before = plan.get("approved_before_hash")
+    after = plan.get("approved_after_hash")
+    if live_approved == before:
+        # case 1: APPROVED 未更新 → 从 staging 补 APPROVED@new → receipt → marker
+        staging_after = os.path.join(root, ".index", "tx", "staging", "APPROVED.yaml.after")
+        if not os.path.exists(staging_after):
+            return {"tx_id": tx_id, "status": "needs_reconcile",
+                    "actions": ["case1 but no staging APPROVED"]}
+        with open(staging_after, "rb") as f:
+            write_atomic(approved_path(root, plan.get("definition", "")), f.read())
+        actions.append("APPROVED installed (case1)")
+        _p1b_complete_receipt_marker(root, db_path, tx_id, plan, actions)
+        write_state(root, tx_id, "committed", _now())
+        cleanup_staging(root)
+        return {"tx_id": tx_id, "status": "committed", "actions": actions}
+    elif live_approved == after:
+        # case 2: APPROVED 已更新 → 只补 receipt + marker
+        actions.append("APPROVED already committed (case2)")
+        _p1b_complete_receipt_marker(root, db_path, tx_id, plan, actions)
+        write_state(root, tx_id, "committed", _now())
+        cleanup_staging(root)
+        return {"tx_id": tx_id, "status": "committed", "actions": actions}
+    else:
+        return {"tx_id": tx_id, "status": "needs_reconcile",
+                "actions": ["case3: APPROVED modified by other; not overwritten"]}
+
+
+def _p1b_complete_receipt_marker(root, db_path, tx_id, plan, actions):
+    """P1-B case1/case2 收尾：补 receipt → marker → materialize。"""
+    from .canonical import file_canonical_hash
+    from ..mini_yaml import dump as _yaml_dump
+    from ..mini_yaml import load as _yaml_load
+    from .receipt import verify_definition_receipt as _vdrc, receipt_path as _rp, build_definition_receipt
+    from .definition import read_approved_hash
+    ev_id = plan.get("event_id")
+    rc_path = _rp(root, ev_id)
+    need_receipt = (not os.path.exists(rc_path)) or (not _vdrc(root, ev_id)["valid"])
+    if need_receipt:
+        rc = build_definition_receipt(
+            event_id=ev_id, transaction_id=tx_id,
+            event_hash=plan.get("event_hash") or file_canonical_hash(
+                os.path.join(root, "events", f"{ev_id}.yaml")),
+            definition_hash=plan.get("proposed_definition_hash", ""),
+            approved_before_hash=plan.get("approved_before_hash", ""),
+            approved_after_hash=plan.get("approved_after_hash", ""),
+            approved_ref_after=plan.get("approved_ref_after", ""),
+            committed_at=_now())
+        write_atomic(rc_path, _yaml_dump(rc).encode("utf-8"))
+        actions.append("receipt (re)written")
+    if not marker_valid(root, tx_id):
+        rc_doc = _yaml_load(rc_path, strict=True) if os.path.exists(rc_path) else {}
+        mk = build_marker(transaction_id=tx_id, event_id=ev_id,
+                          event_hash=file_canonical_hash(os.path.join(root, "events", f"{ev_id}.yaml")),
+                          receipt_hash=file_canonical_hash(rc_path),
+                          output_refs_manifest=_out_manifest(plan),
+                          committed_at=rc_doc.get("committed_at", _now()))
+        write_atomic(marker_path(root, tx_id), serialize_marker(mk))
+        actions.append("marker written")
+    replay_materialize(root, db_path)
+    actions.append("materialize replayed")
+
+
+def recover_tx_any(root: str, db_path: str, tx_id: str) -> dict:
+    """根据 plan.command_version 分发 P1-A / P1-B 恢复。"""
+    plan = load_plan(root, tx_id)
+    if plan is None:
+        return recover_tx(root, db_path, tx_id)
+    cmd_ver = plan.get("command_version", "")
+    if "revise-definition" in cmd_ver:
+        return recover_definition_tx(root, db_path, tx_id)
+    return recover_tx(root, db_path, tx_id)

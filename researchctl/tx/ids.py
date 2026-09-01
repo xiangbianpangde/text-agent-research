@@ -67,3 +67,23 @@ def next_report_id(root: str) -> str:
             if m:
                 maxn = max(maxn, int(m.group(1)))
     return f"REPORT-{maxn + 1:03d}"
+
+
+# ---- P1-B：定义版本 ID（successor 在 definition.py 中） ----
+
+def next_definition_version(root: str, entity: str) -> str:
+    """从 canonical definitions 找当前最大版本号，返回 next_version。
+
+    用于 bootstrap 场景（非 P1-B 职责，但辅助工具需要）。
+    P1-B 事务内使用 successor(APPROVED.ref) 代替。
+    """
+    import re
+    ddir = os.path.join(root, "definitions", entity)
+    if not os.path.isdir(ddir):
+        return f"{entity}@v1"
+    maxn = 0
+    for fn in os.listdir(ddir):
+        m = re.fullmatch(rf"{re.escape(entity)}@v(\d+)\.yaml", fn)
+        if m:
+            maxn = max(maxn, int(m.group(1)))
+    return f"{entity}@v{maxn + 1}"

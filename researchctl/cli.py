@@ -70,6 +70,23 @@ def main(argv=None) -> int:
     sp = sub.add_parser("tx-reset-guard", help="P1-A: 检查 .index reset 是否被 unresolved WAL 阻止")
     sp.set_defaults(func=cmd_tx_reset_guard)
 
+    # ---- P1-B Definition Evolution ----
+    sp = sub.add_parser("revise-definition", help="P1-B: 定义版本修订 H003@v1→v2 + DefinitionRevised Event + APPROVED pointer（单一事务）")
+    sp.add_argument("--idempotency-key", dest="idempotency_key", required=True)
+    sp.add_argument("--definition", required=True)
+    sp.add_argument("--expected-previous", dest="expected_previous", required=True)
+    sp.add_argument("--definition-input", dest="definition_input", required=True,
+                    help="definition semantic payload 文件（body-only，禁止含 reserved identity key）")
+    sp.add_argument("--change-type", dest="change_type", default="",
+                    help="逗号分隔的受控 enum（scope_change/population_change/...）")
+    sp.add_argument("--actor", required=True)
+    sp.add_argument("--authorization-ref", dest="authorization_ref", required=True)
+    sp.add_argument("--approval-ref", dest="approval_ref", required=True)
+    sp.add_argument("--reason-refs", dest="reason_refs", default="")
+    sp.add_argument("--crash-after", dest="crash_after", default=None,
+                    help="故障注入点（测试用）：after-plan/after-staging/after-definition-install/...")
+    sp.set_defaults(func=cmd_revise_definition)
+
     args = p.parse_args(argv)
     if args.db is None:
         args.db = os.path.join(args.root, DEFAULT_DB)
@@ -141,6 +158,37 @@ def cmd_tx_status(args):
 def cmd_tx_reset_guard(args):
     from .tx.recover import reset_index_guard
     return reset_index_guard(args.root, args.db)
+
+
+# ---- P1-B 命令 ----------------
+
+def cmd_revise_definition(args):
+    from .tx.revise import revise_definition
+    from .mini_yaml import load_file
+    if not os.path.exists(args.definition_input):
+        return {"status": "error", "error_semantic": "SOURCE_MISSING",
+                "detail": f"definition-input 文件不存在: {args.definition_input}"}
+    try:
+        body = load_file(args.definition_input, strict=True) or {}
+    except Exception as e:
+        return {"status": "error", "error_semantic": "HASH_MISMATCH",
+                "detail": f"definition-input 解析失败: {e}"}
+    if not isinstance(body, dict):
+        return {"status": "error", "error_semantic": "HASH_MISMATCH",
+                "detail": "definition-input 必须是 YAML 映射"}
+    change_types = [c.strip() for c in args.change_type.split(",") if c.strip()] if args.change_type else []
+    reason_refs = [r for r in args.reason_refs.split(",") if r] if args.reason_refs else []
+    return revise_definition(
+        root=args.root, db_path=args.db,
+        idempotency_key=args.idempotency_key,
+        definition=args.definition,
+        expected_previous=args.expected_previous,
+        definition_input=body,
+        change_type=change_types,
+        actor=args.actor, authorization_ref=args.authorization_ref,
+        approval_ref=args.approval_ref, reason_refs=reason_refs,
+        crash_after=args.crash_after,
+    )
 
 
 if __name__ == "__main__":

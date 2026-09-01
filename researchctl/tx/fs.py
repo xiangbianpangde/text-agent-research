@@ -134,6 +134,9 @@ def is_unresolved(root: str) -> bool:
     （P2-5：不把 canonical transaction state 与 materialization state 混合）。
     """
     from .receipt import receipt_valid_fourpiece
+    from .receipt import verify_definition_receipt
+    from .plan import load_plan
+    from ..mini_yaml import load_file as _yaml_load
     txdir = os.path.join(root, ".index", "tx")
     if not os.path.isdir(txdir):
         return False
@@ -144,6 +147,13 @@ def is_unresolved(root: str) -> bool:
             if receipt_valid_fourpiece(root, txid):
                 any_committed = True
                 continue
+            # P1-B: 该 plan 是否是 DefinitionRevised（四件套不适用）
+            plan = load_plan(root, txid)
+            if plan and "revise-definition" in plan.get("command_version", ""):
+                ev_id = plan.get("event_id")
+                if ev_id and verify_definition_receipt(root, ev_id).get("valid") is True:
+                    any_committed = True
+                    continue
             return True
     # staging 只在没有已 committed 事务且仍有残留时视为 unresolved
     staging = os.path.join(txdir, "staging")

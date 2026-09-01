@@ -8,3 +8,5 @@ researchctl/__pycache__/
 
 # 项目记忆内部数据
 .project-memory/
+.note-skills/
+.project-memory-legacy/

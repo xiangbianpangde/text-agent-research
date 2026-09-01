@@ -468,7 +468,9 @@ try:
 
     def hook_t27(point):
         if point == "after-staging":
-            git_commit(dst, "move-head")
+            # 即使 .researchctl/ 被 gitignore，也需确保 HEAD 变化
+            subprocess.run(["git", "-C", dst, "commit", "--allow-empty", "-m", "move-head"],
+                          capture_output=True)
 
     r = F.freeze_report(root=dst, idempotency_key="k1", actor="text-agent",
                         authorization_ref="AUTH-0001", on_step=hook_t27)

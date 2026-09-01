@@ -11,6 +11,55 @@ import os
 from .canonical import canonical_json
 
 
+def build_definition_plan(*, transaction_id: str, event_id: str, command_version: str,
+                          idempotency_key: str, request_fingerprint: str,
+                          basis_digest: str, actor: str,
+                          authorization_ref: str, approval_ref: str,
+                          approval_digest: str, reason_refs: list,
+                          basis_git_commit: str, created_at: str,
+                          definition: str, previous: str,
+                          proposed_definition_hash: str,
+                          definition_before_hash: str,
+                          change_type: list, changed_fields: list,
+                          impact_algorithm_version: str,
+                          impact_basis_digest: str,
+                          approved_before_hash: str,
+                          approved_ref_after: str,
+                          approved_at: str,
+                          approved_after_hash: str,
+                          files: list) -> dict:
+    """构造 revise-definition plan snapshot（P1-B-Contract §3.7）。"""
+    return {
+        "transaction_id": transaction_id,
+        "event_id": event_id,
+        "command_version": command_version,
+        "idempotency_key": idempotency_key,
+        "request_fingerprint": request_fingerprint,
+        "basis_digest": basis_digest,
+        "actor": actor,
+        "authorization_ref": authorization_ref,
+        "approval_ref": approval_ref,
+        "approval_digest": approval_digest,
+        "reason_refs": reason_refs or [],
+        "basis_git_commit": basis_git_commit,
+        "created_at": created_at,
+        "definition": definition,
+        "previous": previous,
+        "proposed_definition_hash": proposed_definition_hash,
+        "definition_before_hash": definition_before_hash,
+        "change_type": change_type or [],
+        "changed_fields": changed_fields or [],
+        "impact_algorithm_version": impact_algorithm_version,
+        "impact_basis_digest": impact_basis_digest,
+        "approved_before_hash": approved_before_hash,
+        "approved_ref_after": approved_ref_after,
+        "approved_at": approved_at,
+        "approved_after_hash": approved_after_hash,
+        "files": files,
+    }
+
+
+
 def build_plan(*, transaction_id: str, event_id: str, command_version: str,
                idempotency_key: str, request_fingerprint: str, basis_digest: str,
                actor: str, authorization_ref: str, reason_refs: list,

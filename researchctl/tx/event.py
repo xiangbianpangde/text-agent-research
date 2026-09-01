@@ -12,6 +12,58 @@ from .canonical import canonical_hash, canonical_json
 from .ids import next_event_id
 
 
+def build_definition_revised_event(*, root: str, event_id: str, transaction_id: str,
+                              command_version: str, idempotency_key: str,
+                              request_fingerprint: str, actor: str,
+                              authorization_ref: str, approval_ref: str,
+                              approval_digest: str, reason_refs: list,
+                              basis_git_commit: str,
+                              occurred_at: str, recorded_at: str,
+                              subject: str, previous: str,
+                              change_type: list, changed_fields: list,
+                              proposed_definition_hash: str,
+                              impact_algorithm_version: str,
+                              impact_basis_digest: str,
+                              approved_before_hash: str,
+                              input_refs: list, output_refs: list,
+                              affected_entities: list,
+                              caused_by: Optional[list] = None) -> dict:
+    """构造 DefinitionRevised 事件文档（canonical，P1-B-Contract §2.2）。"""
+    return {
+        "event_id": event_id,
+        "event_type": "DefinitionRevised",
+        "schema_version": 1,
+        "command_version": command_version,
+        "transaction_id": transaction_id,
+        "tx_state": "committed",
+        "idempotency_key": idempotency_key,
+        "request_fingerprint": request_fingerprint,
+        "actor": actor,
+        "authorization_ref": authorization_ref,
+        "approval_ref": approval_ref,
+        "approval_digest": approval_digest,
+        "reason_refs": reason_refs or [],
+        "basis_git_commit": basis_git_commit,
+        "approved_before_hash": approved_before_hash,
+        "occurred_at": occurred_at,
+        "recorded_at": recorded_at,
+        "subject": subject,
+        "previous": previous,
+        "change_type": change_type or [],
+        "changed_fields": changed_fields or [],
+        "proposed_definition_hash": proposed_definition_hash,
+        "impact_algorithm_version": impact_algorithm_version,
+        "impact_basis_digest": impact_basis_digest,
+        "input_refs": input_refs,
+        "output_refs": output_refs,
+        "affected_entities": affected_entities,
+        "caused_by": caused_by or [],
+    }
+
+
+EVENT_TYPES = {"ReportFrozen", "DefinitionRevised"}
+
+
 def build_event(*, root: str, event_id: str, transaction_id: str, command_version: str,
                 idempotency_key: str, request_fingerprint: str, actor: str,
                 authorization_ref: str, reason_refs: list, basis_git_commit: str,

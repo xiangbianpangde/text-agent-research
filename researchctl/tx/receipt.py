@@ -129,3 +129,133 @@ def verify_receipt(root: str, event_id: str) -> dict:
             "report_hash": rc.get("report_hash"),
             "manifest_hash": rc.get("manifest_hash"),
             "event_hash": rc.get("event_hash")}
+
+
+# ---- P1-B DefinitionRevised receipt（§2.3） ----
+
+def build_definition_receipt(*, event_id: str, transaction_id: str,
+                             event_hash: str, definition_hash: str,
+                             approved_before_hash: str,
+                             approved_after_hash: str,
+                             approved_ref_after: str,
+                             committed_at: str) -> dict:
+    """构造 P1-B DefinitionRevised commit receipt（P1-B-Contract §2.3）。"""
+    output_digest = canonical_hash({
+        "event_hash": event_hash,
+        "definition_hash": definition_hash,
+        "approved_after_hash": approved_after_hash,
+        "approved_ref_after": approved_ref_after,
+    })
+    return {
+        "event_id": event_id,
+        "transaction_id": transaction_id,
+        "event_hash": event_hash,
+        "definition_hash": definition_hash,
+        "approved_before_hash": approved_before_hash,
+        "approved_after_hash": approved_after_hash,
+        "approved_ref_after": approved_ref_after,
+        "output_digest": output_digest,
+        "committed_at": committed_at,
+    }
+
+
+def verify_definition_receipt(root: str, event_id: str) -> dict:
+    """验证 P1-B DefinitionRevised receipt（§2.3 a–k）。
+
+    返回 {valid: bool, event_id, event_hash, definition_hash, reason}。
+    """
+    from .canonical import file_canonical_hash
+    from ..mini_yaml import load_file
+    from .definition import entity_of, successor
+
+    edir = os.path.join(root, "events")
+    ev_path = os.path.join(edir, f"{event_id}.yaml")
+    rc_path = os.path.join(edir, f"{event_id}.commit")
+
+    # a. 存在且可解析
+    if not os.path.exists(ev_path):
+        return {"valid": False, "reason": "event-missing"}
+    if not os.path.exists(rc_path):
+        return {"valid": False, "reason": "receipt-missing"}
+    try:
+        ev = load_file(ev_path, strict=True) or {}
+        rc = load_file(rc_path, strict=True) or {}
+    except Exception as e:
+        return {"valid": False, "reason": f"parse-error:{e}"}
+
+    # b. receipt.event_id == event_id == 文件名
+    if rc.get("event_id") != event_id:
+        return {"valid": False, "reason": "event-id-mismatch"}
+
+    # c. transaction_id 一致
+    if rc.get("transaction_id") != ev.get("transaction_id"):
+        return {"valid": False, "reason": "tx-id-mismatch"}
+
+    # d. event_hash
+    actual_event_hash = file_canonical_hash(ev_path)
+    if rc.get("event_hash") != actual_event_hash:
+        return {"valid": False, "reason": "event-hash-mismatch"}
+
+    # e. definition_hash（output_refs[role=definition].path）
+    out_refs = ev.get("output_refs") or []
+    def_out = next((r for r in out_refs if r.get("role") == "definition"), None)
+    if not def_out:
+        return {"valid": False, "reason": "definition-output-ref-missing"}
+    def_path = os.path.join(root, def_out.get("path", ""))
+    actual_def_hash = file_canonical_hash(def_path)
+    if rc.get("definition_hash") != actual_def_hash:
+        return {"valid": False, "reason": "definition-hash-mismatch"}
+
+    # f. Event.output_refs[definition].content_hash == receipt.definition_hash
+    #    AND Event.proposed_definition_hash == receipt.definition_hash
+    def_hash = rc.get("definition_hash")
+    if def_out.get("content_hash") != def_hash:
+        return {"valid": False, "reason": "output-refs-definition-hash-mismatch"}
+    if ev.get("proposed_definition_hash") != def_hash:
+        return {"valid": False, "reason": "proposed-definition-hash-mismatch"}
+
+    # g. receipt.approved_ref_after == Event.subject
+    if rc.get("approved_ref_after") != ev.get("subject"):
+        return {"valid": False, "reason": "approved-ref-after-mismatch"}
+
+    # h. receipt.approved_before_hash == Event.approved_before_hash
+    if rc.get("approved_before_hash") != ev.get("approved_before_hash"):
+        return {"valid": False, "reason": "approved-before-hash-mismatch"}
+
+    # i. receipt.output_digest == canonical(event_hash, definition_hash, approved_after_hash, approved_ref_after)
+    exp_digest = canonical_hash({
+        "event_hash": rc.get("event_hash"),
+        "definition_hash": rc.get("definition_hash"),
+        "approved_after_hash": rc.get("approved_after_hash"),
+        "approved_ref_after": rc.get("approved_ref_after"),
+    })
+    if rc.get("output_digest") != exp_digest:
+        return {"valid": False, "reason": "output-digest-mismatch"}
+
+    # j. 完整 identity validator（Sol rev5 P1-1 + rev6 P1-2）
+    subj = ev.get("subject", "")
+    prev = ev.get("previous", "")
+    try:
+        if subj != successor(prev):
+            return {"valid": False, "reason": "subject-not-successor-of-previous"}
+        if entity_of(subj) != entity_of(prev):
+            return {"valid": False, "reason": "entity-mismatch-between-subject-and-previous"}
+    except ValueError as e:
+        return {"valid": False, "reason": f"identity-parse-error:{e}"}
+
+    # k. previous input_ref 验证（Sol rev7 P2-6）
+    in_refs = ev.get("input_refs") or []
+    prev_in = next((r for r in in_refs if r.get("role") == "definition.previous"), None)
+    if prev_in:
+        if not prev_in.get("path", "").endswith(f"{prev}.yaml"):
+            return {"valid": False, "reason": "previous-input-ref-path-mismatch"}
+        prev_path = os.path.join(root, prev_in.get("path", ""))
+        prev_hash = file_canonical_hash(prev_path)
+        if prev_in.get("content_hash") != prev_hash:
+            return {"valid": False, "reason": "previous-input-ref-hash-mismatch"}
+    else:
+        return {"valid": False, "reason": "previous-input-ref-missing"}
+
+    return {"valid": True, "event_id": event_id,
+            "event_hash": rc.get("event_hash"),
+            "definition_hash": rc.get("definition_hash")}
