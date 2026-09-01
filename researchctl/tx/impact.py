@@ -161,8 +161,10 @@ def _load_entities(root: str) -> dict:
                 continue
             try:
                 doc = load_file(p, strict=True) or {}
-            except Exception:
-                continue
+            except Exception as e:
+                # P1-2（Sol rev7）：Run manifest 是 canonical impact entity，strict-parse 失败
+                # 必须 fail-closed（IMPACT_INVALID），禁止静默从 graph 删除
+                raise ValueError(f"IMPACT_INVALID: Run manifest 解析失败 {p}: {e}")
             eid = doc.get("run_id") or rn
             # 优先文档内 version_ref；无则用 run_id（canonical identity rule，非物理路径）
             ver = doc.get("version_ref") or eid
@@ -189,8 +191,21 @@ def _load_entities(root: str) -> dict:
     return entities
 
 
+def _is_executed_uncommitted(doc: dict) -> bool:
+    """ResultBundle executed AND uncommitted 的 canonical predicate（Sol rev7 P1-1）。
+
+    executed 由 lifecycle 表达；uncommitted 必须由独立 commitment 信号（doc.committed is not True）
+    判定——lifecycle==executed 本身不等于 uncommitted。_impact_classification 与
+    _lifecycle_override_reason 共用同一 predicate，防止 impact/reason 漂移。
+    """
+    lifecycle = str(doc.get("lifecycle") or doc.get("state") or "").strip()
+    executed = lifecycle == "executed"
+    uncommitted = doc.get("committed") is not True
+    return executed and uncommitted
+
+
 def _impact_classification(entity_key, doc: dict) -> str:
-    """分类矩阵（§4.5，Sol P2-2 + rev6 P1-2）。
+    """分类矩阵（§4.5，Sol P2-2 + rev6 P1-2 + rev7 P1-1）。
 
     只按 canonical entity_type × lifecycle 精确分类；绝不按 entity_id substring 猜类型
     （RUNBOOK-001 不能因含 "run" 被当 Run）。
@@ -208,7 +223,7 @@ def _impact_classification(entity_key, doc: dict) -> str:
             return "stale"
         return None
     if etype == "ResultBundle":
-        if lifecycle == "executed" and lifecycle != "committed":
+        if _is_executed_uncommitted(doc):
             return "needs_review"
         return None
     if etype == "Conclusion":
@@ -220,12 +235,13 @@ def _impact_classification(entity_key, doc: dict) -> str:
 
 
 def _lifecycle_override_reason(entity_key, doc: dict) -> Optional[str]:
-    """B. lifecycle override（Sol rev9 P2-2）：ResultBundle executed+uncommitted → active_result_bundle。"""
+    """B. lifecycle override（Sol rev9 P2-2 + rev7 P1-1）：ResultBundle executed+uncommitted
+    → active_result_bundle。与 _impact_classification 共用同一 predicate。"""
     eid, ver = entity_key
     etype = str(doc.get("entity_type") or doc.get("kind") or "").strip()
     lifecycle = str(doc.get("lifecycle") or doc.get("state") or "").strip()
     if etype == "ResultBundle":
-        if lifecycle == "executed" and lifecycle != "committed":
+        if _is_executed_uncommitted(doc):
             return "active_result_bundle"
     return None
 
