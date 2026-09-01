@@ -62,25 +62,25 @@ def canonicalize_change_types(change_types) -> list:
 
 
 def _entity_refs_of(doc: dict) -> list:
-    """提取文档中所有版本引用（entity@version 或 entity）。"""
+    """提取文档中所有版本引用（entity@version），每条含 (ref, relation)。"""
     refs = []
 
-    def walk(value):
+    def walk(value, parent_key=None):
         if isinstance(value, dict):
             for k, v in value.items():
                 if k in _DEPENDENCY_KEYS or k in ("upstream", "references"):
                     if isinstance(v, str) and re.fullmatch(r"[A-Z][A-Za-z0-9_-]+@v\d+", v):
-                        refs.append(v)
+                        refs.append((v, k))
                     elif isinstance(v, (dict, list)):
-                        walk(v)
+                        walk(v, k)
                 elif isinstance(v, str) and v:
                     if re.fullmatch(r"[A-Z][A-Za-z0-9_-]+@v\d+", v):
-                        refs.append(v)
+                        refs.append((v, parent_key or "references"))
                 elif isinstance(v, (dict, list)):
-                    walk(v)
+                    walk(v, k)
         elif isinstance(value, list):
             for v in value:
-                walk(v)
+                walk(v, parent_key)
 
     walk(doc)
     return refs
@@ -183,17 +183,17 @@ def compute_affected(root: str, *, definition: str, previous: str,
     每条：{entity_id, version_ref, impact, stale_reasons[], upstream_revision}。
     """
     entities = _load_entities(root)
-    # reverse dependency graph：entity → 引用它的实体
-    reverse: dict = {}  # (eid, ver) -> list of (eid2, ver2)
+    # reverse dependency graph：entity → (引用它的实体, relation)
+    reverse: dict = {}  # (eid, ver) -> list of (entity_key, relation)
     for key, info in entities.items():
         doc = info["doc"]
-        for ref in _entity_refs_of(doc):
+        for ref, rel in _entity_refs_of(doc):
             ref_key = None
             m = re.fullmatch(r"([A-Z][A-Za-z0-9_-]+)@v(\d+)", ref)
             if m:
                 ref_key = (m.group(1), ref)
             if ref_key in entities:
-                reverse.setdefault(ref_key, []).append(key)
+                reverse.setdefault(ref_key, []).append((key, rel))
 
     root_key = (definition, previous)
     visited = set()
@@ -204,7 +204,8 @@ def compute_affected(root: str, *, definition: str, previous: str,
         if cur in visited:
             continue
         visited.add(cur)
-        for dependent in reverse.get(cur, []):
+        for dep_entry in reverse.get(cur, []):
+            dependent, relation = dep_entry
             if dependent == root_key or dependent in visited:
                 continue
             dep_doc = entities.get(dependent, {}).get("doc", {})
@@ -219,13 +220,15 @@ def compute_affected(root: str, *, definition: str, previous: str,
                     existing["impact"] = "needs_review"
                 # reasons 保留全部（多路径聚合）
                 existing["stale_reasons"].extend(
-                    _build_reasons(dependent, dep_doc, change_types, previous, candidate_subject))
+                    _build_reasons(dependent, dep_doc, change_types, previous, candidate_subject,
+                                   relation))
                 continue
             affected.append({
                 "entity_id": dependent[0],
                 "version_ref": dependent[1],
                 "impact": impact,
-                "stale_reasons": _build_reasons(dependent, dep_doc, change_types, previous, candidate_subject),
+                "stale_reasons": _build_reasons(dependent, dep_doc, change_types, previous,
+                                                 candidate_subject, relation),
                 "upstream_revision": candidate_subject,
             })
             # 继续沿 reverse edges（transitive closure）
@@ -255,22 +258,24 @@ def compute_affected(root: str, *, definition: str, previous: str,
 
 
 def _build_reasons(entity_key, doc: dict, change_types: list,
-                   previous: str, candidate_subject: str) -> list:
+                   previous: str, candidate_subject: str,
+                   relation: str = "uses") -> list:
     """为受影响实体构造 stale_reasons[]。
 
     A. revision-change 映射：每个 canonicalized change_type member → reason_code
     B. lifecycle override 命中时取代（而非追加）
+    via_relation 使用真实 edge relation（Sol rev 实现复审 P1-3）。
     """
     reasons = []
     override = _lifecycle_override_reason(entity_key, doc)
     if override:
-        reasons.append({"reason_code": override, "via_relation": "uses"})
+        reasons.append({"reason_code": override, "via_relation": relation})
         return reasons
     for ct in canonicalize_change_types(change_types):
         rc = CHANGE_TYPE_TO_REASON.get(ct, "other_upstream_change")
-        reasons.append({"reason_code": rc, "via_relation": "uses"})
+        reasons.append({"reason_code": rc, "via_relation": relation})
     if not reasons:
-        reasons.append({"reason_code": "other_upstream_change", "via_relation": "uses"})
+        reasons.append({"reason_code": "other_upstream_change", "via_relation": relation})
     return reasons
 
 

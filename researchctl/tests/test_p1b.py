@@ -480,6 +480,77 @@ try:
 finally:
     cleanup(tmp)
 
+# ================= Sol 实现复审 P1 修复验证 =================
+print("\n[P1 修复验证] APPROVED identity / predecessor authority / via_relation")
+
+# P1-1: APPROVED.definition 篡改
+print("\n[P1-1] APPROVED.definition 篡改拒绝")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    app_path = os.path.join(dst, "definitions", "H003", "APPROVED.yaml")
+    open(app_path, "w").write("definition: H999\nref: H003@v1\napproved_at: x\nbasis_git_commit: b\n")
+    git_commit(dst, "tamper")
+    from researchctl.tx.revise import revise_definition
+    from researchctl.tests.p1b_bootstrap import DEFAULT_BODY as _DB
+    r = revise_definition(root=dst, idempotency_key="p11a", definition="H003",
+                          expected_previous="H003@v1", definition_input=_DB,
+                          change_type=["scope_change"], actor="text-agent",
+                          authorization_ref="AUTH-0002", approval_ref="APR-000001")
+    check("P1-1 APPROVED.definition 篡改 → DEF_IDENTITY_MISMATCH",
+          r.get("error_semantic") == "DEF_IDENTITY_MISMATCH")
+finally:
+    cleanup(tmp)
+
+# P1-2: predecessor authority — 版本号 ≠ EV 编号
+print("\n[P1-2] predecessor hash 从 Event.subject 而非 EV 编号获取")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    from researchctl.tx.revise import revise_definition
+    from researchctl.tests.p1b_bootstrap import DEFAULT_BODY as _DB, wrap_hash as _wh, write_approval as _wa
+    r = revise_definition(root=dst, idempotency_key="p12a", definition="H003",
+                          expected_previous="H003@v1", definition_input=_DB,
+                          change_type=["scope_change"], actor="text-agent",
+                          authorization_ref="AUTH-0002", approval_ref="APR-000001")
+    # v2 由 EV-000001 产生（版本号 2 ≠ EV 编号 000001）
+    git_commit(dst)
+    h = _wh("H003", "H003@v2", _DB)
+    _wa(dst, "APR-000002", definition="H003", previous="H003@v2",
+        proposed_hash=h, change_type=["scope_change"])
+    git_commit(dst, "apr2")
+    from researchctl.tx.definition import get_previous_hash
+    from researchctl.tx.receipt import verify_definition_receipt
+    prev_hash = get_previous_hash(dst, "H003", "H003@v2")
+    rc = verify_definition_receipt(dst, "EV-000001")
+    check("P1-2 predecessor hash == receipt.definition_hash（非 EV 编号假设）",
+          prev_hash == rc.get("definition_hash"))
+finally:
+    cleanup(tmp)
+
+# P1-3: impact via_relation 保留真实 relation
+print("\n[P1-3] via_relation 保留真实依赖边")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    # 改为 based_on 依赖
+    p = os.path.join(dst, "organized", "TS-0043.yaml")
+    open(p, "w").write("entity_type: TaskSlice\nlifecycle: not_executed\nbased_on: H003@v1\n")
+    git_commit(dst, "based_on")
+    from researchctl.tx.revise import revise_definition
+    from researchctl.tests.p1b_bootstrap import DEFAULT_BODY as _DB
+    r = revise_definition(root=dst, idempotency_key="p13a", definition="H003",
+                          expected_previous="H003@v1", definition_input=_DB,
+                          change_type=["scope_change"], actor="text-agent",
+                          authorization_ref="AUTH-0002", approval_ref="APR-000001")
+    from researchctl.mini_yaml import load_file
+    ev = load_file(os.path.join(dst, "events", "EV-000001.yaml"), strict=True) or {}
+    relations = {s.get("via_relation") for a in ev.get("affected_entities", [])
+                 for s in a.get("stale_reasons", [])}
+    check("P1-3 via_relation=based_on 被保留", "based_on" in relations, str(relations))
+finally:
+    cleanup(tmp)
+
 # ================= 汇总 =================
 print("\n" + "=" * 62)
 print(f"结果: {PASS} PASS, {FAIL} FAIL")

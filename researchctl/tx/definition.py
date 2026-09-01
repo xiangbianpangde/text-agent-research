@@ -198,21 +198,31 @@ def _get_value_at_path(d: dict, path: str):
 def get_previous_hash(root: str, entity: str, previous: str) -> Optional[str]:
     """获取 predecessor 版本文件的 canonical hash 或是 receipt.definition_hash。
 
-    若 previous 是 P1-B committed revision → 从 receipt 获取 definition_hash；
-    若 previous 是 bootstrap v1 → 从文件计算 canonical hash。
+    若 previous 是 P1-B committed revision → 从 valid receipt 获取 definition_hash
+    （按 **Event.subject == previous** 查找，绝不假设 EV 编号 == 版本编号，Sol rev 实现复审 P1-2）；
+    若 previous 是 bootstrap v1（无 committed DefinitionRevised）→ 从文件计算 canonical hash。
     """
     from ..mini_yaml import load_file
-    # 检查 receipt
+    from .receipt import verify_definition_receipt
+    # 扫描 canonical committed Event/receipt，按 subject == previous 查找
     ev_dir = os.path.join(root, "events")
     if os.path.isdir(ev_dir):
-        ev_num = version_number(previous)
-        ev_id = f"EV-{ev_num:06d}"
-        rc_path = os.path.join(ev_dir, f"{ev_id}.commit")
-        if os.path.exists(rc_path):
+        for fn in sorted(os.listdir(ev_dir)):
+            m = re.fullmatch(r"EV-(\d{6})\.yaml", fn)
+            if not m:
+                continue
+            eid = fn[:-5]
             try:
-                rc = load_file(rc_path, strict=True) or {}
-                return rc.get("definition_hash")
+                ev = load_file(os.path.join(ev_dir, fn), strict=True) or {}
             except Exception:
-                pass
-    # fallback: 文件 canonical hash
+                continue
+            if ev.get("subject") != previous:
+                continue
+            if ev.get("event_type") != "DefinitionRevised":
+                continue
+            # 该 Event 的 receipt 必须有效（canonical COMMITTED truth）
+            rc = verify_definition_receipt(root, eid)
+            if rc.get("valid") is True:
+                return rc.get("definition_hash")
+    # bootstrap：无 committed DefinitionRevised → 从文件计算 canonical hash
     return file_canonical_hash(definition_path(root, entity, previous))

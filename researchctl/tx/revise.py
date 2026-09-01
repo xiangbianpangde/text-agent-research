@@ -195,10 +195,16 @@ def _revise_locked(root, db_path, idempotency_key, definition,
     if approved is None:
         raise TxError("DEF_NOT_FOUND", f"{definition} 尚无 APPROVED（P1-B 不负责 bootstrap）")
     approved_before_hash = read_approved_hash(root, definition)
-    # 5b: chain CAS（§4.2 顺序：先于 predecessor 文件检查）
+    # 5b: chain CAS + identity invariant（Sol rev 实现复审 P1-1）
     if approved.get("ref") != expected_previous:
         raise TxError("DEF_CHAIN_MISMATCH",
                       f"expected_previous={expected_previous} != APPROVED.ref={approved.get('ref')}")
+    if approved.get("definition") != definition:
+        raise TxError("DEF_IDENTITY_MISMATCH",
+                      f"APPROVED.definition={approved.get('definition')} != CLI definition={definition}")
+    if entity_of(approved.get("ref", "")) != definition:
+        raise TxError("DEF_IDENTITY_MISMATCH",
+                      f"APPROVED.ref entity={entity_of(approved.get('ref', ''))} != CLI definition={definition}")
     # 5c: 读 predecessor
     prev_def = read_definition(root, definition, expected_previous)
     if prev_def is None:
@@ -221,14 +227,14 @@ def _revise_locked(root, db_path, idempotency_key, definition,
     if os.path.exists(cand_path):
         raise TxError("DEF_VERSION_OCCUPIED",
                       f"candidate_subject {candidate_subject} 已被占用（不跳号）")
-    # 6b: change_type 非空且合法
-    if not ct_canonical:
-        raise TxError("DEF_SEMANTIC_CHANGE_REQUIRED", "change_type 为空")
-    # 6c: 语义变化确认（DEF_NO_CHANGE）——在 approval 之前（§4.2 顺序）
+    # 6b: 语义变化确认（DEF_NO_CHANGE）——合同优先级最高（Sol rev 实现复审 P2-1）
     changed_fields = structural_diff(prev_def, wrapped)
     if not changed_fields:
         raise TxError("DEF_NO_CHANGE",
                       "changed_fields 为空（structural_diff(previous.body, proposed.body) 无变化）")
+    # 6c: change_type 非空且合法
+    if not ct_canonical:
+        raise TxError("DEF_SEMANTIC_CHANGE_REQUIRED", "change_type 为空")
     # 6d: approval binding（approval 必须在 basis commit，§6.3）
     approval_res = validate_approval_binding(root, head, approval_ref,
                                              definition=definition,
