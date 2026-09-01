@@ -354,9 +354,13 @@ def get_previous_hash(root: str, entity: str, previous: str) -> Optional[str]:
     若 previous 是 P1-B committed revision → 从 valid receipt 获取 definition_hash
     （按 **Event.subject == previous** 查找，绝不假设 EV 编号 == 版本编号，Sol rev 实现复审 P1-2）；
     若 previous 是 bootstrap v1（无 committed DefinitionRevised）→ 从 external pin 锚定。
+
+    注意：若存在 subject==previous 的 DefinitionRevised Event 但 receipt 无效，
+    返回 None（predecessor authority broken），不降级到 bootstrap（Sol rev8 P2）。
     """
     from ..mini_yaml import load_file
     from .receipt import verify_definition_receipt
+    found_event = False
     # 扫描 canonical committed Event/receipt，按 subject == previous 查找
     ev_dir = os.path.join(root, "events")
     if os.path.isdir(ev_dir):
@@ -373,9 +377,14 @@ def get_previous_hash(root: str, entity: str, previous: str) -> Optional[str]:
                 continue
             if ev.get("event_type") != "DefinitionRevised":
                 continue
+            found_event = True
             # 该 Event 的 receipt 必须有效（canonical COMMITTED truth）
             rc = verify_definition_receipt(root, eid)
             if rc.get("valid") is True:
                 return rc.get("definition_hash")
-    # bootstrap：无 committed DefinitionRevised → 从 external pin 锚定（Sol rev2 P1-2）
-    return verify_bootstrap_definition(root, entity, previous)
+            # 找到 Event 但 receipt 无效 → predecessor authority broken（不降级到 bootstrap）
+            return None
+    # 无 committed DefinitionRevised（真正 bootstrap）→ 从 external pin 锚定
+    if not found_event:
+        return verify_bootstrap_definition(root, entity, previous)
+    return None

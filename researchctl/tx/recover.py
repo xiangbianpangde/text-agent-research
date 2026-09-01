@@ -652,8 +652,13 @@ def _p1b_install_from_staging(root: str, plan: dict, step0: dict, actions: list)
 
 
 def _p1b_recovery_basis_check(root: str, plan: dict) -> bool:
-    """recovery basis check（§5.2 P1-2）：HEAD == plan.basis_git_commit AND
-    actual previous_definition_hash == plan.definition_before_hash。"""
+    """recovery basis check（§5.2 P1-2 + Sol rev8 P1）。
+
+    HEAD == plan.basis_git_commit AND
+    predecessor **canonical authority** == plan.definition_before_hash
+    （不是 live file hash——predecessor receipt 已损坏/缺失时必须在修改 APPROVED 前
+    STALE_BASIS / NEEDS_RECONCILE）。
+    """
     import subprocess as _sp
     try:
         head = _sp.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
@@ -661,11 +666,15 @@ def _p1b_recovery_basis_check(root: str, plan: dict) -> bool:
         return False
     if head != plan.get("basis_git_commit"):
         return False
-    from .canonical import file_canonical_hash
-    prev_path = os.path.join(root, "definitions", plan.get("definition", ""),
-                             f"{plan.get('previous', '')}.yaml")
-    actual = file_canonical_hash(prev_path)
-    return actual == plan.get("definition_before_hash")
+    from .definition import get_previous_hash
+    try:
+        authority_hash = get_previous_hash(root, plan.get("definition", ""),
+                                           plan.get("previous", ""))
+    except Exception:
+        return False
+    if authority_hash is None:
+        return False
+    return authority_hash == plan.get("definition_before_hash")
 
 
 def recover_definition_tx(root: str, db_path: str, tx_id: str) -> dict:
@@ -790,6 +799,12 @@ def _p1b_complete_receipt_marker(root, db_path, tx_id, plan, actions):
             committed_at=_now())
         write_atomic(rc_path, _yaml_dump(rc).encode("utf-8"))
         actions.append("receipt written (missing)")
+    # P1（Sol rev8）：补写 receipt 后必须立即通过完整 verify_definition_receipt(a–k)
+    # 才允许 marker / materialize / COMMITTED（§3.3 COMMITTED = valid receipt + canonical validation）
+    verified = _vdrc(root, ev_id)
+    if not verified["valid"]:
+        raise TxError("PROVENANCE_BROKEN",
+                      f"recovered receipt invalid (a–k): {verified.get('reason')}")
     if not marker_valid(root, tx_id):
         rc_doc = _yaml_load(rc_path, strict=True) if os.path.exists(rc_path) else {}
         mk = build_marker(transaction_id=tx_id, event_id=ev_id,
