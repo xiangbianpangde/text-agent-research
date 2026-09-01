@@ -55,8 +55,13 @@ def rebuild_marker_from_canonical(root: str) -> list:
         if etype == "DefinitionRevised":
             from .receipt import verify_definition_receipt as _vdrc
             rc = _vdrc(root, eid)
-        else:
+        elif etype == "ReportFrozen":
             rc = verify_receipt(root, eid)
+        else:
+            # P2-2: 未知 event_type 显式 closed-set reject（fail-closed，不当作 ReportFrozen）
+            out.append({"event_id": eid, "status": "needs_reconcile",
+                        "reason": f"invalid-event-type:{etype}"})
+            continue
         if not rc["valid"]:
             out.append({"event_id": eid, "status": "needs_reconcile",
                         "reason": rc["reason"]})
@@ -465,31 +470,42 @@ def reconcile_tx(root: str, db_path: str) -> dict:
                                                  f"在 basis {basis[:8]} 中不可用: {apr_res.get('detail')}"]})
                     status = "needs_reconcile"
 
-    # 7) P1-4: P1-B current-pointer invariant reconcile（Sol rev3 P1-4）
-    #    对有 committed DefinitionRevised history 的实体：
-    #      live APPROVED.ref == latest receipt.approved_ref_after
-    #      AND hash(live APPROVED) == latest receipt.approved_after_hash
-    #    missing APPROVED → DEF_POINTER_DIVERGED / PROVENANCE_BROKEN
-    #    无 history 但有 APPROVED（bootstrap）→ 与 external pin 锚定验证
+    # 7) P1-4: P1-B current-pointer invariant reconcile（Sol rev3 P1-4 + rev4 P1-2）
+    #    实体集合先从 canonical history（committed DefinitionRevised ∪ 外部 bootstrap registry）确定，
+    #    再检查 APPROVED 存在/可解析——不能用"当前能否读到 APPROVED"决定是否需要检查。
     try:
         from .definition import (read_approved, read_approved_hash, definition_dir,
-                                 verify_bootstrap_approved)
-        if os.path.isdir(os.path.join(root, "definitions")):
-            for entity in sorted(os.listdir(os.path.join(root, "definitions"))):
-                edir = os.path.join(root, "definitions", entity)
-                if not os.path.isdir(edir) or entity == ".git":
-                    continue
-                live_app = read_approved(root, entity)
-                if live_app is None:
-                    continue  # 无 APPROVED，非 P1-B 实体
+                                 verify_bootstrap_approved, verify_bootstrap_definition)
+        defdir = os.path.join(root, "definitions")
+        if os.path.isdir(defdir):
+            # 先收集需要检查的实体：committed DefinitionRevised history ∪ 有 definition 文件的实体
+            entities_to_check = set()
+            if os.path.isdir(defdir):
+                for entity in sorted(os.listdir(defdir)):
+                    if entity == ".git":
+                        continue
+                    edir_full = os.path.join(defdir, entity)
+                    if os.path.isdir(edir_full):
+                        entities_to_check.add(entity)
+            for entity in sorted(entities_to_check):
+                edir_full = os.path.join(defdir, entity)
+                app_exists = os.path.exists(os.path.join(edir_full, "APPROVED.yaml"))
                 # 找该实体 latest committed DefinitionRevised
                 from .revise import latest_approved_evidence
                 latest = latest_approved_evidence(root, entity)
                 if latest is not None:
-                    if not os.path.exists(os.path.join(edir, "APPROVED.yaml")):
+                    # 有 committed history → APPROVED 必须存在且可解析（Sol rev4 P1-2 / U52）
+                    if not app_exists:
                         results.append({"tx_id": None, "entity_id": entity,
                                         "status": "needs_reconcile",
                                         "actions": ["PROVENANCE_BROKEN: 有 committed history 但 APPROVED 缺失"]})
+                        status = "needs_reconcile"
+                        continue
+                    live_app = read_approved(root, entity)
+                    if live_app is None:
+                        results.append({"tx_id": None, "entity_id": entity,
+                                        "status": "needs_reconcile",
+                                        "actions": ["PROVENANCE_BROKEN: APPROVED 存在但不可解析（malformed）"]})
                         status = "needs_reconcile"
                         continue
                     if live_app.get("ref") != latest["approved_ref_after"]:
@@ -506,15 +522,28 @@ def reconcile_tx(root: str, db_path: str) -> dict:
                                         "actions": [f"DEF_POINTER_DIVERGED: {entity} exact pointer hash 不一致"]})
                         status = "needs_reconcile"
                 else:
-                    # 无 P1-B history → bootstrap baseline：验证 APPROVED 与 external pin 一致
+                    # 无 P1-B history → bootstrap baseline：验证 APPROVED + v1 均与 external pin 一致（Sol rev4 P1-2）
+                    if not app_exists:
+                        continue  # 无 APPROVED 的普通目录，非 P1-B 实体
                     try:
-                        verify_bootstrap_approved(root, entity)
-                    except Exception as e:
-                        from .fs import TxError as _TxErr
-                        if isinstance(e, _TxErr) and e.semantic == "DEF_POINTER_DIVERGED":
+                        live_app = read_approved(root, entity)
+                        if live_app is None:
                             results.append({"tx_id": None, "entity_id": entity,
                                             "status": "needs_reconcile",
-                                            "actions": [f"DEF_POINTER_DIVERGED: bootstrap APPROVED 与 external pin 不一致: {e}"]})
+                                            "actions": ["PROVENANCE_BROKEN: bootstrap APPROVED 存在但不可解析"]})
+                            status = "needs_reconcile"
+                            continue
+                        verify_bootstrap_approved(root, entity)
+                        # v1 也验证（合同 §5.4：bootstrap APPROVED + v1 都锚定 external pin）
+                        v1 = live_app.get("ref", "")
+                        if v1:
+                            verify_bootstrap_definition(root, entity, v1)
+                    except Exception as e:
+                        from .fs import TxError as _TxErr
+                        if isinstance(e, _TxErr) and e.semantic in ("DEF_POINTER_DIVERGED", "PROVENANCE_BROKEN"):
+                            results.append({"tx_id": None, "entity_id": entity,
+                                            "status": "needs_reconcile",
+                                            "actions": [f"{e.semantic}: bootstrap 与 external pin 不一致: {e}"]})
                             status = "needs_reconcile"
     except Exception as e:
         results.append({"tx_id": None, "status": "needs_reconcile",
@@ -653,6 +682,14 @@ def recover_definition_tx(root: str, db_path: str, tx_id: str) -> dict:
 
     ev_id = plan.get("event_id")
     rc = verify_definition_receipt(root, ev_id) if ev_id else {"valid": False}
+
+    # P1-3（Sol rev4）：在任何 canonical mutation 前区分 receipt missing vs exists-but-invalid
+    #   receipt 存在但 invalid → 立即 fail-closed（不得先推进 APPROVED/补装 staging）
+    rc_path = _rcpath(root, ev_id) if ev_id else None
+    if not rc["valid"] and rc_path and os.path.exists(rc_path):
+        return {"tx_id": tx_id, "status": "needs_reconcile",
+                "actions": [f"PROVENANCE_BROKEN: receipt {ev_id}.commit 已存在但 invalid"
+                             f"（{rc.get('reason')}）；拒绝任何 recovery mutation"]}
 
     # A. receipt valid → committed（补 marker + materialize）
     if rc["valid"]:

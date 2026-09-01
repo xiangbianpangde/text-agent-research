@@ -214,15 +214,11 @@ def bootstrap_pin_path(root: str) -> str:
 def read_bootstrap_pin(root: str):
     """读取外部 pin（不可变常量 bootstrap_git_commit）。
 
-    优先级：
-      1) 环境变量 RESEARCHCTL_BOOTSTRAP_COMMIT（真正 external，最高优先）
-      2) 仓库外配置文件 <root父目录>/bootstrap-pin.yaml（不在 git 仓库内）
+    来源：仓库外配置文件 <root父目录>/bootstrap-pin.yaml（不在 git 仓库内）。
+    不读取环境变量（Sol rev4 P1-1：调用者不可覆盖的 immutable trust root；
+    env 可被普通 invocation 重定向，不可作为信任锚）。
     返回 {bootstrap_git_commit} 或 None（缺失/损坏 → None，调用方必须 fail-closed）。
     """
-    import os as _os
-    env_commit = _os.environ.get(BOOTSTRAP_PIN_ENV, "").strip()
-    if env_commit:
-        return {"bootstrap_git_commit": env_commit}
     from ..mini_yaml import load_file
     p = bootstrap_pin_path(root)
     if not os.path.exists(p):

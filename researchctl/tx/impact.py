@@ -51,6 +51,23 @@ _DEPENDENCY_KEYS = ("based_on", "uses", "references", "caused_by")
 _CONTAINER_KEYS = ("dependencies", "relations", "provenance")
 
 
+def canonicalize_for_fingerprint(change_types) -> list:
+    """用于 fingerprint 的 canonicalization：排序+去重，保留全部值（含未知值）。
+
+    与 canonicalize_change_types 的区别：不过滤任何值，确保不同请求有不同的 fingerprint。
+    """
+    if not change_types:
+        return []
+    seen = set()
+    out = []
+    for ct in change_types:
+        if ct and ct not in seen:
+            out.append(ct)
+            seen.add(ct)
+    out.sort()
+    return out
+
+
 def canonicalize_change_types(change_types, strict=True) -> list:
     """change_type 集合语义：unique + 按 enum 顺序排序（§4.2）。
 

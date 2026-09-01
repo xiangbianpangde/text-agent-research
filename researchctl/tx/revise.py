@@ -31,7 +31,7 @@ from .definition import (successor, entity_of, read_definition, read_approved,
                          wrap_definition_input, validate_definition_identity,
                          structural_diff, get_previous_hash)
 from .impact import (compute_affected, impact_basis_digest, max_committed_event_id,
-                     canonicalize_change_types, CHANGE_TYPES)
+                     canonicalize_change_types, canonicalize_for_fingerprint, CHANGE_TYPES)
 
 COMMAND_VERSION = "revise-definition/v1"
 SCHEMA_VERSION = 1
@@ -209,7 +209,7 @@ def _revise_locked(root, db_path, idempotency_key, definition,
         "definition": definition,
         "expected_previous": expected_previous,
         "candidate_subject": candidate_subject,
-        "change_type": canonical_hash({"change_type": ct_canonical}),
+        "change_type": canonical_hash({"change_type": canonicalize_for_fingerprint(change_type)}),
         "proposed_definition_hash": proposed_definition_hash,
     })
     _maybe_crash(crash_after, "after-fingerprint", on_step)
@@ -334,14 +334,20 @@ def _revise_locked(root, db_path, idempotency_key, definition,
     from ..mini_yaml import dump as yaml_dump
     # 序列化定义版本文件
     definition_bytes = yaml_dump(wrapped).encode("utf-8")
-    # 构造 output_refs
-    out_refs = [
+    # Event 的 output_refs：只保留冻结 schema 的 definition（§2.2；P1-4：无 self/output refs）
+    ev_out_refs = [
+        {"role": "definition",
+         "path": f"definitions/{definition}/{candidate_subject}.yaml",
+         "content_hash": proposed_definition_hash},
+    ]
+    # plan files：保留全部 recovery 数据（definition/event/approved_pointer/receipt，仅 recovery 用）
+    plan_out_refs = [
         {"role": "definition",
          "path": f"definitions/{definition}/{candidate_subject}.yaml",
          "content_hash": proposed_definition_hash},
         {"role": "event",
          "path": f"events/{event_id}.yaml",
-         "content_hash": canonical_hash({})},  # 填充后更新
+         "content_hash": ""},  # 填充后更新
         {"role": "approved_pointer",
          "path": f"definitions/{definition}/APPROVED.yaml",
          "before_hash": approved_before_hash,
@@ -357,7 +363,7 @@ def _revise_locked(root, db_path, idempotency_key, definition,
          "content_hash": prev_hash,
          "reference_scope": "historical"},
     ]
-    # 构造 Event
+    # 构造 Event（output_refs 只含 definition）
     ev = build_definition_revised_event(
         root=root, event_id=event_id, transaction_id=tx_id,
         command_version=COMMAND_VERSION, idempotency_key=idempotency_key,
@@ -373,12 +379,9 @@ def _revise_locked(root, db_path, idempotency_key, definition,
         impact_basis_digest=ibd,
         approved_before_hash=approved_before_hash,
         input_refs=in_refs,
-        output_refs=out_refs,
+        output_refs=ev_out_refs,
         affected_entities=affected,
     )
-    # 更新 event 的 canonical hash
-    event_hash = canonical_hash(ev)
-    out_refs[1]["content_hash"] = event_hash
     # 构造 APPROVED@new
     approved_new = {
         "definition": definition,
@@ -388,11 +391,8 @@ def _revise_locked(root, db_path, idempotency_key, definition,
     }
     approved_new_bytes = yaml_dump(approved_new).encode("utf-8")
     approved_new_hash = canonical_hash(approved_new)
-    out_refs[2]["after_hash"] = approved_new_hash
-    # 更新 ev 的 output_refs
-    ev["output_refs"] = out_refs
+    plan_out_refs[2]["after_hash"] = approved_new_hash
     event_bytes = serialize_event(ev)
-    # 重建 event_hash（含完整 output_refs）
     event_hash = canonical_hash(ev)
     ev_final_hash = event_hash
 
@@ -521,9 +521,10 @@ def _revise_locked(root, db_path, idempotency_key, definition,
     _maybe_crash(crash_after, "after-receipt", on_step)
 
     # ---- 步骤 16: marker（derived cache；只在 committed 后写） ----
-    output_refs_manifest = [{"role": r["role"], "path": r["path"],
-                             "content_hash": r.get("content_hash") or ""}
-                            for r in out_refs]
+    # 使用 plan files（recovery 数据全集：definition/event/approved_pointer/receipt）作为 manifest
+    output_refs_manifest = [{"role": f["role"], "path": f["path"],
+                             "content_hash": f.get("after_hash") or f.get("content_hash") or ""}
+                            for f in files]
     mk = build_marker(transaction_id=tx_id, event_id=event_id,
                       event_hash=ev_final_hash,
                       receipt_hash=canonical_hash(rc),

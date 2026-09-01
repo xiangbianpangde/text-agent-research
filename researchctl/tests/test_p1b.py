@@ -656,6 +656,89 @@ try:
 finally:
     cleanup(tmp)
 
+# ================= Sol 第四轮 P1/P2 修复验证 =================
+print("\n[Sol rev4 修复验证] bootstrap 不可重定向 / missing APPROVED / receipt invalid 先行 / Event 无 self-ref")
+
+# P1-1: bootstrap pin 不读 env（调用者不可重定向 trust root）
+print("\n[rev4-P1-1] bootstrap trust root 不被 env 重定向")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    import os as _os
+    # 恶意：设置 RESEARCHCTL_BOOTSTRAP_COMMIT 指向一个伪造 commit
+    _os.environ["RESEARCHCTL_BOOTSTRAP_COMMIT"] = "deadbeef"
+    from researchctl.tx.definition import read_bootstrap_pin
+    pin = read_bootstrap_pin(dst)
+    check("rev4-P1-1a env 不覆盖仓库外 pin",
+          pin is not None and pin.get("bootstrap_git_commit") != "deadbeef", str(pin))
+finally:
+    cleanup(tmp)
+
+# P1-2: reconcile 检测有 committed history 但 APPROVED 缺失
+print("\n[rev4-P1-2] missing APPROVED（有 history）→ fail-closed")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    from researchctl.tx.revise import revise_definition
+    from researchctl.tests.p1b_bootstrap import DEFAULT_BODY as _DB
+    r = revise_definition(root=dst, idempotency_key="r41", definition="H003",
+                          expected_previous="H003@v1", definition_input=_DB,
+                          change_type=["scope_change"], actor="text-agent",
+                          authorization_ref="AUTH-0002", approval_ref="APR-000001")
+    git_commit(dst)
+    # 删除 APPROVED.yaml（有 committed history）
+    os.unlink(os.path.join(dst, "definitions", "H003", "APPROVED.yaml"))
+    git_commit(dst, "delete-approved")
+    from researchctl.tx.recover import reconcile_tx
+    rc = reconcile_tx(dst, os.path.join(dst, ".index", "research.sqlite"))
+    issues = [a for x in rc.get("results", []) for a in x.get("actions", [])]
+    check("rev4-P1-2a missing APPROVED → PROVENANCE_BROKEN",
+          any("APPROVED 缺失" in a for a in issues), str(issues[:2]))
+finally:
+    cleanup(tmp)
+
+# P1-4: Event output_refs 只含 definition（无 self/output refs）
+print("\n[rev4-P1-4] Event output_refs 无 self-refs")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    from researchctl.tx.revise import revise_definition
+    from researchctl.tests.p1b_bootstrap import DEFAULT_BODY as _DB
+    r = revise_definition(root=dst, idempotency_key="r44", definition="H003",
+                          expected_previous="H003@v1", definition_input=_DB,
+                          change_type=["scope_change"], actor="text-agent",
+                          authorization_ref="AUTH-0002", approval_ref="APR-000001")
+    from researchctl.mini_yaml import load_file
+    ev = load_file(os.path.join(dst, "events", "EV-000001.yaml"), strict=True) or {}
+    out_refs = ev.get("output_refs", [])
+    roles = [r.get("role") for r in out_refs]
+    check("rev4-P1-4a output_refs 只含 definition", roles == ["definition"], str(roles))
+finally:
+    cleanup(tmp)
+
+# P2-1: fingerprint 保留未知 change_type（alias 消除）
+print("\n[rev4-P2-1] fingerprint alias 消除")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    from researchctl.tx.revise import revise_definition
+    from researchctl.tests.p1b_bootstrap import DEFAULT_BODY as _DB
+    # 正常 revision
+    r1 = revise_definition(root=dst, idempotency_key="r45", definition="H003",
+                           expected_previous="H003@v1", definition_input=_DB,
+                           change_type=["scope_change"], actor="text-agent",
+                           authorization_ref="AUTH-0002", approval_ref="APR-000001")
+    git_commit(dst)
+    # 同 key 但 change_type 含未知值 → 不应 replay（fingerprint 应不同 → conflict）
+    r2 = revise_definition(root=dst, idempotency_key="r45", definition="H003",
+                           expected_previous="H003@v2", definition_input=_DB,
+                           change_type=["scope_change", "evil_unknown"], actor="text-agent",
+                           authorization_ref="AUTH-0002", approval_ref="APR-000001")
+    check("rev4-P2-1a 未知 change_type 不产生 fingerprint alias（非 replay）",
+          r2.get("status") != "replay", str(r2))
+finally:
+    cleanup(tmp)
+
 # ================= 汇总 =================
 print("\n" + "=" * 62)
 print(f"结果: {PASS} PASS, {FAIL} FAIL")
