@@ -768,6 +768,67 @@ try:
 finally:
     cleanup(tmp)
 
+# ================= Sol 第六轮 P1/P2 修复验证 =================
+print("\n[Sol rev6 修复验证] receipt k authority / classification 无 substring")
+
+# P1-1: receipt k 比较 predecessor canonical authority（predecessor receipt 丢失 → invalid）
+print("\n[rev6-P1-1] receipt k 用 predecessor canonical authority")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    from researchctl.tx.revise import revise_definition
+    from researchctl.tests.p1b_bootstrap import DEFAULT_BODY as _DB, wrap_hash as _wh, write_approval as _wa
+    # v1→v2
+    r1 = revise_definition(root=dst, idempotency_key="r61", definition="H003",
+                           expected_previous="H003@v1", definition_input=_DB,
+                           change_type=["scope_change"], actor="text-agent",
+                           authorization_ref="AUTH-0002", approval_ref="APR-000001")
+    git_commit(dst)
+    # v2→v3（EV-000002 产生 H003@v3）
+    body3 = dict(_DB); body3["threshold"] = 0.97
+    h = _wh("H003", "H003@v2", body3)
+    _wa(dst, "APR-000002", definition="H003", previous="H003@v2",
+        proposed_hash=h, change_type=["scope_change"])
+    git_commit(dst, "apr2")
+    r2 = revise_definition(root=dst, idempotency_key="r62", definition="H003",
+                           expected_previous="H003@v2", definition_input=body3,
+                           change_type=["scope_change"], actor="text-agent",
+                           authorization_ref="AUTH-0002", approval_ref="APR-000002")
+    check("rev6-P1-1a v2→v3 成功", r2.get("status") == "success", str(r2.get("status")))
+    git_commit(dst)
+    from researchctl.tx.receipt import verify_definition_receipt
+    v3_ok = verify_definition_receipt(dst, "EV-000002")
+    check("rev6-P1-1b v3 receipt 有效", v3_ok.get("valid") is True, str(v3_ok.get("reason")))
+    # 删除 predecessor（v2）的 receipt → v3 验证应失败（canonical predecessor evidence 丢失）
+    os.unlink(os.path.join(dst, "events", "EV-000001.commit"))
+    v3_bad = verify_definition_receipt(dst, "EV-000002")
+    check("rev6-P1-1c predecessor receipt 丢失 → v3 invalid",
+          v3_bad.get("valid") is False, str(v3_bad.get("reason")))
+finally:
+    cleanup(tmp)
+
+# P1-2: classification 不用 entity_id substring（RUNBOOK-001 含 run 但不是 Run）
+print("\n[rev6-P1-2] classification 只按 entity_type")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    # RUNBOOK-001 entity_type=Claim（含 "run" 但不该被当 Run）
+    p = os.path.join(dst, "organized", "RUNBOOK-001.yaml")
+    open(p, "w").write("entity_id: RUNBOOK-001\nversion_ref: RUNBOOK-001@r1\n"
+                        "entity_type: Claim\nlifecycle: committed\nuses: H003@v1\n")
+    git_commit(dst, "runbook")
+    from researchctl.tx.impact import _impact_classification
+    doc = {"entity_type": "Claim", "lifecycle": "committed"}
+    cls = _impact_classification(("RUNBOOK-001", "RUNBOOK-001@r1"), doc)
+    check("rev6-P1-2a RUNBOOK-001(Claim) → stale 而非 superseded/Run",
+          cls == "stale", str(cls))
+    doc2 = {"entity_type": "Run", "lifecycle": "committed"}
+    cls2 = _impact_classification(("SOME-X", "SOME-X@v1"), doc2)
+    check("rev6-P1-2b Run(committed) → superseded（按 entity_type 精确）",
+          cls2 == "superseded", str(cls2))
+finally:
+    cleanup(tmp)
+
 # ================= 汇总 =================
 print("\n" + "=" * 62)
 print(f"结果: {PASS} PASS, {FAIL} FAIL")

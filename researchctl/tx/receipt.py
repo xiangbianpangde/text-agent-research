@@ -265,7 +265,7 @@ def verify_definition_receipt(root: str, event_id: str) -> dict:
             if actual_def.get("previous") != prev:
                 return {"valid": False, "reason": f"definition-previous-mismatch: {actual_def.get('previous')} != {prev}"}
 
-    # k. previous input_ref 验证（Sol rev7 P2-6 + rev2 P1-6 精确 path）
+    # k. previous input_ref 验证（Sol rev7 P2-6 + rev2 P1-6 + rev6 P1-1 canonical authority）
     in_refs = ev.get("input_refs") or []
     prev_in = next((r for r in in_refs if r.get("role") == "definition.previous"), None)
     if prev_in:
@@ -273,10 +273,18 @@ def verify_definition_receipt(root: str, event_id: str) -> dict:
         expected_prev_path = f"definitions/{entity_of(prev)}/{prev}.yaml"
         if prev_in.get("path") != expected_prev_path:
             return {"valid": False, "reason": "previous-input-ref-path-mismatch"}
-        prev_path = os.path.join(root, prev_in.get("path", ""))
-        prev_hash = file_canonical_hash(prev_path)
-        if prev_in.get("content_hash") != prev_hash:
-            return {"valid": False, "reason": "previous-input-ref-hash-mismatch"}
+        # P1-1（Sol rev6）：必须比较 predecessor **canonical authority**，而非 live file hash。
+        #   - previous 是 committed DefinitionRevised → 该 predecessor 的 valid receipt.definition_hash
+        #   - previous 是 bootstrap → external pin 锚定的 canonical hash
+        from .definition import get_previous_hash
+        try:
+            authority_hash = get_previous_hash(root, entity_of(prev), prev)
+        except Exception as e:
+            return {"valid": False, "reason": f"previous-authority-resolve-error:{e}"}
+        if authority_hash is None:
+            return {"valid": False, "reason": "previous-authority-missing"}
+        if prev_in.get("content_hash") != authority_hash:
+            return {"valid": False, "reason": "previous-input-ref-authority-mismatch"}
     else:
         return {"valid": False, "reason": "previous-input-ref-missing"}
 

@@ -141,13 +141,14 @@ def _load_entities(root: str) -> dict:
             if not os.path.isdir(edir):
                 continue
             for fn in sorted(os.listdir(edir)):
-                if not fn.endswith(".yaml") or fn == "APPROVED.yaml":
+                if not fn.endswith(".yaml") or fn == "APPROVED.yaml" or fn == "BOOTSTRAP.yaml":
                     continue
                 p = os.path.join(edir, fn)
                 try:
                     doc = load_file(p, strict=True) or {}
-                except Exception:
-                    continue
+                except Exception as e:
+                    # P2-2（Sol rev6）：canonical impact entity parse failure 必须 fail-closed
+                    raise ValueError(f"IMPACT_INVALID: definition 解析失败 {p}: {e}")
                 eid = doc.get("entity_id") or entity
                 ver = doc.get("version_ref") or fn[:-5]
                 entities[(eid, ver)] = {"doc": doc, "path": p}
@@ -177,8 +178,9 @@ def _load_entities(root: str) -> dict:
                 continue
             try:
                 doc = load_file(p, strict=True) or {}
-            except Exception:
-                continue
+            except Exception as e:
+                # P2-2（Sol rev6）：canonical impact entity parse failure 必须 fail-closed
+                raise ValueError(f"IMPACT_INVALID: organized 实体解析失败 {p}: {e}")
             eid = doc.get("entity_id") or fn.rsplit(".", 1)[0]
             # P1-2（Sol rev5）：优先文档内 version_ref（如 TS-0043@r1），
             # 绝不用带 .yaml/.md 的物理文件名冒充 semantic version_ref
@@ -188,23 +190,28 @@ def _load_entities(root: str) -> dict:
 
 
 def _impact_classification(entity_key, doc: dict) -> str:
-    """分类矩阵（§4.5，Sol P2-2）。返回 impact 枚举或 None（不参与）。"""
+    """分类矩阵（§4.5，Sol P2-2 + rev6 P1-2）。
+
+    只按 canonical entity_type × lifecycle 精确分类；绝不按 entity_id substring 猜类型
+    （RUNBOOK-001 不能因含 "run" 被当 Run）。
+    返回 impact 枚举或 None（不参与）。
+    """
     eid, ver = entity_key
-    etype = str(doc.get("entity_type") or doc.get("kind") or "")
-    lifecycle = str(doc.get("lifecycle") or doc.get("state") or "")
-    if etype == "Run" or "run" in eid.lower():
+    etype = str(doc.get("entity_type") or doc.get("kind") or "").strip()
+    lifecycle = str(doc.get("lifecycle") or doc.get("state") or "").strip()
+    if etype == "Run":
         if lifecycle == "committed" or doc.get("committed") is True:
             return "superseded"
         return None
-    if etype == "TaskSlice" or "task" in eid.lower():
+    if etype == "TaskSlice":
         if lifecycle != "executed":
             return "stale"
         return None
-    if etype == "ResultBundle" or "result" in eid.lower():
+    if etype == "ResultBundle":
         if lifecycle == "executed" and lifecycle != "committed":
             return "needs_review"
         return None
-    if etype == "Conclusion" or "conclusion" in eid.lower():
+    if etype == "Conclusion":
         return "stale"
     # ExperimentSpec / Observation / Inference / Claim 引用旧版本
     if etype in ("ExperimentSpec", "Observation", "Inference", "Claim"):
@@ -215,9 +222,9 @@ def _impact_classification(entity_key, doc: dict) -> str:
 def _lifecycle_override_reason(entity_key, doc: dict) -> Optional[str]:
     """B. lifecycle override（Sol rev9 P2-2）：ResultBundle executed+uncommitted → active_result_bundle。"""
     eid, ver = entity_key
-    etype = str(doc.get("entity_type") or doc.get("kind") or "")
-    lifecycle = str(doc.get("lifecycle") or doc.get("state") or "")
-    if etype == "ResultBundle" or "result" in eid.lower():
+    etype = str(doc.get("entity_type") or doc.get("kind") or "").strip()
+    lifecycle = str(doc.get("lifecycle") or doc.get("state") or "").strip()
+    if etype == "ResultBundle":
         if lifecycle == "executed" and lifecycle != "committed":
             return "active_result_bundle"
     return None

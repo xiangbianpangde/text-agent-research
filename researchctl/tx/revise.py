@@ -321,8 +321,12 @@ def _revise_locked(root, db_path, idempotency_key, definition,
     ibd = impact_basis_digest(basis_git_commit=head,
                               max_committed_event_id=frontier,
                               impact_algorithm_version="definition-impact/v1")
-    affected = compute_affected(root, definition=definition, previous=expected_previous,
-                                change_types=ct_canonical, candidate_subject=candidate_subject)
+    try:
+        affected = compute_affected(root, definition=definition, previous=expected_previous,
+                                    change_types=ct_canonical, candidate_subject=candidate_subject)
+    except ValueError as e:
+        # IMPACT_INVALID（分类越界 / canonical 实体解析失败）→ fail-closed REJECT
+        raise TxError("IMPACT_INVALID", str(e))
     _maybe_crash(crash_after, "after-impact", on_step)
 
     # ---- 步骤 8: 分配 ID ----

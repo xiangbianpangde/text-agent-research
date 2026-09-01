@@ -321,8 +321,12 @@ def verify_bootstrap_metadata(root: str, entity: str) -> None:
                                 f"{pin['bootstrap_git_commit']}:{meta_path}"],
                                stderr=_sp.DEVNULL)
     except _sp.CalledProcessError:
-        # pin commit 中无 BOOTSTRAP.yaml → metadata 可选，跳过
-        return
+        # pin commit 中无 BOOTSTRAP.yaml：若 live 也没有 → 两边都没有才可跳过；
+        # 若 live 存在 → 报告 divergence（P2-1，Sol rev6：live-only metadata 也 fail-closed）
+        if not os.path.exists(live_meta):
+            return
+        raise TxError("DEF_POINTER_DIVERGED",
+                      f"bootstrap BOOTSTRAP.yaml live-only 但 pin 中不存在（{entity}）")
     try:
         pinned_meta = _yaml_load(out.decode("utf-8"), strict=True) or {}
         pinned_hash = _chash(pinned_meta)
