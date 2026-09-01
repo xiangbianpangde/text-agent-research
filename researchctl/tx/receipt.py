@@ -183,9 +183,11 @@ def verify_definition_receipt(root: str, event_id: str) -> dict:
     except Exception as e:
         return {"valid": False, "reason": f"parse-error:{e}"}
 
-    # b. receipt.event_id == event_id == 文件名
+    # b. receipt.event_id == event_id == 文件名 AND Event.event_id == 文件名（Sol rev3 P1-3）
     if rc.get("event_id") != event_id:
         return {"valid": False, "reason": "event-id-mismatch"}
+    if ev.get("event_id") != event_id:
+        return {"valid": False, "reason": "event-internal-id-mismatch"}
 
     # c. transaction_id 一致
     if rc.get("transaction_id") != ev.get("transaction_id"):

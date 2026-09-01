@@ -111,12 +111,14 @@ def write_bootstrap(root: str, change_type=None, definition="H003",
     # git commit（basis）
     subprocess.run(["git", "-C", root, "add", "-A"], capture_output=True)
     subprocess.run(["git", "-C", root, "commit", "-m", "P1-B bootstrap"], capture_output=True)
-    # 外部 pin：把刚提交的 commit 记录为 bootstrap_git_commit（trust root，杜绝 self-reference）
+    # 外部 pin：把刚提交的 commit 记录为 bootstrap_git_commit（trust root）
+    # 写入仓库外（root 的父目录），而非 repo 内文件（杜绝 self-reference，Sol rev3 P1-1）
+    from researchctl.tx.definition import bootstrap_pin_path, BOOTSTRAP_PIN_ENV
     head = subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
-    with open(os.path.join(root, ".auth", "bootstrap-pin.yaml"), "w", encoding="utf-8") as f:
+    pin_file = bootstrap_pin_path(root)
+    os.makedirs(os.path.dirname(pin_file), exist_ok=True)
+    with open(pin_file, "w", encoding="utf-8") as f:
         f.write(f"schema_version: 1\nbootstrap_git_commit: {head}\n")
-    subprocess.run(["git", "-C", root, "add", "-A"], capture_output=True)
-    subprocess.run(["git", "-C", root, "commit", "-m", "P1-B bootstrap pin"], capture_output=True)
 
 
 def commit_all(root: str, msg="tx"):

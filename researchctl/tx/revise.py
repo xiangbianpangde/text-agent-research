@@ -31,7 +31,7 @@ from .definition import (successor, entity_of, read_definition, read_approved,
                          wrap_definition_input, validate_definition_identity,
                          structural_diff, get_previous_hash)
 from .impact import (compute_affected, impact_basis_digest, max_committed_event_id,
-                     canonicalize_change_types)
+                     canonicalize_change_types, CHANGE_TYPES)
 
 COMMAND_VERSION = "revise-definition/v1"
 SCHEMA_VERSION = 1
@@ -182,10 +182,10 @@ def _revise_locked(root, db_path, idempotency_key, definition,
                    actor, authorization_ref, approval_ref,
                    reason_refs, crash_after, on_step=None):
     ts0 = _now()
-    try:
-        ct_canonical = canonicalize_change_types(change_type)
-    except ValueError as e:
-        raise TxError("DEF_CHANGE_TYPE_INVALID", str(e))
+    # P2-1: 先做宽松 canonicalize（仅排序去重，不拒绝非法值）；
+    # 非法值检测延迟到 PRE-GATE 中 DEF_NO_CHANGE 之后（合同错误优先级，Sol rev3 P2-1）
+    ct_canonical = canonicalize_change_types(change_type, strict=False)
+    ct_invalid = [c for c in (change_type or []) if c not in CHANGE_TYPES]
 
     # ---- 步骤 1: 锁已获取（with freeze_lock） ----
     _maybe_crash(crash_after, "after-lock", on_step)
@@ -260,6 +260,10 @@ def _revise_locked(root, db_path, idempotency_key, definition,
         if approved_before_hash != latest_pointer["approved_after_hash"]:
             raise TxError("DEF_POINTER_DIVERGED",
                           f"live APPROVED hash != latest receipt.approved_after_hash（exact pointer hash）")
+    else:
+        # 无 P1-B history → bootstrap baseline：验证 bootstrap APPROVED 与 external pin 一致（Sol rev3 P1-1 C）
+        from .definition import verify_bootstrap_approved
+        verify_bootstrap_approved(root, definition)
     # 5c: 读 predecessor
     prev_def = read_definition(root, definition, expected_previous)
     if prev_def is None:
@@ -287,9 +291,12 @@ def _revise_locked(root, db_path, idempotency_key, definition,
     if not changed_fields:
         raise TxError("DEF_NO_CHANGE",
                       "changed_fields 为空（structural_diff(previous.body, proposed.body) 无变化）")
-    # 6c: change_type 非空且合法
+    # 6c: change_type 非空且合法（非法值延迟到 DEF_NO_CHANGE 之后才拒绝，Sol rev3 P2-1）
     if not ct_canonical:
         raise TxError("DEF_SEMANTIC_CHANGE_REQUIRED", "change_type 为空")
+    if ct_invalid:
+        raise TxError("DEF_CHANGE_TYPE_INVALID",
+                      f"change_type {ct_invalid} 不在受控 enum 中")
     # 6d: approval binding（approval 必须在 basis commit，§6.3）
     approval_res = validate_approval_binding(root, head, approval_ref,
                                              definition=definition,
@@ -462,11 +469,16 @@ def _revise_locked(root, db_path, idempotency_key, definition,
         raise TxError("DEF_IDENTITY_MISMATCH", str(e))
     _maybe_crash(crash_after, "after-staging-verify", on_step)
 
-    # ---- 步骤 12: 最终 stale-basis 检查 ----
+    # ---- 步骤 12: 最终 stale-basis 检查（HEAD / APPROVED-before / previous hash 全部未变，P2-2） ----
     head2 = _git_head(root)
     approved2_hash = read_approved_hash(root, definition)
-    if approved2_hash != approved_before_hash or head2 != head:
-        raise TxError("STALE_BASIS", "HEAD/APPROVED 在 gate 后变化")
+    prev2_hash = get_previous_hash(root, definition, expected_previous)
+    if head2 != head:
+        raise TxError("STALE_BASIS", "HEAD 在 gate 后变化")
+    if approved2_hash != approved_before_hash:
+        raise TxError("STALE_BASIS", "APPROVED 在 gate 后变化")
+    if prev2_hash != prev_hash:
+        raise TxError("STALE_BASIS", "predecessor hash 在 gate 后变化")
     _maybe_crash(crash_after, "after-stale-basis", on_step)
 
     # ---- 步骤 13: 原子 no-clobber install：definition → Event ----

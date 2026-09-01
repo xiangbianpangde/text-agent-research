@@ -551,6 +551,111 @@ try:
 finally:
     cleanup(tmp)
 
+# ================= Sol 第三轮 P1/P2 修复验证 =================
+print("\n[Sol rev3 修复验证] bootstrap pin / rebuild 分发 / receipt b / current-pointer / multi-path")
+
+# P1-1: bootstrap pin 外部化（仓库外文件）+ 篡改 bootstrap 拒绝
+print("\n[rev3-P1-1] bootstrap external pin（仓库外 trust root）")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    from researchctl.tx.definition import bootstrap_pin_path
+    pin_path = bootstrap_pin_path(dst)
+    check("rev3-P1-1a pin 在仓库外", not pin_path.startswith(dst),
+          os.path.relpath(pin_path, dst))
+    check("rev3-P1-1b pin 文件存在", os.path.exists(pin_path))
+    # 篡改 bootstrap v1（改语义字段值，非注释——YAML 注释不改 canonical doc）→ 首次 revision 应 DEF_POINTER_DIVERGED
+    v1_path = os.path.join(dst, "definitions", "H003", "H003@v1.yaml")
+    open(v1_path, "w").write("schema_version: 1\nentity_id: H003\nversion_ref: H003@v1\nprevious: null\n"
+                             "body:\n  kind: Hypothesis\n  population: text_agent_long_context\n"
+                             "  outcome: retrieval_recall\n  threshold: 0.9\n  method: index_scan\n"
+                             "  tampered: true\n")
+    git_commit(dst, "tamper-v1")
+    from researchctl.tx.revise import revise_definition
+    from researchctl.tests.p1b_bootstrap import DEFAULT_BODY as _DB
+    r = revise_definition(root=dst, idempotency_key="r31", definition="H003",
+                          expected_previous="H003@v1", definition_input=_DB,
+                          change_type=["scope_change"], actor="text-agent",
+                          authorization_ref="AUTH-0002", approval_ref="APR-000001")
+    check("rev3-P1-1c 篡改 bootstrap v1 → DEF_POINTER_DIVERGED/PROVENANCE_BROKEN",
+          r.get("error_semantic") in ("DEF_POINTER_DIVERGED", "PROVENANCE_BROKEN"),
+          str(r.get("error_semantic")))
+finally:
+    cleanup(tmp)
+
+# P1-2: rebuild_marker_from_canonical 按 event_type 分发
+print("\n[rev3-P1-2] no-plan rebuild 按 event_type 分发 validator")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    from researchctl.tx.revise import revise_definition
+    from researchctl.tests.p1b_bootstrap import DEFAULT_BODY as _DB
+    r = revise_definition(root=dst, idempotency_key="r32", definition="H003",
+                          expected_previous="H003@v1", definition_input=_DB,
+                          change_type=["scope_change"], actor="text-agent",
+                          authorization_ref="AUTH-0002", approval_ref="APR-000001")
+    git_commit(dst)
+    # 删 .index → rebuild 应识别 DefinitionRevised
+    shutil.rmtree(os.path.join(dst, ".index"), ignore_errors=True)
+    from researchctl.tx.recover import rebuild_marker_from_canonical
+    rebuilt = rebuild_marker_from_canonical(dst)
+    check("rev3-P1-2a rebuild 识别 DefinitionRevised 为 committed",
+          any(x.get("status") == "committed" and x.get("event_id") == "EV-000001"
+              for x in rebuilt), str(rebuilt))
+finally:
+    cleanup(tmp)
+
+# P1-4: reconcile 检测 current-pointer divergence
+print("\n[rev3-P1-4] reconcile 检测 current-pointer divergence")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    from researchctl.tx.revise import revise_definition
+    from researchctl.tests.p1b_bootstrap import DEFAULT_BODY as _DB
+    r = revise_definition(root=dst, idempotency_key="r34", definition="H003",
+                          expected_previous="H003@v1", definition_input=_DB,
+                          change_type=["scope_change"], actor="text-agent",
+                          authorization_ref="AUTH-0002", approval_ref="APR-000001")
+    git_commit(dst)
+    # 篡改 APPROVED metadata（ref 不变）并 commit
+    app_path = os.path.join(dst, "definitions", "H003", "APPROVED.yaml")
+    open(app_path, "w").write("definition: H003\nref: H003@v2\napproved_at: FAKE\nbasis_git_commit: FAKE\n")
+    git_commit(dst, "tamper-approved")
+    from researchctl.tx.recover import reconcile_tx
+    rc = reconcile_tx(dst, os.path.join(dst, ".index", "research.sqlite"))
+    issues = [a for x in rc.get("results", []) for a in x.get("actions", [])]
+    check("rev3-P1-4a reconcile 检出 DEF_POINTER_DIVERGED",
+          any("DEF_POINTER_DIVERGED" in a for a in issues), str(issues[:2]))
+finally:
+    cleanup(tmp)
+
+# P2-1: DEF_CHANGE_TYPE_INVALID（在 DEF_NO_CHANGE 之后）
+print("\n[rev3-P2-1] DEF_CHANGE_TYPE_INVALID")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    r = revise(dst, key="r35", change_type="totally_invalid,scope_change")
+    check("rev3-P2-1a 非法 change_type → DEF_CHANGE_TYPE_INVALID",
+          r.get("error_semantic") == "DEF_CHANGE_TYPE_INVALID", str(r))
+finally:
+    cleanup(tmp)
+
+# P2-4: relation list-of-refs 被支持
+print("\n[rev3-P2-4] relation list-of-refs")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    p = os.path.join(dst, "organized", "TS-0043.yaml")
+    open(p, "w").write("entity_type: TaskSlice\nlifecycle: not_executed\nuses:\n  - H003@v1\n")
+    git_commit(dst, "list-rel")
+    from researchctl.tx.impact import _entity_refs_of
+    doc = {"entity_type": "TaskSlice", "lifecycle": "not_executed", "uses": ["H003@v1", "M001@v2"]}
+    refs = _entity_refs_of(doc)
+    check("rev3-P2-4a list-of-refs 提取",
+          ("H003@v1", "uses") in refs and ("M001@v2", "uses") in refs, str(refs))
+finally:
+    cleanup(tmp)
+
 # ================= 汇总 =================
 print("\n" + "=" * 62)
 print(f"结果: {PASS} PASS, {FAIL} FAIL")

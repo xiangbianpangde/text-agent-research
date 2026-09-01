@@ -51,16 +51,18 @@ _DEPENDENCY_KEYS = ("based_on", "uses", "references", "caused_by")
 _CONTAINER_KEYS = ("dependencies", "relations", "provenance")
 
 
-def canonicalize_change_types(change_types) -> list:
+def canonicalize_change_types(change_types, strict=True) -> list:
     """change_type 集合语义：unique + 按 enum 顺序排序（§4.2）。
 
-    任一值不在受控 enum 中 → 抛出 ValueError("DEF_CHANGE_TYPE_INVALID")（Sol rev2 P2-1）。
+    strict=True：任一值不在受控 enum 中 → 抛出 ValueError("DEF_CHANGE_TYPE_INVALID")。
+    strict=False：静默过滤非法值（用于 fingerprint 预计算；实际拒绝在 PRE-GATE）。
     """
     if not change_types:
         return []
-    for ct in change_types:
-        if ct not in CHANGE_TYPES:
-            raise ValueError(f"DEF_CHANGE_TYPE_INVALID: '{ct}' 不在受控 enum 中")
+    if strict:
+        for ct in change_types:
+            if ct not in CHANGE_TYPES:
+                raise ValueError(f"DEF_CHANGE_TYPE_INVALID: '{ct}' 不在受控 enum 中")
     seen = set()
     out = []
     for ct in CHANGE_TYPES:
@@ -84,7 +86,14 @@ def _entity_refs_of(doc: dict) -> list:
                 if k in _DEPENDENCY_KEYS:
                     if isinstance(v, str) and re.fullmatch(r"[A-Z][A-Za-z0-9_-]+@v\d+", v):
                         refs.append((v, k))
-                    elif isinstance(v, (dict, list)):
+                    elif isinstance(v, list):
+                        # P2-4: whitelist relation 支持 list-of-refs（不静默忽略）
+                        for item in v:
+                            if isinstance(item, str) and re.fullmatch(r"[A-Z][A-Za-z0-9_-]+@v\d+", item):
+                                refs.append((item, k))
+                            elif isinstance(item, dict):
+                                walk(item, k)
+                    elif isinstance(v, dict):
                         walk(v, k)
                 elif k in _CONTAINER_KEYS and isinstance(v, list):
                     # 仅容器字段：展开其中显式 dependency 条目（{relation: ref} 或 {ref: ..., relation: ...}）
@@ -212,62 +221,59 @@ def compute_affected(root: str, *, definition: str, previous: str,
                 reverse.setdefault(ref_key, []).append((key, rel))
 
     root_key = (definition, previous)
-    visited = set()
+    # node-expansion visited：只控制 BFS 是否展开下游；不阻断 edge/reason 累积（Sol rev3 P1-5）
+    expanded = set()
     queue = [root_key]
-    affected = []
+    # edge 累积：同一实体可经多条路径命中，保留全部 reason（P2-2/P2-5 多路径）
+    edge_accum: dict = {}  # dependent_key -> list of relation
     while queue:
         cur = queue.pop(0)
-        if cur in visited:
+        if cur in expanded:
             continue
-        visited.add(cur)
+        expanded.add(cur)
         for dep_entry in reverse.get(cur, []):
             dependent, relation = dep_entry
-            if dependent == root_key or dependent in visited:
+            if dependent == root_key:
                 continue
-            # P1-8: 先求完整 transitive reverse closure，再按矩阵决定哪些产生 affected fact
-            # 即使当前节点不产生 affected record，也继续沿 reverse edges 向下游传播
-            if dependent not in visited:
+            # 总是累积 edge/reason（即使 dependent 已 expanded，多路径 reason 仍保留）
+            edge_accum.setdefault(dependent, []).append(relation)
+            # node expansion：仅在未展开时入队（BFS 终止）
+            if dependent not in expanded:
                 queue.append(dependent)
-            dep_doc = entities.get(dependent, {}).get("doc", {})
-            impact = _impact_classification(dependent, dep_doc)
-            if impact is None:
-                continue
-            # 优先级：needs_review > stale
-            existing = next((a for a in affected if a["entity_id"] == dependent[0]
-                             and a["version_ref"] == dependent[1]), None)
-            if existing is not None:
-                if impact == "needs_review":
-                    existing["impact"] = "needs_review"
-                existing["stale_reasons"].extend(
-                    _build_reasons(dependent, dep_doc, change_types, previous, candidate_subject,
-                                   relation))
-                continue
-            affected.append({
-                "entity_id": dependent[0],
-                "version_ref": dependent[1],
-                "impact": impact,
-                "stale_reasons": _build_reasons(dependent, dep_doc, change_types, previous,
-                                                 candidate_subject, relation),
-                "upstream_revision": candidate_subject,
-            })
-            # 继续沿 reverse edges（transitive closure）
-            queue.append(dependent)
 
-    # 去重 + reason 排序（(upstream_revision, canonical(change_type), reason_code, via_relation)）
-    for a in affected:
+    # 现在对累积到的每个依赖实体做分类与 reason 构建（确定性）
+    affected = []
+    for dependent, relations in edge_accum.items():
+        dep_doc = entities.get(dependent, {}).get("doc", {})
+        impact = _impact_classification(dependent, dep_doc)
+        if impact is None:
+            continue
+        # 该实体经多路径命中的全部 relation 合并生成 reason
+        merged = []
+        for rel in sorted(set(relations)):
+            merged.extend(_build_reasons(dependent, dep_doc, change_types, previous,
+                                         candidate_subject, rel))
+        # 去重 + 排序（(upstream_revision, canonical(change_type), reason_code, via_relation)）
         seen = set()
         uniq = []
-        for r in a["stale_reasons"]:
+        for r in merged:
             k = (r.get("reason_code"), r.get("via_relation"))
             if k in seen:
                 continue
             seen.add(k)
             uniq.append(r)
-        uniq.sort(key=lambda r: (a["upstream_revision"],
+        uniq.sort(key=lambda r: (candidate_subject,
                                  canonical_hash({"change_type": canonicalize_change_types(change_types)}),
                                  r.get("reason_code"), r.get("via_relation")))
-        a["stale_reasons"] = uniq
+        affected.append({
+            "entity_id": dependent[0],
+            "version_ref": dependent[1],
+            "impact": impact,
+            "stale_reasons": uniq,
+            "upstream_revision": candidate_subject,
+        })
 
+    # 最终输出排序：按 (entity_id, version_ref) 固定字典序（canonical bytes 稳定）
     affected.sort(key=lambda a: (a["entity_id"], a["version_ref"]))
     # INV-010 硬检查
     for a in affected:

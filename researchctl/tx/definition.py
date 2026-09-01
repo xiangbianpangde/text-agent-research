@@ -195,17 +195,34 @@ def _get_value_at_path(d: dict, path: str):
 
 # ---- Predecessor hash 验证 ----
 
+# 外部 pin 常量名（deployment config；不随仓库变动）
+BOOTSTRAP_PIN_ENV = "RESEARCHCTL_BOOTSTRAP_COMMIT"
+# 仓库外配置文件（root 的父目录，不在 git 仓库内）
+BOOTSTRAP_PIN_FILENAME = "bootstrap-pin.yaml"
+
+
 def bootstrap_pin_path(root: str) -> str:
-    return os.path.join(root, ".auth", "bootstrap-pin.yaml")
+    """外部 pin 文件路径：位于仓库之外（root 的父目录），不是 repo 内文件。
+
+    rev11 §5.4 trust root = frozen deployment config 的不可变常量 bootstrap_commit，
+    不从 BOOTSTRAP.yaml / repo 自身取得（杜绝 self-reference，Sol rev3 P1-1）。
+    """
+    parent = os.path.dirname(os.path.abspath(root))
+    return os.path.join(parent, BOOTSTRAP_PIN_FILENAME)
 
 
 def read_bootstrap_pin(root: str):
     """读取外部 pin（不可变常量 bootstrap_git_commit）。
 
-    trust root = frozen fixture/deployment 配置中的不可变常量 bootstrap_commit
-    （外部 pin，不从 BOOTSTRAP.yaml 自身取得，杜绝 self-reference，Sol rev2 P1-2）。
-    返回 {bootstrap_git_commit} 或 None。
+    优先级：
+      1) 环境变量 RESEARCHCTL_BOOTSTRAP_COMMIT（真正 external，最高优先）
+      2) 仓库外配置文件 <root父目录>/bootstrap-pin.yaml（不在 git 仓库内）
+    返回 {bootstrap_git_commit} 或 None（缺失/损坏 → None，调用方必须 fail-closed）。
     """
+    import os as _os
+    env_commit = _os.environ.get(BOOTSTRAP_PIN_ENV, "").strip()
+    if env_commit:
+        return {"bootstrap_git_commit": env_commit}
     from ..mini_yaml import load_file
     p = bootstrap_pin_path(root)
     if not os.path.exists(p):
@@ -215,41 +232,75 @@ def read_bootstrap_pin(root: str):
         if doc.get("bootstrap_git_commit"):
             return {"bootstrap_git_commit": doc["bootstrap_git_commit"]}
     except Exception:
-        pass
+        return None
     return None
+
+
+def _git_show_bytes(root: str, commit: str, path: str):
+    """git show <commit>:<path> 返回 bytes；失败返回 None。"""
+    import subprocess
+    try:
+        return subprocess.check_output(
+            ["git", "-C", root, "show", f"{commit}:{path}"],
+            stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        return None
+
+
+def _pinned_canonical_hash(root: str, commit: str, path: str):
+    """从 pin commit 读取文件并计算 canonical hash。解析失败 → raise TxError。"""
+    from .fs import TxError
+    from ..mini_yaml import load
+    from .canonical import canonical_hash
+    out = _git_show_bytes(root, commit, path)
+    if out is None:
+        raise TxError("PROVENANCE_BROKEN",
+                      f"bootstrap pin 中无 {path}（commit {commit[:8]}）")
+    try:
+        doc = load(out.decode("utf-8"), strict=True) or {}
+        return canonical_hash(doc)
+    except Exception as e:
+        raise TxError("PROVENANCE_BROKEN", f"bootstrap pin bytes 解析失败 {path}: {e}")
 
 
 def verify_bootstrap_definition(root: str, entity: str, version: str) -> str:
     """bootstrap baseline 验证：从外部 pin 的 commit 读取 v1 bytes 计算 canonical hash，
-    与 live 文件比较（Sol rev2 P1-2）。
+    与 live 文件比较（Sol rev3 P1-1：fail-closed，缺失 pin 即 PROVENANCE_BROKEN）。
 
-    返回 pinned canonical hash。live 不一致 → raise TxError DEF_POINTER_DIVERGED / PROVENANCE_BROKEN。
+    返回 pinned canonical hash。live 不一致 → raise TxError DEF_POINTER_DIVERGED。
     """
     from .fs import TxError
     pin = read_bootstrap_pin(root)
     if pin is None:
-        # 无 pin（未冻结 bootstrap）→ 退化为文件 hash（实现层向前兼容；正式部署必须 pin）
-        return file_canonical_hash(definition_path(root, entity, version))
-    import subprocess
-    path = f"definitions/{entity}/{version}.yaml"
-    try:
-        out = subprocess.check_output(
-            ["git", "-C", root, "show", f"{pin['bootstrap_git_commit']}:{path}"],
-            stderr=subprocess.DEVNULL)
-    except subprocess.CalledProcessError:
+        # 无外部 pin → fail-closed（rev11 §5.4；不允许退化为 live 文件信任）
         raise TxError("PROVENANCE_BROKEN",
-                      f"bootstrap pin 中无 {path}（commit {pin['bootstrap_git_commit'][:8]}）")
-    from ..mini_yaml import load
-    from .canonical import canonical_hash
-    try:
-        doc = load(out.decode("utf-8"), strict=True) or {}
-        pinned_hash = canonical_hash(doc)
-    except Exception as e:
-        raise TxError("PROVENANCE_BROKEN", f"bootstrap pin bytes 解析失败: {e}")
+                      "bootstrap 无外部 pin（缺 RESEARCHCTL_BOOTSTRAP_COMMIT / 仓库外 bootstrap-pin.yaml）")
+    pinned_hash = _pinned_canonical_hash(root, pin["bootstrap_git_commit"],
+                                         f"definitions/{entity}/{version}.yaml")
     live_hash = file_canonical_hash(definition_path(root, entity, version))
     if live_hash != pinned_hash:
         raise TxError("DEF_POINTER_DIVERGED",
                       f"bootstrap {version} live bytes 与 external pin 不一致（trust root 被篡改）")
+    return pinned_hash
+
+
+def verify_bootstrap_approved(root: str, entity: str) -> str:
+    """bootstrap APPROVED pin 验证（Sol rev3 P1-1 C）：首次 revision 前必须验证
+    bootstrap APPROVED bytes 与 external pin commit 一致。
+
+    返回 pinned canonical hash；不一致/无 pin → raise TxError。
+    """
+    from .fs import TxError
+    pin = read_bootstrap_pin(root)
+    if pin is None:
+        raise TxError("PROVENANCE_BROKEN",
+                      "bootstrap 无外部 pin（无法验证 bootstrap APPROVED）")
+    pinned_hash = _pinned_canonical_hash(root, pin["bootstrap_git_commit"],
+                                         f"definitions/{entity}/APPROVED.yaml")
+    live_hash = read_approved_hash(root, entity)
+    if live_hash != pinned_hash:
+        raise TxError("DEF_POINTER_DIVERGED",
+                      f"bootstrap APPROVED live bytes 与 external pin 不一致（trust root 被篡改）")
     return pinned_hash
 
 

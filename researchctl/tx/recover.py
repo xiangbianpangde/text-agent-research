@@ -44,13 +44,24 @@ def rebuild_marker_from_canonical(root: str) -> list:
         if not m:
             continue
         eid = fn[:-5]  # EV-000001（保留前缀）
-        rc = verify_receipt(root, eid)
+        # 按 event_type 分发 validator（Sol rev3 P1-2：DefinitionRevised 用 verify_definition_receipt）
+        try:
+            ev = load_file(os.path.join(edir, fn), strict=True) or {}
+        except Exception:
+            out.append({"event_id": eid, "status": "needs_reconcile",
+                        "reason": "event-parse-error"})
+            continue
+        etype = ev.get("event_type", "")
+        if etype == "DefinitionRevised":
+            from .receipt import verify_definition_receipt as _vdrc
+            rc = _vdrc(root, eid)
+        else:
+            rc = verify_receipt(root, eid)
         if not rc["valid"]:
             out.append({"event_id": eid, "status": "needs_reconcile",
                         "reason": rc["reason"]})
             continue
         # 四件套通过 → 补写 derived marker（不依赖 plan）
-        ev = load_file(os.path.join(edir, fn), strict=True) or {}
         rc_doc = load_file(receipt_path(root, eid), strict=True) or {}
         output_refs_manifest = [{"role": r.get("role"), "path": r.get("path"),
                                  "content_hash": r.get("content_hash")}
@@ -378,7 +389,14 @@ def reconcile_tx(root: str, db_path: str) -> dict:
             if name.endswith(".plan.yaml"):
                 tx_id = name[:-len(".plan.yaml")]
                 # P1-5: 按 command_version 分发 P1-A / P1-B recovery
-                r = recover_tx_any(root, db_path, tx_id)
+                try:
+                    r = recover_tx_any(root, db_path, tx_id)
+                except Exception as e:
+                    # P2-3: 单个事务恢复异常不中断整个 reconcile（fail-closed 记录）
+                    results.append({"tx_id": tx_id, "status": "needs_reconcile",
+                                    "actions": [f"recover 异常（fail-closed）: {type(e).__name__}: {e}"]})
+                    status = "needs_reconcile"
+                    continue
                 results.append(r)
                 # aborted = 干净终态（pre-canonical），不算需人工
                 if r["status"] not in ("committed", "aborted"):
@@ -446,6 +464,62 @@ def reconcile_tx(root: str, db_path: str) -> dict:
                                     "actions": [f"APPROVAL_EVIDENCE_MISMATCH: {eid} APR {apr_ref} "
                                                  f"在 basis {basis[:8]} 中不可用: {apr_res.get('detail')}"]})
                     status = "needs_reconcile"
+
+    # 7) P1-4: P1-B current-pointer invariant reconcile（Sol rev3 P1-4）
+    #    对有 committed DefinitionRevised history 的实体：
+    #      live APPROVED.ref == latest receipt.approved_ref_after
+    #      AND hash(live APPROVED) == latest receipt.approved_after_hash
+    #    missing APPROVED → DEF_POINTER_DIVERGED / PROVENANCE_BROKEN
+    #    无 history 但有 APPROVED（bootstrap）→ 与 external pin 锚定验证
+    try:
+        from .definition import (read_approved, read_approved_hash, definition_dir,
+                                 verify_bootstrap_approved)
+        if os.path.isdir(os.path.join(root, "definitions")):
+            for entity in sorted(os.listdir(os.path.join(root, "definitions"))):
+                edir = os.path.join(root, "definitions", entity)
+                if not os.path.isdir(edir) or entity == ".git":
+                    continue
+                live_app = read_approved(root, entity)
+                if live_app is None:
+                    continue  # 无 APPROVED，非 P1-B 实体
+                # 找该实体 latest committed DefinitionRevised
+                from .revise import latest_approved_evidence
+                latest = latest_approved_evidence(root, entity)
+                if latest is not None:
+                    if not os.path.exists(os.path.join(edir, "APPROVED.yaml")):
+                        results.append({"tx_id": None, "entity_id": entity,
+                                        "status": "needs_reconcile",
+                                        "actions": ["PROVENANCE_BROKEN: 有 committed history 但 APPROVED 缺失"]})
+                        status = "needs_reconcile"
+                        continue
+                    if live_app.get("ref") != latest["approved_ref_after"]:
+                        results.append({"tx_id": None, "entity_id": entity,
+                                        "status": "needs_reconcile",
+                                        "actions": [f"DEF_POINTER_DIVERGED: {entity} live APPROVED.ref="
+                                                     f"{live_app.get('ref')} != latest receipt.approved_ref_after="
+                                                     f"{latest['approved_ref_after']}"]})
+                        status = "needs_reconcile"
+                    live_hash = read_approved_hash(root, entity)
+                    if live_hash != latest["approved_after_hash"]:
+                        results.append({"tx_id": None, "entity_id": entity,
+                                        "status": "needs_reconcile",
+                                        "actions": [f"DEF_POINTER_DIVERGED: {entity} exact pointer hash 不一致"]})
+                        status = "needs_reconcile"
+                else:
+                    # 无 P1-B history → bootstrap baseline：验证 APPROVED 与 external pin 一致
+                    try:
+                        verify_bootstrap_approved(root, entity)
+                    except Exception as e:
+                        from .fs import TxError as _TxErr
+                        if isinstance(e, _TxErr) and e.semantic == "DEF_POINTER_DIVERGED":
+                            results.append({"tx_id": None, "entity_id": entity,
+                                            "status": "needs_reconcile",
+                                            "actions": [f"DEF_POINTER_DIVERGED: bootstrap APPROVED 与 external pin 不一致: {e}"]})
+                            status = "needs_reconcile"
+    except Exception as e:
+        results.append({"tx_id": None, "status": "needs_reconcile",
+                        "actions": [f"current-pointer reconcile 异常: {e}"]})
+        status = "needs_reconcile"
 
     return {"status": status, "results": results}
 
