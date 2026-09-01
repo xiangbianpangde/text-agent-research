@@ -92,33 +92,34 @@ def canonicalize_change_types(change_types, strict=True) -> list:
 def _entity_refs_of(doc: dict) -> list:
     """提取文档中版本引用，只认冻结 whitelist 的显式 dependency 字段（Sol rev2 P1-7）。
 
-    返回 [(ref, relation)]，relation ∈ {based_on, uses, references, caused_by}。
-    任意字段（note:/label:/foo:）即使含 @v1 也绝不当作 dependency。
+    使用通用 entity-reference 解析（不限定 @vN 格式，Sol rev5 P1-1）。
+    返回 [(ref, relation)]，ref 为完整 version_ref（如 H003@v1、TS-0043@r1），
+    relation ∈ {based_on, uses, references, caused_by}。
     """
+    def is_entity_ref(s: str) -> bool:
+        """通用 entity-reference 检测：至少含一个 @ 符号（如 H003@v1, TS-0043@r1, E017@v3）。"""
+        return bool(s) and "@" in s and len(s) >= 3
     refs = []
 
     def walk(value, parent_key=None):
         if isinstance(value, dict):
             for k, v in value.items():
                 if k in _DEPENDENCY_KEYS:
-                    if isinstance(v, str) and re.fullmatch(r"[A-Z][A-Za-z0-9_-]+@v\d+", v):
+                    if isinstance(v, str) and is_entity_ref(v):
                         refs.append((v, k))
                     elif isinstance(v, list):
-                        # P2-4: whitelist relation 支持 list-of-refs（不静默忽略）
                         for item in v:
-                            if isinstance(item, str) and re.fullmatch(r"[A-Z][A-Za-z0-9_-]+@v\d+", item):
+                            if isinstance(item, str) and is_entity_ref(item):
                                 refs.append((item, k))
                             elif isinstance(item, dict):
                                 walk(item, k)
                     elif isinstance(v, dict):
                         walk(v, k)
                 elif k in _CONTAINER_KEYS and isinstance(v, list):
-                    # 仅容器字段：展开其中显式 dependency 条目（{relation: ref} 或 {ref: ..., relation: ...}）
                     for item in v:
                         if isinstance(item, dict):
                             for ik, iv in item.items():
-                                if ik in _DEPENDENCY_KEYS and isinstance(iv, str) \
-                                        and re.fullmatch(r"[A-Z][A-Za-z0-9_-]+@v\d+", iv):
+                                if ik in _DEPENDENCY_KEYS and isinstance(iv, str) and is_entity_ref(iv):
                                     refs.append((iv, ik))
         elif isinstance(value, list):
             for v in value:
@@ -162,7 +163,9 @@ def _load_entities(root: str) -> dict:
             except Exception:
                 continue
             eid = doc.get("run_id") or rn
-            entities[(eid, rn)] = {"doc": doc, "path": p}
+            # 优先文档内 version_ref；无则用 run_id（canonical identity rule，非物理路径）
+            ver = doc.get("version_ref") or eid
+            entities[(eid, ver)] = {"doc": doc, "path": p}
     # organized 下的其他实体（实验结果/分析）
     odir = os.path.join(root, "organized")
     if os.path.isdir(odir):
@@ -177,7 +180,10 @@ def _load_entities(root: str) -> dict:
             except Exception:
                 continue
             eid = doc.get("entity_id") or fn.rsplit(".", 1)[0]
-            entities[(eid, fn)] = {"doc": doc, "path": p}
+            # P1-2（Sol rev5）：优先文档内 version_ref（如 TS-0043@r1），
+            # 绝不用带 .yaml/.md 的物理文件名冒充 semantic version_ref
+            ver = doc.get("version_ref") or eid
+            entities[(eid, ver)] = {"doc": doc, "path": p}
     return entities
 
 
@@ -231,9 +237,10 @@ def compute_affected(root: str, *, definition: str, previous: str,
         doc = info["doc"]
         for ref, rel in _entity_refs_of(doc):
             ref_key = None
-            m = re.fullmatch(r"([A-Z][A-Za-z0-9_-]+)@v(\d+)", ref)
-            if m:
-                ref_key = (m.group(1), ref)
+            # 通用 entity-reference 解析：取 @ 之前的部分作为 entity_id
+            if "@" in ref:
+                eid = ref.split("@", 1)[0]
+                ref_key = (eid, ref)
             if ref_key in entities:
                 reverse.setdefault(ref_key, []).append((key, rel))
 
@@ -335,7 +342,7 @@ def max_committed_event_id(root: str) -> str:
     """从 canonical events 中找最大 committed event_id。
 
     ReportFrozen 用 verify_receipt；DefinitionRevised 用 verify_definition_receipt
-    （Sol rev2 P2-2：不能对 P1-B 事件用 P1-A validator）。
+    （Sol rev2 P2-2 + rev5 P2-2 closed-set：未知 event_type → needs_reconcile/空）。
     """
     from .receipt import verify_receipt, verify_definition_receipt
     edir = os.path.join(root, "events")
@@ -355,8 +362,11 @@ def max_committed_event_id(root: str) -> str:
         try:
             if etype == "DefinitionRevised":
                 res = verify_definition_receipt(root, eid)
-            else:
+            elif etype == "ReportFrozen":
                 res = verify_receipt(root, eid)
+            else:
+                # 未知 event_type → closed-set reject（不 fallback 到 P1-A validator，Sol rev5 P2-2）
+                continue
         except Exception:
             continue
         if res.get("valid") is True:

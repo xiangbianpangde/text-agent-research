@@ -475,7 +475,8 @@ def reconcile_tx(root: str, db_path: str) -> dict:
     #    再检查 APPROVED 存在/可解析——不能用"当前能否读到 APPROVED"决定是否需要检查。
     try:
         from .definition import (read_approved, read_approved_hash, definition_dir,
-                                 verify_bootstrap_approved, verify_bootstrap_definition)
+                                 verify_bootstrap_approved, verify_bootstrap_definition,
+                                 verify_bootstrap_metadata)
         defdir = os.path.join(root, "definitions")
         if os.path.isdir(defdir):
             # 先收集需要检查的实体：committed DefinitionRevised history ∪ 有 definition 文件的实体
@@ -538,6 +539,8 @@ def reconcile_tx(root: str, db_path: str) -> dict:
                         v1 = live_app.get("ref", "")
                         if v1:
                             verify_bootstrap_definition(root, entity, v1)
+                        # BOOTSTRAP.yaml metadata 锚定（Sol rev5 P2-1）
+                        verify_bootstrap_metadata(root, entity)
                     except Exception as e:
                         from .fs import TxError as _TxErr
                         if isinstance(e, _TxErr) and e.semantic in ("DEF_POINTER_DIVERGED", "PROVENANCE_BROKEN"):

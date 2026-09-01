@@ -76,6 +76,12 @@ def write_bootstrap(root: str, change_type=None, definition="H003",
     app_path = os.path.join(ddir, "APPROVED.yaml")
     with open(app_path, "w", encoding="utf-8") as f:
         f.write(BOOTSTRAP_APPROVED)
+    # BOOTSTRAP.yaml metadata（可选；存在则 reconcile 会锚定 external pin，Sol rev5 P2-1）
+    meta_path = os.path.join(ddir, "BOOTSTRAP.yaml")
+    if not os.path.exists(meta_path):
+        with open(meta_path, "w", encoding="utf-8") as f:
+            f.write(f"schema_version: 1\nentity: {definition}\nrole: bootstrap-metadata\n"
+                    f"created_by: external-controlled-bootstrap\n")
 
     # approval artifact（basis-pinned）
     apdir = os.path.join(root, ".auth", "approvals")

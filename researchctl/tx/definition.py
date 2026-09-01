@@ -300,6 +300,47 @@ def verify_bootstrap_approved(root: str, entity: str) -> str:
     return pinned_hash
 
 
+def verify_bootstrap_metadata(root: str, entity: str) -> None:
+    """bootstrap BOOTSTRAP.yaml metadata pin 验证（Sol rev5 P2-1）。
+
+    BOOTSTRAP.yaml 是 metadata（非 trust root，Sol rev6 P2-4），但必须与 external pin
+    锚定一致（合同 §5.4）。若 entity 目录无 BOOTSTRAP.yaml 则跳过（可选 metadata）。
+    存在但与 pin commit 不一致 → raise TxError DEF_POINTER_DIVERGED。
+    """
+    from .fs import TxError
+    from ..mini_yaml import load as _yaml_load
+    from .canonical import canonical_hash as _chash
+    pin = read_bootstrap_pin(root)
+    if pin is None:
+        return
+    import subprocess as _sp
+    meta_path = f"definitions/{entity}/BOOTSTRAP.yaml"
+    live_meta = os.path.join(root, "definitions", entity, "BOOTSTRAP.yaml")
+    try:
+        out = _sp.check_output(["git", "-C", root, "show",
+                                f"{pin['bootstrap_git_commit']}:{meta_path}"],
+                               stderr=_sp.DEVNULL)
+    except _sp.CalledProcessError:
+        # pin commit 中无 BOOTSTRAP.yaml → metadata 可选，跳过
+        return
+    try:
+        pinned_meta = _yaml_load(out.decode("utf-8"), strict=True) or {}
+        pinned_hash = _chash(pinned_meta)
+    except Exception:
+        return
+    if not os.path.exists(live_meta):
+        raise TxError("DEF_POINTER_DIVERGED",
+                      f"bootstrap BOOTSTRAP.yaml 缺失但 pin 中存在（{entity}）")
+    try:
+        live_meta_doc = _yaml_load(open(live_meta, encoding="utf-8").read(), strict=True) or {}
+        live_hash = _chash(live_meta_doc)
+    except Exception as e:
+        raise TxError("PROVENANCE_BROKEN", f"bootstrap BOOTSTRAP.yaml 解析失败: {e}")
+    if live_hash != pinned_hash:
+        raise TxError("DEF_POINTER_DIVERGED",
+                      f"bootstrap BOOTSTRAP.yaml 与 external pin 不一致（{entity}）")
+
+
 def get_previous_hash(root: str, entity: str, previous: str) -> Optional[str]:
     """获取 predecessor 版本文件的 canonical hash 或是 receipt.definition_hash。
 

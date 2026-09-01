@@ -739,6 +739,35 @@ try:
 finally:
     cleanup(tmp)
 
+# ================= Sol 第五轮 P1/P2 修复验证 =================
+print("\n[Sol rev5 修复验证] 通用 ref / 两层 closure / organized version_ref")
+
+# P1-1 + P1-2: 非 @vN 版本 + 两层 transitive closure
+print("\n[rev5-P1-1/2] 通用 ref（@r1）+ 两层 closure + organized 用 version_ref")
+tmp, dst = make_copy()
+try:
+    bootstrap(dst)
+    # H003@v1 ← TS-0043@r1 ← E017@v3（两层 closure；TS-0043 用 @r1 版本，非 @vN）
+    p1 = os.path.join(dst, "organized", "TS-0043.yaml")
+    open(p1, "w").write("entity_id: TS-0043\nversion_ref: TS-0043@r1\n"
+                         "entity_type: TaskSlice\nlifecycle: not_executed\nuses: H003@v1\n")
+    p2 = os.path.join(dst, "organized", "E017.yaml")
+    open(p2, "w").write("entity_id: E017\nversion_ref: E017@v3\n"
+                         "entity_type: Conclusion\nreferences: TS-0043@r1\n")
+    git_commit(dst, "rev5-dep")
+    from researchctl.tx.impact import compute_affected
+    affected = compute_affected(dst, definition="H003", previous="H003@v1",
+                                change_types=["scope_change"], candidate_subject="H003@v2")
+    ids = [(a["entity_id"], a["version_ref"]) for a in affected]
+    check("rev5-P1-1a TS-0043@r1 进入 affected（@r1 版本）",
+          ("TS-0043", "TS-0043@r1") in ids, str(ids))
+    check("rev5-P1-1b E017@v3 经两层 closure 进入 affected",
+          ("E017", "E017@v3") in ids, str(ids))
+    check("rev5-P1-2a organized 不用文件名当 version_ref",
+          all(not v.endswith(".yaml") and not v.endswith(".md") for _, v in ids), str(ids))
+finally:
+    cleanup(tmp)
+
 # ================= 汇总 =================
 print("\n" + "=" * 62)
 print(f"结果: {PASS} PASS, {FAIL} FAIL")
