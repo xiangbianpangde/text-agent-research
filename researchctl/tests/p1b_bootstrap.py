@@ -111,6 +111,12 @@ def write_bootstrap(root: str, change_type=None, definition="H003",
     # git commit（basis）
     subprocess.run(["git", "-C", root, "add", "-A"], capture_output=True)
     subprocess.run(["git", "-C", root, "commit", "-m", "P1-B bootstrap"], capture_output=True)
+    # 外部 pin：把刚提交的 commit 记录为 bootstrap_git_commit（trust root，杜绝 self-reference）
+    head = subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
+    with open(os.path.join(root, ".auth", "bootstrap-pin.yaml"), "w", encoding="utf-8") as f:
+        f.write(f"schema_version: 1\nbootstrap_git_commit: {head}\n")
+    subprocess.run(["git", "-C", root, "add", "-A"], capture_output=True)
+    subprocess.run(["git", "-C", root, "commit", "-m", "P1-B bootstrap pin"], capture_output=True)
 
 
 def commit_all(root: str, msg="tx"):

@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from typing import Optional
@@ -94,6 +95,44 @@ def _canonical_idempotency_lookup(root: str, key: str, fp: str) -> dict:
     return {"status": "miss"}
 
 
+def latest_approved_evidence(root: str, definition: str):
+    """返回该定义实体最新 committed DefinitionRevised 的 receipt 证据。
+
+    按 event_id 单调序取最大（§5.4 / Sol rev3 P2-7）。
+    返回 {approved_ref_after, approved_after_hash, event_id} 或 None（无 P1-B history）。
+    """
+    from .receipt import verify_definition_receipt as _vdrc
+    from ..mini_yaml import load_file as _yaml_load
+    edir = os.path.join(root, "events")
+    if not os.path.isdir(edir):
+        return None
+    latest = None
+    for fn in sorted(os.listdir(edir)):
+        m = re.fullmatch(r"EV-(\d{6})\.yaml", fn)
+        if not m:
+            continue
+        eid = fn[:-5]
+        try:
+            ev = _yaml_load(os.path.join(edir, fn), strict=True) or {}
+        except Exception:
+            continue
+        if ev.get("event_type") != "DefinitionRevised":
+            continue
+        if (ev.get("subject") or "").split("@")[0] != definition:
+            continue
+        rc = _vdrc(root, eid)
+        if rc.get("valid") is not True:
+            continue
+        from ..mini_yaml import load_file as _yaml_load2
+        rc_doc = _yaml_load2(os.path.join(edir, f"{eid}.commit"), strict=True) or {}
+        latest = {
+            "approved_ref_after": rc_doc.get("approved_ref_after"),
+            "approved_after_hash": rc_doc.get("approved_after_hash"),
+            "event_id": eid,
+        }
+    return latest
+
+
 def _maybe_crash(crash_after: Optional[str], point: str,
                  on_step: Optional[callable] = None) -> None:
     """故障注入：on_step(point) 先执行（测试用），crash_after 命中时模拟进程崩溃。"""
@@ -143,7 +182,10 @@ def _revise_locked(root, db_path, idempotency_key, definition,
                    actor, authorization_ref, approval_ref,
                    reason_refs, crash_after, on_step=None):
     ts0 = _now()
-    ct_canonical = canonicalize_change_types(change_type)
+    try:
+        ct_canonical = canonicalize_change_types(change_type)
+    except ValueError as e:
+        raise TxError("DEF_CHANGE_TYPE_INVALID", str(e))
 
     # ---- 步骤 1: 锁已获取（with freeze_lock） ----
     _maybe_crash(crash_after, "after-lock", on_step)
@@ -205,6 +247,19 @@ def _revise_locked(root, db_path, idempotency_key, definition,
     if entity_of(approved.get("ref", "")) != definition:
         raise TxError("DEF_IDENTITY_MISMATCH",
                       f"APPROVED.ref entity={entity_of(approved.get('ref', ''))} != CLI definition={definition}")
+    # 5b2: current-pointer invariant（§5.4 / §4.2，Sol rev2 P1-1）
+    #   live APPROVED.ref == latest valid committed DefinitionRevised receipt.approved_ref_after
+    #   AND hash(live APPROVED) == latest receipt.approved_after_hash
+    latest_pointer = latest_approved_evidence(root, definition)
+    if latest_pointer is not None:
+        # 存在已 committed 的 DefinitionRevised history → 校验 current-pointer invariant
+        if approved.get("ref") != latest_pointer["approved_ref_after"]:
+            raise TxError("DEF_POINTER_DIVERGED",
+                          f"live APPROVED.ref={approved.get('ref')} != latest receipt.approved_ref_after="
+                          f"{latest_pointer['approved_ref_after']}")
+        if approved_before_hash != latest_pointer["approved_after_hash"]:
+            raise TxError("DEF_POINTER_DIVERGED",
+                          f"live APPROVED hash != latest receipt.approved_after_hash（exact pointer hash）")
     # 5c: 读 predecessor
     prev_def = read_definition(root, definition, expected_previous)
     if prev_def is None:
@@ -423,8 +478,18 @@ def _revise_locked(root, db_path, idempotency_key, definition,
         raise TxError("TX_INCOMPLETE", "Event 目标被占用（已产生 canonical output）")
     _maybe_crash(crash_after, "after-event-install", on_step)
 
-    # ---- 步骤 14: 原子替换 APPROVED.yaml（update 语义） ----
-    # 先写 APPROVED@new（临时文件锁内安全）
+    # ---- 步骤 14: 原子替换 APPROVED.yaml（update 语义，Sol rev2 P1-9 TOCTOU 闭合） ----
+    # 替换前重新 CAS：HEAD / APPROVED before hash / previous hash 全部未变（optimistic check）
+    head3 = _git_head(root)
+    approved3_hash = read_approved_hash(root, definition)
+    prev3_hash = get_previous_hash(root, definition, expected_previous)
+    if head3 != head:
+        raise TxError("STALE_BASIS", "HEAD 在 install 后变化（拒绝替换 APPROVED）")
+    if approved3_hash != approved_before_hash:
+        raise TxError("STALE_BASIS", "APPROVED 在 install 后变化（拒绝覆盖）")
+    if prev3_hash != prev_hash:
+        raise TxError("STALE_BASIS", "predecessor 在 install 后变化（拒绝替换 APPROVED）")
+    # 写 APPROVED@new（临时文件锁内安全）
     write_atomic(approved_path(root, definition), approved_new_bytes)
     _maybe_crash(crash_after, "after-approved-update", on_step)
 

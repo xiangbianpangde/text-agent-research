@@ -377,7 +377,8 @@ def reconcile_tx(root: str, db_path: str) -> dict:
         for name in sorted(os.listdir(txdir)):
             if name.endswith(".plan.yaml"):
                 tx_id = name[:-len(".plan.yaml")]
-                r = recover_tx(root, db_path, tx_id)
+                # P1-5: 按 command_version 分发 P1-A / P1-B recovery
+                r = recover_tx_any(root, db_path, tx_id)
                 results.append(r)
                 # aborted = 干净终态（pre-canonical），不算需人工
                 if r["status"] not in ("committed", "aborted"):
@@ -406,6 +407,45 @@ def reconcile_tx(root: str, db_path: str) -> dict:
         results.append({"tx_id": None, "event_id": "CURRENT", "status": "needs_reconcile",
                         "actions": [f"{fm_issue['issue']}: {fm_issue['detail']}"]})
         status = "needs_reconcile"
+
+    # 6) P2-3: approval historical evidence — 扫描 committed DefinitionRevised
+    #    Event.approval_digest vs Event.basis_git_commit 中 APR canonical digest
+    edir = os.path.join(root, "events")
+    if os.path.isdir(edir):
+        from ..mini_yaml import load_file as _yaml_load
+        from .receipt import verify_definition_receipt as _vdrc
+        from .auth import resolve_approval_digest
+        for fn in sorted(os.listdir(edir)):
+            if not fn.endswith(".yaml"):
+                continue
+            eid = fn[:-5]
+            try:
+                ev = _yaml_load(os.path.join(edir, fn), strict=True) or {}
+            except Exception:
+                continue
+            if ev.get("event_type") != "DefinitionRevised":
+                continue
+            rc = _vdrc(root, eid)
+            if not rc.get("valid"):
+                continue
+            # 该 Event 有 valid receipt → 检查 approval evidence
+            basis = ev.get("basis_git_commit", "")
+            apr_ref = ev.get("approval_ref", "")
+            expected_digest = ev.get("approval_digest", "")
+            if basis and apr_ref and expected_digest:
+                apr_res = resolve_approval_digest(root, basis, apr_ref)
+                if apr_res.get("ok") and apr_res.get("digest") != expected_digest:
+                    results.append({"tx_id": None, "event_id": eid,
+                                    "status": "needs_reconcile",
+                                    "actions": [f"APPROVAL_EVIDENCE_MISMATCH: {eid} approval_digest "
+                                                 f"{expected_digest[:16]} != basis commit APR {apr_res['digest'][:16]}"]})
+                    status = "needs_reconcile"
+                elif not apr_res.get("ok"):
+                    results.append({"tx_id": None, "event_id": eid,
+                                    "status": "needs_reconcile",
+                                    "actions": [f"APPROVAL_EVIDENCE_MISMATCH: {eid} APR {apr_ref} "
+                                                 f"在 basis {basis[:8]} 中不可用: {apr_res.get('detail')}"]})
+                    status = "needs_reconcile"
 
     return {"status": status, "results": results}
 
@@ -449,15 +489,25 @@ def _p1b_immutable_set_status(root: str, plan: dict) -> dict:
             sname = os.path.basename(f["path"])
             sp = os.path.join(staging_dir, sname)
             if os.path.exists(sp):
-                result[role] = {"ok": False, "reason": "staged", "path": f["path"],
-                                "staging": sp}
+                # 验证 staging hash == plan.content_hash（§5.2 verified staging；Sol rev2 P1-3）
+                from .canonical import file_canonical_hash as _fch
+                staged_hash = _fch(sp)
+                if staged_hash != f["content_hash"]:
+                    result[role] = {"ok": False, "reason": "staged-hash-mismatch",
+                                    "path": f["path"], "staging": sp}
+                else:
+                    result[role] = {"ok": False, "reason": "staged", "path": f["path"],
+                                    "staging": sp}
             else:
                 result[role] = {"ok": False, "reason": "missing", "path": f["path"]}
     return result
 
 
 def _p1b_install_from_staging(root: str, plan: dict, step0: dict, actions: list) -> bool:
-    """补装缺失的 definition/event（no-clobber）。"""
+    """补装缺失的 definition/event（no-clobber）。
+
+    staging 必须已通过 hash 校验（reason == 'staged' 而非 'staged-hash-mismatch'）。
+    """
     files = {f["role"]: f for f in plan.get("files", [])}
     ok = True
     for role, st in step0.items():
@@ -467,11 +517,26 @@ def _p1b_install_from_staging(root: str, plan: dict, step0: dict, actions: list)
         try:
             with open(st["staging"], "rb") as fh:
                 data = fh.read()
+            # 双保险：装入前再次验证 bytes hash（防止 TOCTOU 于 staging）
+            from .canonical import canonical_hash_bytes as _chb
+            from ..mini_yaml import load as _yaml_load
+            from .canonical import canonical_hash as _ch
+            try:
+                doc = _yaml_load(data.decode("utf-8"), strict=True)
+                actual = _ch(doc)
+            except Exception:
+                ok = False
+                actions.append(f"staging parse error {role}: not installed")
+                continue
+            if actual != f["content_hash"]:
+                ok = False
+                actions.append(f"staging hash mismatch {role}: not installed")
+                continue
             if not install_no_clobber(os.path.join(root, f["path"]), data):
                 ok = False
                 actions.append(f"staging install blocked: {role}")
                 continue
-            actions.append(f"{role} installed from staging")
+            actions.append(f"{role} installed from staging (hash verified)")
             st["ok"] = True
             st["installed"] = True
         except OSError as e:
@@ -560,9 +625,15 @@ def recover_definition_tx(root: str, db_path: str, tx_id: str) -> dict:
         if not os.path.exists(staging_after):
             return {"tx_id": tx_id, "status": "needs_reconcile",
                     "actions": ["case1 but no staging APPROVED"]}
+        # P1-3: case1 staged APPROVED 必须 hash 验证 == plan.approved_after_hash
+        from .canonical import file_canonical_hash as _fch
+        staged_app_hash = _fch(staging_after)
+        if staged_app_hash != plan.get("approved_after_hash"):
+            return {"tx_id": tx_id, "status": "needs_reconcile",
+                    "actions": [f"case1 staged APPROVED hash mismatch: {staged_app_hash}"]}
         with open(staging_after, "rb") as f:
             write_atomic(approved_path(root, plan.get("definition", "")), f.read())
-        actions.append("APPROVED installed (case1)")
+        actions.append("APPROVED installed (case1, hash verified)")
         _p1b_complete_receipt_marker(root, db_path, tx_id, plan, actions)
         write_state(root, tx_id, "committed", _now())
         cleanup_staging(root)
@@ -588,7 +659,11 @@ def _p1b_complete_receipt_marker(root, db_path, tx_id, plan, actions):
     from .definition import read_approved_hash
     ev_id = plan.get("event_id")
     rc_path = _rp(root, ev_id)
-    need_receipt = (not os.path.exists(rc_path)) or (not _vdrc(root, ev_id)["valid"])
+    if os.path.exists(rc_path) and not _vdrc(root, ev_id)["valid"]:
+        # P1-4: 已存在但 invalid 的 canonical receipt 绝不覆盖（append-only / fail-closed）
+        raise TxError("PROVENANCE_BROKEN",
+                      f"receipt {ev_id}.commit 已存在但验证失败；拒绝覆盖（P1-B recovery fail-closed）")
+    need_receipt = not os.path.exists(rc_path)
     if need_receipt:
         rc = build_definition_receipt(
             event_id=ev_id, transaction_id=tx_id,
@@ -600,7 +675,7 @@ def _p1b_complete_receipt_marker(root, db_path, tx_id, plan, actions):
             approved_ref_after=plan.get("approved_ref_after", ""),
             committed_at=_now())
         write_atomic(rc_path, _yaml_dump(rc).encode("utf-8"))
-        actions.append("receipt (re)written")
+        actions.append("receipt written (missing)")
     if not marker_valid(root, tx_id):
         rc_doc = _yaml_load(rc_path, strict=True) if os.path.exists(rc_path) else {}
         mk = build_marker(transaction_id=tx_id, event_id=ev_id,

@@ -52,6 +52,7 @@ def validate_authorization_scope(root: str, actor: str, authorization_ref: str,
                                  scope: str) -> dict:
     """通用 scope 授权校验（P1-B：scope='revise-definition'）。
 
+    scope 精确匹配（非 substring，Sol rev2 P1-10）。
     返回 {ok, error_semantic?, detail}。scope 为空则检查默认 'freeze-report'。
     """
     if not authorization_ref:
@@ -66,9 +67,11 @@ def validate_authorization_scope(root: str, actor: str, authorization_ref: str,
             if auth.get("grantee") != actor:
                 return {"ok": False, "error_semantic": "AUTH_SCOPE_DENIED",
                         "detail": f"grantee 不匹配: {authorization_ref}"}
-            if scope and scope not in (auth.get("scope") or ""):
+            # 精确比较 scope（Sol rev2 P1-10：非 substring 匹配）
+            auth_scope = auth.get("scope") or ""
+            if scope and scope != auth_scope:
                 return {"ok": False, "error_semantic": "AUTH_SCOPE_DENIED",
-                        "detail": f"scope 不含 {scope}: {authorization_ref}"}
+                        "detail": f"scope 不匹配: 期望 '{scope}', 实际 '{auth_scope}'"}
             if auth.get("valid") is not True:
                 return {"ok": False, "error_semantic": "AUTH_SCOPE_DENIED",
                         "detail": f"授权未生效 valid!=true: {authorization_ref}"}

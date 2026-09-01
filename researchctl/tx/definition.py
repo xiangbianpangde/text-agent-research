@@ -195,12 +195,70 @@ def _get_value_at_path(d: dict, path: str):
 
 # ---- Predecessor hash 验证 ----
 
+def bootstrap_pin_path(root: str) -> str:
+    return os.path.join(root, ".auth", "bootstrap-pin.yaml")
+
+
+def read_bootstrap_pin(root: str):
+    """读取外部 pin（不可变常量 bootstrap_git_commit）。
+
+    trust root = frozen fixture/deployment 配置中的不可变常量 bootstrap_commit
+    （外部 pin，不从 BOOTSTRAP.yaml 自身取得，杜绝 self-reference，Sol rev2 P1-2）。
+    返回 {bootstrap_git_commit} 或 None。
+    """
+    from ..mini_yaml import load_file
+    p = bootstrap_pin_path(root)
+    if not os.path.exists(p):
+        return None
+    try:
+        doc = load_file(p, strict=True) or {}
+        if doc.get("bootstrap_git_commit"):
+            return {"bootstrap_git_commit": doc["bootstrap_git_commit"]}
+    except Exception:
+        pass
+    return None
+
+
+def verify_bootstrap_definition(root: str, entity: str, version: str) -> str:
+    """bootstrap baseline 验证：从外部 pin 的 commit 读取 v1 bytes 计算 canonical hash，
+    与 live 文件比较（Sol rev2 P1-2）。
+
+    返回 pinned canonical hash。live 不一致 → raise TxError DEF_POINTER_DIVERGED / PROVENANCE_BROKEN。
+    """
+    from .fs import TxError
+    pin = read_bootstrap_pin(root)
+    if pin is None:
+        # 无 pin（未冻结 bootstrap）→ 退化为文件 hash（实现层向前兼容；正式部署必须 pin）
+        return file_canonical_hash(definition_path(root, entity, version))
+    import subprocess
+    path = f"definitions/{entity}/{version}.yaml"
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", root, "show", f"{pin['bootstrap_git_commit']}:{path}"],
+            stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        raise TxError("PROVENANCE_BROKEN",
+                      f"bootstrap pin 中无 {path}（commit {pin['bootstrap_git_commit'][:8]}）")
+    from ..mini_yaml import load
+    from .canonical import canonical_hash
+    try:
+        doc = load(out.decode("utf-8"), strict=True) or {}
+        pinned_hash = canonical_hash(doc)
+    except Exception as e:
+        raise TxError("PROVENANCE_BROKEN", f"bootstrap pin bytes 解析失败: {e}")
+    live_hash = file_canonical_hash(definition_path(root, entity, version))
+    if live_hash != pinned_hash:
+        raise TxError("DEF_POINTER_DIVERGED",
+                      f"bootstrap {version} live bytes 与 external pin 不一致（trust root 被篡改）")
+    return pinned_hash
+
+
 def get_previous_hash(root: str, entity: str, previous: str) -> Optional[str]:
     """获取 predecessor 版本文件的 canonical hash 或是 receipt.definition_hash。
 
     若 previous 是 P1-B committed revision → 从 valid receipt 获取 definition_hash
     （按 **Event.subject == previous** 查找，绝不假设 EV 编号 == 版本编号，Sol rev 实现复审 P1-2）；
-    若 previous 是 bootstrap v1（无 committed DefinitionRevised）→ 从文件计算 canonical hash。
+    若 previous 是 bootstrap v1（无 committed DefinitionRevised）→ 从 external pin 锚定。
     """
     from ..mini_yaml import load_file
     from .receipt import verify_definition_receipt
@@ -224,5 +282,5 @@ def get_previous_hash(root: str, entity: str, previous: str) -> Optional[str]:
             rc = verify_definition_receipt(root, eid)
             if rc.get("valid") is True:
                 return rc.get("definition_hash")
-    # bootstrap：无 committed DefinitionRevised → 从文件计算 canonical hash
-    return file_canonical_hash(definition_path(root, entity, previous))
+    # bootstrap：无 committed DefinitionRevised → 从 external pin 锚定（Sol rev2 P1-2）
+    return verify_bootstrap_definition(root, entity, previous)

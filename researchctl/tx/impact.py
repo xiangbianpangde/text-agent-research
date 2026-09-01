@@ -44,14 +44,23 @@ CHANGE_TYPE_TO_REASON = {
     "other_semantic": "other_upstream_change",
 }
 
-# 依赖关系（provenance edges）
+# 依赖关系（provenance edges）——冻结 whitelist（Sol rev2 P1-7）：只认四个显式 relation
 _DEPENDENCY_KEYS = ("based_on", "uses", "references", "caused_by")
+
+# 非 dependency 字段但被 schema 允许提取 version ref 的容器键（仅这些，不放开任意字段）
+_CONTAINER_KEYS = ("dependencies", "relations", "provenance")
 
 
 def canonicalize_change_types(change_types) -> list:
-    """change_type 集合语义：unique + 按 enum 顺序排序（§4.2）。"""
+    """change_type 集合语义：unique + 按 enum 顺序排序（§4.2）。
+
+    任一值不在受控 enum 中 → 抛出 ValueError("DEF_CHANGE_TYPE_INVALID")（Sol rev2 P2-1）。
+    """
     if not change_types:
         return []
+    for ct in change_types:
+        if ct not in CHANGE_TYPES:
+            raise ValueError(f"DEF_CHANGE_TYPE_INVALID: '{ct}' 不在受控 enum 中")
     seen = set()
     out = []
     for ct in CHANGE_TYPES:
@@ -62,22 +71,29 @@ def canonicalize_change_types(change_types) -> list:
 
 
 def _entity_refs_of(doc: dict) -> list:
-    """提取文档中所有版本引用（entity@version），每条含 (ref, relation)。"""
+    """提取文档中版本引用，只认冻结 whitelist 的显式 dependency 字段（Sol rev2 P1-7）。
+
+    返回 [(ref, relation)]，relation ∈ {based_on, uses, references, caused_by}。
+    任意字段（note:/label:/foo:）即使含 @v1 也绝不当作 dependency。
+    """
     refs = []
 
     def walk(value, parent_key=None):
         if isinstance(value, dict):
             for k, v in value.items():
-                if k in _DEPENDENCY_KEYS or k in ("upstream", "references"):
+                if k in _DEPENDENCY_KEYS:
                     if isinstance(v, str) and re.fullmatch(r"[A-Z][A-Za-z0-9_-]+@v\d+", v):
                         refs.append((v, k))
                     elif isinstance(v, (dict, list)):
                         walk(v, k)
-                elif isinstance(v, str) and v:
-                    if re.fullmatch(r"[A-Z][A-Za-z0-9_-]+@v\d+", v):
-                        refs.append((v, parent_key or "references"))
-                elif isinstance(v, (dict, list)):
-                    walk(v, k)
+                elif k in _CONTAINER_KEYS and isinstance(v, list):
+                    # 仅容器字段：展开其中显式 dependency 条目（{relation: ref} 或 {ref: ..., relation: ...}）
+                    for item in v:
+                        if isinstance(item, dict):
+                            for ik, iv in item.items():
+                                if ik in _DEPENDENCY_KEYS and isinstance(iv, str) \
+                                        and re.fullmatch(r"[A-Z][A-Za-z0-9_-]+@v\d+", iv):
+                                    refs.append((iv, ik))
         elif isinstance(value, list):
             for v in value:
                 walk(v, parent_key)
@@ -208,6 +224,10 @@ def compute_affected(root: str, *, definition: str, previous: str,
             dependent, relation = dep_entry
             if dependent == root_key or dependent in visited:
                 continue
+            # P1-8: 先求完整 transitive reverse closure，再按矩阵决定哪些产生 affected fact
+            # 即使当前节点不产生 affected record，也继续沿 reverse edges 向下游传播
+            if dependent not in visited:
+                queue.append(dependent)
             dep_doc = entities.get(dependent, {}).get("doc", {})
             impact = _impact_classification(dependent, dep_doc)
             if impact is None:
@@ -218,7 +238,6 @@ def compute_affected(root: str, *, definition: str, previous: str,
             if existing is not None:
                 if impact == "needs_review":
                     existing["impact"] = "needs_review"
-                # reasons 保留全部（多路径聚合）
                 existing["stale_reasons"].extend(
                     _build_reasons(dependent, dep_doc, change_types, previous, candidate_subject,
                                    relation))
@@ -290,8 +309,12 @@ def impact_basis_digest(*, basis_git_commit: str, max_committed_event_id: str,
 
 
 def max_committed_event_id(root: str) -> str:
-    """从 canonical events 中找最大 committed event_id（含 receipt 验证）。"""
-    from .receipt import verify_receipt
+    """从 canonical events 中找最大 committed event_id。
+
+    ReportFrozen 用 verify_receipt；DefinitionRevised 用 verify_definition_receipt
+    （Sol rev2 P2-2：不能对 P1-B 事件用 P1-A validator）。
+    """
+    from .receipt import verify_receipt, verify_definition_receipt
     edir = os.path.join(root, "events")
     if not os.path.isdir(edir):
         return ""
@@ -301,7 +324,16 @@ def max_committed_event_id(root: str) -> str:
             continue
         eid = fn[:-5]
         try:
-            res = verify_receipt(root, eid)
+            from ..mini_yaml import load_file
+            ev = load_file(os.path.join(edir, fn), strict=True) or {}
+            etype = ev.get("event_type", "")
+        except Exception:
+            continue
+        try:
+            if etype == "DefinitionRevised":
+                res = verify_definition_receipt(root, eid)
+            else:
+                res = verify_receipt(root, eid)
         except Exception:
             continue
         if res.get("valid") is True:

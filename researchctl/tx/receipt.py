@@ -232,7 +232,7 @@ def verify_definition_receipt(root: str, event_id: str) -> dict:
     if rc.get("output_digest") != exp_digest:
         return {"valid": False, "reason": "output-digest-mismatch"}
 
-    # j. 完整 identity validator（Sol rev5 P1-1 + rev6 P1-2）
+    # j. 完整 identity validator（Sol rev5 P1-1 + rev6 P1-2 + rev2 P1-6 补全）
     subj = ev.get("subject", "")
     prev = ev.get("previous", "")
     try:
@@ -242,12 +242,34 @@ def verify_definition_receipt(root: str, event_id: str) -> dict:
             return {"valid": False, "reason": "entity-mismatch-between-subject-and-previous"}
     except ValueError as e:
         return {"valid": False, "reason": f"identity-parse-error:{e}"}
+    # j 续：definition path basename == Event.subject
+    def_out = next((r for r in (ev.get("output_refs") or []) if r.get("role") == "definition"), None)
+    if def_out:
+        def_path_basename = os.path.basename(def_out.get("path", ""))
+        if def_path_basename != f"{subj}.yaml":
+            return {"valid": False, "reason": f"definition-path-basename-mismatch: {def_path_basename} != {subj}.yaml"}
+        # j 续：actual definition 文件内部 entity_id/version_ref/previous 与 Event 一致
+        from ..mini_yaml import load_file as _yaml_load
+        def_full_path = os.path.join(root, def_out.get("path", ""))
+        if os.path.exists(def_full_path):
+            try:
+                actual_def = _yaml_load(def_full_path, strict=True) or {}
+            except Exception as e:
+                return {"valid": False, "reason": f"definition-parse-error:{e}"}
+            if actual_def.get("entity_id") != entity_of(subj):
+                return {"valid": False, "reason": f"definition-entity-id-mismatch: {actual_def.get('entity_id')} != {entity_of(subj)}"}
+            if actual_def.get("version_ref") != subj:
+                return {"valid": False, "reason": f"definition-version-ref-mismatch: {actual_def.get('version_ref')} != {subj}"}
+            if actual_def.get("previous") != prev:
+                return {"valid": False, "reason": f"definition-previous-mismatch: {actual_def.get('previous')} != {prev}"}
 
-    # k. previous input_ref 验证（Sol rev7 P2-6）
+    # k. previous input_ref 验证（Sol rev7 P2-6 + rev2 P1-6 精确 path）
     in_refs = ev.get("input_refs") or []
     prev_in = next((r for r in in_refs if r.get("role") == "definition.previous"), None)
     if prev_in:
-        if not prev_in.get("path", "").endswith(f"{prev}.yaml"):
+        # 精确 path 比较（Sol rev2 P1-6：不使用 endswith）
+        expected_prev_path = f"definitions/{entity_of(prev)}/{prev}.yaml"
+        if prev_in.get("path") != expected_prev_path:
             return {"valid": False, "reason": "previous-input-ref-path-mismatch"}
         prev_path = os.path.join(root, prev_in.get("path", ""))
         prev_hash = file_canonical_hash(prev_path)
