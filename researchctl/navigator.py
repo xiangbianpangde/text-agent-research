@@ -119,13 +119,10 @@ def generate_index_md(root: str, db_path: Optional[str] = None, write_file: bool
                 except Exception:
                     sp_doc = {}
             
-            # P1-8: 避免硬编码 H003，根据 spec 或 definitions 真实环境确定
+            # P1-8: 严格依据 spec 或 definitions 真实环境确定，绝不硬编码 H003
             hypo_val = sp_doc.get("hypothesis")
             if not hypo_val:
-                if "H003" in hypo_defs:
-                    hypo_val = "H003"
-                else:
-                    hypo_val = "未分配假设 (Unassigned Hypothesis)"
+                hypo_val = "未分配假设 (Unassigned Hypothesis)"
 
             specs_by_id[eid] = {
                 "path": epath,
@@ -195,8 +192,8 @@ def generate_index_md(root: str, db_path: Optional[str] = None, write_file: bool
                 lines.append("")
                 lines.append(f"Current report: `{curr_reps[0]}`")
 
-            # P2-2: 基于显式元数据（而不是路径子串）匹配 Organized 文件
-            matching_orgs = [o for o in org_info_list if o["experiment"] in exp_list or o["id"] in exp_list]
+            # P2-2: 基于显式元数据（而不是路径子串或 ID 回退）匹配 Organized 文件
+            matching_orgs = [o for o in org_info_list if o["experiment"] in exp_list]
             if matching_orgs:
                 lines.append("")
                 lines.append("Organized:")

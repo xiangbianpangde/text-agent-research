@@ -189,9 +189,12 @@ def ingest_raw(
             ])
 
             manifest_tmp = manifest_path + f".tmp.{uuid.uuid4().hex[:8]}"
+            installed_artifacts.append(manifest_tmp)
             with open(manifest_tmp, "w", encoding="utf-8") as f:
                 f.write("\n".join(manifest_lines) + "\n")
             os.replace(manifest_tmp, manifest_path)
+            if manifest_tmp in installed_artifacts:
+                installed_artifacts.remove(manifest_tmp)
 
             # 步骤 4: 更新索引（原子顺序：吸纳数据 → 渲染 INDEX.md → 封装 scan_fingerprint）
             actual_db = db_path or os.path.join(root, ".index/research.sqlite")
@@ -223,7 +226,12 @@ def ingest_raw(
                 if isinstance(sem_res, dict) and sem_res.get("status") == "fail_closed":
                     raise RuntimeError(f"SEMANTIC_REBUILD_FAILED: {sem_res.get('error_semantic')}")
         except Exception as e:
-            # P1-5 回滚保证：清理已安装的 raw 和 manifest 目录/文件，绝不遗留半状态
+            # P1-5 回滚保证：清理已安装的 raw、manifest 以及任何未完成的临时文件，绝不遗留半状态
+            if 'manifest_tmp' in locals() and os.path.exists(manifest_tmp):
+                try:
+                    os.remove(manifest_tmp)
+                except OSError:
+                    pass
             for p in reversed(installed_artifacts):
                 if os.path.isdir(p):
                     shutil.rmtree(p, ignore_errors=True)
@@ -234,6 +242,11 @@ def ingest_raw(
                         pass
             raise e
         finally:
+            if 'manifest_tmp' in locals() and os.path.exists(manifest_tmp):
+                try:
+                    os.remove(manifest_tmp)
+                except OSError:
+                    pass
             if os.path.exists(staging_dir):
                 shutil.rmtree(staging_dir, ignore_errors=True)
 

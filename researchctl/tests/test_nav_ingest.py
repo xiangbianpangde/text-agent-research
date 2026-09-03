@@ -9,9 +9,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
+import unittest.mock as mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 FIXTURE = os.path.join(ROOT, "fixture")
@@ -82,6 +84,15 @@ def main():
         check("N1-8 实验索引包含历史运行 R051-R053 列表与模型", all(r in content for r in ("R051", "R052", "R053", "model-a", "model-b")))
         check("N1-9 时间索引包含运行记录", "Run `R051`" in content or "Run `R052`" in content)
         check("N1-10 包含真实报告时间（无硬编码固定日期）", "Report `REPORT-001`" in content)
+        check("N1-11 无硬编码 H003（无 hypothesis 字段时归入未分配假设）", "### 未分配假设" in content)
+
+        # 验证当 spec 显式定义 hypothesis 时正确聚合
+        with open(os.path.join(dst, "experiments/EXP-017/spec.yaml"), "a") as f:
+            f.write("hypothesis: H003\n")
+        run_cmd("index", root=dst)
+        run_cmd("generate-index", root=dst)
+        content2 = open(idx_path, encoding="utf-8").read()
+        check("N1-12 显式 hypothesis: H003 正确按 H003 聚合", "### H003" in content2)
     finally:
         cleanup(tmp)
 
@@ -238,7 +249,7 @@ def main():
         cleanup(tmp)
 
     # -------------------------------------------------------------------------
-    # [N4-Rollback] 中途失败原子回滚测试 (P1-5 回滚保证)
+    # [N4-Rollback] 中途失败原子回滚测试 (P1-5 回滚保证 + tmp 清理)
     # -------------------------------------------------------------------------
     print("\n[N4-Rollback] ingest-raw 中途失败原子回滚测试 (P1-5)")
     tmp, dst = make_copy()
@@ -249,9 +260,8 @@ def main():
         with open(os.path.join(sample_dir, "data.txt"), "w") as f:
             f.write("test data")
 
-        # 在 index.sqlite 注入破坏使后续 build_index 抛出异常
+        # 1. 在 build_index 崩溃注入测试
         from researchctl.ingest import ingest_raw
-        import unittest.mock as mock
         with mock.patch("researchctl.ingest.build_index", side_effect=RuntimeError("injected_build_failure")):
             crashed = False
             try:
@@ -261,11 +271,30 @@ def main():
                     crashed = True
             check("N4-Rollback-1 模拟中途 build 崩溃触发异常", crashed)
 
-        # 检查回滚：已安装的 raw/EXP-017/R888 与 runs/R888 必须已被彻底逆向清理！
         raw_r888 = os.path.join(dst, "raw/EXP-017/R888")
         run_r888 = os.path.join(dst, "runs/R888")
         check("N4-Rollback-2 raw 目录已被干净回滚清理", not os.path.exists(raw_r888))
         check("N4-Rollback-3 runs 目录已被干净回滚清理", not os.path.exists(run_r888))
+
+        # 2. 模拟 os.replace 崩溃注入测试（验证不会残留 manifest.yaml.tmp.*）
+        ghost_r777_dir = os.path.join(dst, "runs/R777")
+        os.makedirs(ghost_r777_dir, exist_ok=True)
+        with mock.patch("os.replace", side_effect=RuntimeError("injected_replace_failure")):
+            crashed_replace = False
+            try:
+                ingest_raw(dst, experiment="EXP-017", source_path=sample_dir, run_id="R777")
+            except RuntimeError as e:
+                if "injected_replace_failure" in str(e):
+                    crashed_replace = True
+            check("N4-Rollback-4 模拟 os.replace 崩溃触发异常", crashed_replace)
+
+        raw_r777 = os.path.join(dst, "raw/EXP-017/R777")
+        manifest_r777 = os.path.join(dst, "runs/R777/manifest.yaml")
+        tmp_files = [f for f in os.listdir(ghost_r777_dir) if f.startswith("manifest.yaml.tmp")]
+        check("N4-Rollback-5 raw 目录已被清理", not os.path.exists(raw_r777))
+        check("N4-Rollback-6 manifest 文件不存在", not os.path.exists(manifest_r777))
+        check("N4-Rollback-7 无任何 manifest.yaml.tmp.* 临时文件残留 (P1-5)", len(tmp_files) == 0, f"tmps={tmp_files}")
+        check("N4-Rollback-8 预先存在的 runs 目录保留", os.path.isdir(ghost_r777_dir))
     finally:
         cleanup(tmp)
 
@@ -302,7 +331,7 @@ def main():
         cleanup(tmp)
 
     # -------------------------------------------------------------------------
-    # [N5-Spec] Spec 版本解析严谨性测试 (P1-6 消除盲猜 @v1)
+    # [N5-Spec] Spec 版本严格解析 (P1-6 消除盲猜 @v1)
     # -------------------------------------------------------------------------
     print("\n[N5-Spec] Spec 版本严格解析 (P1-6 消除盲猜 @v1)")
     tmp, dst = make_copy()
@@ -313,15 +342,58 @@ def main():
         with open(os.path.join(sample_dir, "log.txt"), "w") as f:
             f.write("test")
 
-        # 对不存在 spec 的全新实验，未提供 --experiment-ref 时必须拒绝
-        res = run_cmd(
+        # 1. spec 不存在
+        res1 = run_cmd(
             "ingest-raw",
             "--experiment", "EXP-999-NOSPEC",
             "--source", sample_dir,
             root=dst,
         )
         check("N5-Spec-1 spec 不存在且未传 ref 时必须拒绝 (P1-6)",
-              res.get("cli_returncode") != 0 or res.get("status") == "error")
+              res1.get("cli_returncode") != 0 or res1.get("status") == "error")
+
+        # 2. spec 存在但缺少 version
+        no_ver_dir = os.path.join(dst, "experiments/EXP-888-NOVER")
+        os.makedirs(no_ver_dir, exist_ok=True)
+        with open(os.path.join(no_ver_dir, "spec.yaml"), "w") as f:
+            f.write("experiment_id: EXP-888-NOVER\ntitle: Spec with no version\n")
+        res2 = run_cmd(
+            "ingest-raw",
+            "--experiment", "EXP-888-NOVER",
+            "--source", sample_dir,
+            root=dst,
+        )
+        check("N5-Spec-2 spec 缺少 version 时报 SPEC_VERSION_MISSING 拒绝 (P1-6)",
+              res2.get("cli_returncode") != 0 or res2.get("status") == "error")
+    finally:
+        cleanup(tmp)
+
+    # -------------------------------------------------------------------------
+    # [N5-Sem] Semantic 表部分损坏拒绝测试 (P1-7)
+    # -------------------------------------------------------------------------
+    print("\n[N5-Sem] Semantic 表部分损坏拒绝测试 (P1-7)")
+    tmp, dst = make_copy()
+    try:
+        run_cmd("index", root=dst)
+        sample_dir = os.path.join(tmp, "sample_sem")
+        os.makedirs(sample_dir)
+        with open(os.path.join(sample_dir, "log.txt"), "w") as f:
+            f.write("test")
+
+        # 人为制造仅存在 1 张 semantic 表的损坏状态
+        conn = sqlite3.connect(os.path.join(dst, ".index/research.sqlite"))
+        conn.execute("CREATE TABLE terms (term TEXT NOT NULL, doc_id TEXT NOT NULL, tf REAL NOT NULL, PRIMARY KEY (term, doc_id))")
+        conn.commit()
+        conn.close()
+
+        res_sem = run_cmd(
+            "ingest-raw",
+            "--experiment", "EXP-017",
+            "--source", sample_dir,
+            root=dst,
+        )
+        check("N5-Sem-1 semantic 部分表存在时报 SEMANTIC_INDEX_CORRUPT 拒绝 (P1-7)",
+              res_sem.get("cli_returncode") != 0 or res_sem.get("status") == "error")
     finally:
         cleanup(tmp)
 
@@ -355,7 +427,6 @@ def main():
               res_bad_ct.get("status") == "fail_closed" and res_bad_ct.get("error_semantic") == "DEF_CHANGE_TYPE_INVALID")
 
         # 5. 不存在的 Definition 版本如 H003@v999 必须报 NOT_FOUND fail_closed (P1-1 反例 B)
-        # 先创建 definitions/H003 目录
         h003_dir = os.path.join(dst, "definitions/H003")
         os.makedirs(h003_dir, exist_ok=True)
         res_v999 = run_cmd("impact", "H003@v999", root=dst)
