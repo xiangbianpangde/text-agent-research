@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>超长程实验 Agent 检索系统技术架构图</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 30px;
+    }
+    .diagram-container {
+      width: 1520px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 32px 36px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .header {
+      border-bottom: 1px solid #334155;
+      padding-bottom: 18px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .title {
+      font-size: 26px;
+      font-weight: 700;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-top: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .tech-badges {
+      display: flex;
+      gap: 10px;
+    }
+    .badge {
+      background: #0f172a;
+      border: 1px solid #475569;
+      color: #cbd5e1;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge-highlight {
+      background: rgba(14, 165, 233, 0.15);
+      border-color: #0284c7;
+      color: #38bdf8;
+    }
+
+    /* Section Containers */
+    .tier-section {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 18px;
+      position: relative;
+    }
+    .tier-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .tier-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tier-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    /* Grid layouts */
+    .grid-tier1 {
+      display: grid;
+      grid-template-columns: 320px 1fr 340px;
+      gap: 16px;
+    }
+    .grid-kernel {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .grid-storage {
+      display: grid;
+      grid-template-columns: 1.4fr 0.8fr 1.2fr;
+      gap: 16px;
+    }
+
+    /* Sub modules / cards */
+    .tech-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .tech-card.cyan { border-top: 3px solid #06b6d4; }
+    .tech-card.blue { border-top: 3px solid #3b82f6; }
+    .tech-card.emerald { border-top: 3px solid #10b981; }
+    .tech-card.amber { border-top: 3px solid #f59e0b; }
+    .tech-card.purple { border-top: 3px solid #a855f7; }
+    .tech-card.indigo { border-top: 3px solid #6366f1; }
+
+    .card-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f1f5f9;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card-tech {
+      font-size: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: #0f172a;
+      color: #94a3b8;
+    }
+    .card-content {
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+    .card-items {
+      list-style: none;
+      margin-top: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .card-items li {
+      font-size: 11px;
+      color: #cbd5e1;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+    }
+    .card-items li::before {
+      content: "•";
+      color: #38bdf8;
+      font-weight: bold;
+    }
+    .code-tag {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 10px;
+      color: #38bdf8;
+      background: rgba(14, 165, 233, 0.1);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    /* Connectors */
+    .bus-connector {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      margin: -8px 0 10px 0;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* Footer specs */
+    .footer-specs {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-top: 18px;
+      border-top: 1px solid #334155;
+      padding-top: 14px;
+    }
+    .spec-box {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 8px 12px;
+      text-align: center;
+    }
+    .spec-num {
+      font-size: 14px;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+    .spec-name {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="diagram-container">
+  
+  <!-- 头部 -->
+  <div class="header">
+    <div>
+      <div class="title">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+          <polyline points="2 17 12 22 22 17"></polyline>
+          <polyline points="2 12 12 17 22 12"></polyline>
+        </svg>
+        超长程实验 Agent 检索系统软件与技术架构图
+      </div>
+      <div class="subtitle">System Software Stack, Subsystem Modules, Transaction Protocols & Storage Layout</div>
+    </div>
+    <div class="tech-badges">
+      <span class="badge badge-highlight">Python 3.10+ (Stdlib Only)</span>
+      <span class="badge badge-highlight">TypeScript / TypeBox</span>
+      <span class="badge">SQLite 3.35+ (ACID)</span>
+      <span class="badge">Git Content-Addressed</span>
+      <span class="badge">IEEE-754 Deterministic</span>
+    </div>
+  </div>
+
+  <!-- 第 1 层：交互与集成层 -->
+  <div class="tier-section">
+    <div class="tier-header">
+      <div class="tier-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+        Tier 1: 客户端、Agent 认知与扩展集成层 (Client & Host Integration)
+      </div>
+      <span class="tier-tag" style="background: #0369a1; color: #e0f2fe;">Agent Harness Interface</span>
+    </div>
+
+    <div class="grid-tier1">
+      <div class="tech-card purple">
+        <div class="card-label">
+          <span>Pi Agent Runtime</span>
+          <span class="card-tech">Harness</span>
+        </div>
+        <div class="card-content">
+          驱动长程任务状态机，维护会话上下文；通过 Tool 与 Skill 双轮驱动实现“理解归模型，链条归 Harness”。
+        </div>
+      </div>
+
+      <div class="tech-card cyan">
+        <div class="card-label">
+          <span>research-retrieval 任务技能</span>
+          <span class="card-tech">~/.pi/.../research-retrieval</span>
+        </div>
+        <div class="card-content">
+          <b>决策树（Decision Routes A–G）</b>：强约束检索思考路线。查当前结论必走 CURRENT，溯源依据必下钻 Raw，定义变更必查 impact，模糊线索末级 fallback 走 semantic。
+        </div>
+      </div>
+
+      <div class="tech-card blue">
+        <div class="card-label">
+          <span>research 原生 Typed Tool</span>
+          <span class="card-tech">.pi/extensions/research.ts</span>
+        </div>
+        <div class="card-content">
+          TypeScript / TypeBox 规范封装，向 Agent 提供安全的结构化 JSON 交互，隔离原始命令行转义。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 连接总线 -->
+  <div class="bus-connector">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg>
+    <span>JSON IPC 管道: python3 -m researchctl --root [cwd] [command]</span>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg>
+  </div>
+
+  <!-- 第 2 层：内核引擎子系统 -->
+  <div class="tier-section" style="border-color: #0284c7; background: #0b1329;">
+    <div class="tier-header">
+      <div class="tier-title" style="color: #38bdf8;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>
+        Tier 2: researchctl 核心引擎四大子系统 (Kernel Subsystem Engines)
+      </div>
+      <span class="tier-tag" style="background: #0284c7; color: #fff;">Zero-Dependency Pure Python Core</span>
+    </div>
+
+    <div class="grid-kernel">
+      
+      <!-- 子系统 1: 查询与图遍历引擎 -->
+      <div class="tech-card blue">
+        <div class="card-label">
+          <span>1. 查询与图遍历引擎</span>
+          <span class="card-tech">queries.py</span>
+        </div>
+        <ul class="card-items">
+          <li><b>路由闭集表</b>: <span class="code-tag">query / trace / sources / history / impact</span> 严格分流</li>
+          <li><b>QueryResult Envelope</b>: 权威度三元组 (<span class="code-tag">canonical/derived/unresolved</span>)</li>
+          <li><b>溯源下钻器</b>: 结论 → 整理文件 → 穿透到 Raw 日志</li>
+          <li><b>逆向 Impact 规划</b>: 遍历反向 DAG，分析实体变更下游波及面</li>
+        </ul>
+      </div>
+
+      <!-- 子系统 2: 事务与一致性引擎 -->
+      <div class="tech-card amber">
+        <div class="card-label">
+          <span>2. 事务与演化引擎</span>
+          <span class="card-tech">tx/ (P1-A/B)</span>
+        </div>
+        <ul class="card-items">
+          <li><b>全局排他锁</b>: <span class="code-tag">freeze_lock</span> (.researchctl/locks/freeze.lock)</li>
+          <li><b>两阶段提交</b>: Staging → Commit → Receipt → Marker 崩溃零污染</li>
+          <li><b>版本演化控制器</b>: 不可变版本链 (<span class="code-tag">H003@v1→v2</span>) + DefinitionRevised</li>
+          <li><b>Receipt 密码学校验</b>: 四件套验证与 a–k 11 项全约束校验</li>
+        </ul>
+      </div>
+
+      <!-- 子系统 3: 完整性检测引擎 -->
+      <div class="tech-card emerald">
+        <div class="card-label">
+          <span>3. 完整性与巡检引擎</span>
+          <span class="card-tech">indexer / reconciler</span>
+        </div>
+        <ul class="card-items">
+          <li><b>Merkle 树哈希计算</b>: <span class="code-tag">scan_fingerprint</span> 纳秒级感知文件变动</li>
+          <li><b>断链与篡改巡检</b>: 检测 Missing Sources、Hash 不匹配与孤儿文件</li>
+          <li><b>状态漂移硬阻断</b>: <span class="code-tag">drift=true</span> 时严格触发 <span class="code-tag">fail_closed</span></li>
+          <li><b>重构与崩溃对齐</b>: WAL 崩溃恢复与索引全自动零数据丢失重建</li>
+        </ul>
+      </div>
+
+      <!-- 子系统 4: 确定性语义引擎 -->
+      <div class="tech-card cyan">
+        <div class="card-label">
+          <span>4. 确定性语义检索引擎</span>
+          <span class="card-tech">semantic.py (P1-C)</span>
+        </div>
+        <ul class="card-items">
+          <li><b>NFKC + CJK 分词</b>: Unicode 归一化 + 中文 2-gram + 108 停用词过滤</li>
+          <li><b>TF-IDF 与字符 N-Gram</b>: 对称双路算法 + IEEE-754 <span class="code-tag">math.fsum</span></li>
+          <li><b>整数排序全序</b>: <span class="code-tag">score_q = round(s * 1e9)</span> 消除跨平台浮点漂移</li>
+          <li><b>两阶段构建校验</b>: Schema preflight + Post-write 全量不变量守卫</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 连接总线 -->
+  <div class="bus-connector">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+    <span>双向读写解耦：真源只读追加，派生数据落盘 SQLite Cache</span>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+  </div>
+
+  <!-- 第 3 层：存储与数据分层 -->
+  <div class="tier-section">
+    <div class="tier-header">
+      <div class="tier-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+        Tier 3: 存储模型与物理文件落盘层 (Physical Storage & Derived Stores)
+      </div>
+      <span class="tier-tag" style="background: #047857; color: #fff;">Canonical Truth vs Ephemeral Cache</span>
+    </div>
+
+    <div class="grid-storage">
+      
+      <div class="tech-card emerald">
+        <div class="card-label">
+          <span>规范真源文件 (Canonical Git Truth)</span>
+          <span class="card-tech">Git-Tracked Plaintext</span>
+        </div>
+        <div class="card-content">
+          • <b>L3 Report</b>: <code>reports/CURRENT.md</code>, <code>CURRENT.sources.yaml</code>, <code>history/REPORT-*.md</code><br>
+          • <b>L1 Organized</b>: <code>organized/EXP-*/result.md</code>, <code>analysis.md</code><br>
+          • <b>L0 Raw</b>: <code>runs/R*/manifest.yaml</code>, <code>execution.log</code>, <code>metrics.csv</code><br>
+          • <b>定义与事件</b>: <code>definitions/*/APPROVED.yaml</code>, <code>events/EV-*.yaml</code> (Append-only)
+        </div>
+      </div>
+
+      <div class="tech-card amber">
+        <div class="card-label">
+          <span>暂态事务工作区 (WAL & Lock)</span>
+          <span class="card-tech">Filesystem WAL</span>
+        </div>
+        <div class="card-content">
+          • <b>并发保护锁</b>: <code>.researchctl/locks/freeze.lock</code><br>
+          • <b>崩溃恢复暂态</b>: <code>.index/tx/plan.json</code>, <code>state.json</code>, <code>staging/</code><br>
+          • 故障时事务现场完整保留，自动支持重放与 Rollback
+        </div>
+      </div>
+
+      <div class="tech-card cyan">
+        <div class="card-label">
+          <span>SQLite 派生索引 (.index/)</span>
+          <span class="card-tech">.index/research.sqlite</span>
+        </div>
+        <div class="card-content">
+          • <b>核心关系表</b>: <code>documents</code>, <code>entities</code>, <code>source_refs</code>, <code>runs</code>, <code>events</code><br>
+          • <b>语义派生表</b>: <code>terms</code>, <code>ngrams</code>, <code>semantic_metadata</code><br>
+          • <b>水印对齐</b>: <code>index_metadata</code> (scan_fingerprint, last_event_id, drift)<br>
+          <em>状态：纯缓存派生数据，随删随建，保证 0 秒数据损失风险</em>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 底部关键质量指标 -->
+  <div class="footer-specs">
+    <div class="spec-box">
+      <div class="spec-num">0 Third-Party</div>
+      <div class="spec-name">零外部依赖 (纯 Python 标准库)</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-num">389 / 389 PASS</div>
+      <div class="spec-name">端到端回归测试 100% 通过</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-num">ACID + WAL</div>
+      <div class="spec-name">单事务多文件原子写入崩溃恢复</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-num">1e-9 Quantized</div>
+      <div class="spec-name">整数量化真全序排重确定性算法</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-num">Fail-Closed</div>
+      <div class="spec-name">状态漂移与断链严格安全闭环</div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
