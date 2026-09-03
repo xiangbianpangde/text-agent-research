@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>超长程实验 Agent 检索系统架构全景图</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 30px;
+    }
+    .diagram-container {
+      width: 1400px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 16px;
+      padding: 36px 40px;
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+    }
+    .header {
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 18px;
+      margin-bottom: 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .title {
+      font-size: 26px;
+      font-weight: 700;
+      color: #0f172a;
+      letter-spacing: -0.5px;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #64748b;
+      margin-top: 6px;
+      font-weight: 500;
+    }
+    .principle-badge {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+    }
+    
+    .grid-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr 340px;
+      gap: 24px;
+    }
+    
+    .col-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    
+    .col-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #cbd5e1;
+      padding-bottom: 10px;
+    }
+    .col-title span {
+      background: #2563eb;
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    /* Cards inside columns */
+    .sub-card {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 14px 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+    .sub-card.highlight {
+      border-left: 4px solid #2563eb;
+    }
+    .sub-card.warn {
+      border-left: 4px solid #f59e0b;
+    }
+    .sub-card.success {
+      border-left: 4px solid #10b981;
+    }
+    .sub-card.purple {
+      border-left: 4px solid #8b5cf6;
+    }
+    .sub-card.slate {
+      border-left: 4px solid #64748b;
+    }
+
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .card-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .card-tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .tag-blue { background: #dbeafe; color: #1d4ed8; }
+    .tag-amber { background: #fef3c7; color: #b45309; }
+    .tag-emerald { background: #d1fae5; color: #047857; }
+    .tag-purple { background: #ede9fe; color: #6d28d9; }
+    .tag-slate { background: #f1f5f9; color: #475569; }
+
+    .card-desc {
+      font-size: 12px;
+      color: #475569;
+      line-height: 1.5;
+    }
+    .card-meta {
+      margin-top: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      color: #0369a1;
+      background: #f0f9ff;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    /* Flow connector arrows */
+    .flow-step {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      font-size: 16px;
+      margin: -6px 0;
+    }
+
+    /* Bottom footer invariants */
+    .footer-invariants {
+      margin-top: 24px;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+    }
+    .inv-item {
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
+      border-radius: 8px;
+      padding: 10px 14px;
+      text-align: center;
+    }
+    .inv-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #334155;
+    }
+    .inv-desc {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="diagram-container">
+  <!-- 头部信息 -->
+  <div class="header">
+    <div>
+      <div class="title">超长程实验 Agent 检索系统体系架构全景图</div>
+      <div class="subtitle">Ultra-Long-Horizon Text Agent Research Retrieval & State System Architecture</div>
+    </div>
+    <div class="principle-badge">
+      核心原则：显式结构优先于语义猜测 · 确定性优先于 RAG · 当前状态与历史来源同时可恢复
+    </div>
+  </div>
+
+  <!-- 主体三列布局 -->
+  <div class="grid-layout">
+    
+    <!-- 第 1 列：Agent 认知与交互层 -->
+    <div class="col-card">
+      <div class="col-title">
+        <span>Layer A</span> Agent 认知与调用层
+      </div>
+
+      <div class="sub-card highlight">
+        <div class="card-head">
+          <span class="card-name">Text Agent (Pi)</span>
+          <span class="card-tag tag-blue">Execution</span>
+        </div>
+        <div class="card-desc">自主完成超长程间断任务、科学推理、实验编排与报告总结。</div>
+      </div>
+
+      <div class="flow-step">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <polyline points="19 12 12 19 5 12"></polyline>
+        </svg>
+        <span style="margin-left: 6px;">遵循决策树思考</span>
+      </div>
+
+      <div class="sub-card purple">
+        <div class="card-head">
+          <span class="card-name">research-retrieval Skill</span>
+          <span class="card-tag tag-purple">Decision Tree</span>
+        </div>
+        <div class="card-desc">
+          严格规范 7 条典型检索路径（路线 A–G）：<br>
+          • 查当前结论 → 强制读 CURRENT<br>
+          • 查推导依据 → 查 sources + trace<br>
+          • 查原始数据 → 下钻 Raw 日志/指标<br>
+          • 查历史演化 → 查 history 对比<br>
+          • 查定义影响 → 查 impact 逆向分析<br>
+          • 模糊线索召回 → fallback 至 semantic
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <polyline points="19 12 12 19 5 12"></polyline>
+        </svg>
+        <span style="margin-left: 6px;">结构化工具调用</span>
+      </div>
+
+      <div class="sub-card highlight">
+        <div class="card-head">
+          <span class="card-name">Pi Tool: research</span>
+          <span class="card-tag tag-blue">Typed Wrapper</span>
+        </div>
+        <div class="card-desc">统一封装底座能力，向 Agent 上下文直接注入安全结构化 JSON 结果。</div>
+        <div class="card-meta">.pi/extensions/research.ts</div>
+      </div>
+
+      <div class="flow-step">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <polyline points="19 12 12 19 5 12"></polyline>
+        </svg>
+        <span style="margin-left: 6px;">调用底层 CLI 内核</span>
+      </div>
+
+      <div class="sub-card slate">
+        <div class="card-head">
+          <span class="card-name">researchctl CLI</span>
+          <span class="card-tag tag-slate">Kernel Entry</span>
+        </div>
+        <div class="card-desc">纯 Python 标准库、零外部依赖、确定性命令行内核工具集。</div>
+      </div>
+    </div>
+
+    <!-- 第 2 列：五层检索能力与四层科研物理架构 -->
+    <div class="col-card" style="background: #ffffff; border: 2px solid #3b82f6;">
+      <div class="col-title" style="border-bottom-color: #93c5fd;">
+        <span style="background: #1d4ed8;">Layer B</span> 科研物理层级与检索分层架构
+      </div>
+
+      <!-- L3 Report -->
+      <div class="sub-card highlight" style="background: #eff6ff;">
+        <div class="card-head">
+          <span class="card-name">L3 Report（全局结论层 / 阅读入口）</span>
+          <span class="card-tag tag-blue">Layer 4: Provenance</span>
+        </div>
+        <div class="card-desc">
+          <b>当前结论真源</b>：<code>reports/CURRENT.md</code> + <code>CURRENT.sources.yaml</code><br>
+          <b>历史版本演化</b>：<code>reports/history/REPORT-NNN.md</code> 锁定精确 Git Commit 与 SHA-256
+        </div>
+        <div class="card-meta">researchctl sources / history / query</div>
+      </div>
+
+      <div class="flow-step">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="7 13 12 18 17 13"></polyline>
+          <polyline points="7 6 12 11 17 6"></polyline>
+        </svg>
+        <span style="margin: 0 8px; font-weight: 600; color: #1e40af;">阅读检索链向证据下钻 (Downstream / Upstream)</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="17 11 12 6 7 11"></polyline>
+          <polyline points="17 18 12 13 7 18"></polyline>
+        </svg>
+      </div>
+
+      <!-- L2 Index -->
+      <div class="sub-card purple" style="background: #faf5ff;">
+        <div class="card-head">
+          <span class="card-name">L2 Index（全局导航层 / 跳查指引）</span>
+          <span class="card-tag tag-purple">Layer 1 & 2: Navigation</span>
+        </div>
+        <div class="card-desc">
+          <code>index/INDEX.md</code> 提供假说索引、时间索引、主题索引与状态索引。<br>
+          <em>原则：Index 是导航，不是证明依据；可完全重新生成。</em>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <polyline points="19 12 12 19 5 12"></polyline>
+        </svg>
+        <span style="margin: 0 6px;">依据溯源指向工作整理文件</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="19" x2="12" y2="5"></line>
+          <polyline points="5 12 12 5 19 12"></polyline>
+        </svg>
+      </div>
+
+      <!-- L1 Organized -->
+      <div class="sub-card emerald" style="background: #f0fdf4;">
+        <div class="card-head">
+          <span class="card-name">L1 Organized（核心科研工作层）</span>
+          <span class="card-tag tag-emerald">Layer 3: Structured Metadata</span>
+        </div>
+        <div class="card-desc">
+          整理后的实验结果与深度分析（如 <code>organized/EXP-017/result.md</code>）。<br>
+          每个整理文件显式绑定其所消费的原始材料引用（Raw Sources）。
+        </div>
+        <div class="card-meta">researchctl query --doc-type organized</div>
+      </div>
+
+      <div class="flow-step">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <polyline points="19 12 12 19 5 12"></polyline>
+        </svg>
+        <span style="margin: 0 6px; font-weight: 600; color: #b45309;">最终事实支撑 (Deep Audit)</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="19" x2="12" y2="5"></line>
+          <polyline points="5 12 12 5 19 12"></polyline>
+        </svg>
+      </div>
+
+      <!-- L0 Raw -->
+      <div class="sub-card warn" style="background: #fffbeb;">
+        <div class="card-head">
+          <span class="card-name">L0 Raw（不可变可审计底座）</span>
+          <span class="card-tag tag-amber">Immutable Ground Truth</span>
+        </div>
+        <div class="card-desc">
+          原始测量与运行事实：<code>runs/R051/manifest.yaml</code>、<code>execution.log</code>、<code>metrics.csv</code>。<br>
+          记录确切 ExperimentSpec、环境、执行参数与原始输出；只读追加，禁止篡改。
+        </div>
+        <div class="card-meta">researchctl trace [Entity] (一路下钻到 Raw)</div>
+      </div>
+
+      <!-- L5 Semantic Fallback -->
+      <div class="sub-card slate" style="background: #f8fafc; border-style: dashed;">
+        <div class="card-head">
+          <span class="card-name">Layer 5：语义检索兜底（Semantic Fallback）</span>
+          <span class="card-tag tag-slate">TF-IDF + N-Gram</span>
+        </div>
+        <div class="card-desc">
+          仅当概念模糊、位置未知或拼写偏差时作为末级建议性（Advisory）检索；<br>
+          IEEE-754 <code>math.fsum</code> 浮点确定性 + <code>score_q</code> 量化真全序；绝对禁止替代事实推断。
+        </div>
+        <div class="card-meta">researchctl query --text [T] --semantic</div>
+      </div>
+    </div>
+
+    <!-- 第 3 列：状态机与事务治理门禁 -->
+    <div class="col-card">
+      <div class="col-title">
+        <span>Layer C</span> 事务保障与治理门禁
+      </div>
+
+      <div class="sub-card highlight">
+        <div class="card-head">
+          <span class="card-name">P1-A Report Finalize Hook</span>
+          <span class="card-tag tag-blue">Single Atomic Tx</span>
+        </div>
+        <div class="card-desc">
+          <b>命令：freeze-report</b><br>
+          • 校验所有 sources 存在与精确 hash<br>
+          • 原子写入 REPORT-NNN + sources.yaml<br>
+          • 生成 <code>ReportFrozen</code> 事件与 receipt<br>
+          • WAL 崩溃恢复保障，绝无半提交状态
+        </div>
+      </div>
+
+      <div class="sub-card purple">
+        <div class="card-head">
+          <span class="card-name">P1-B Definition Revision Gate</span>
+          <span class="card-tag tag-purple">Evolution & Impact</span>
+        </div>
+        <div class="card-desc">
+          <b>命令：revise-definition / impact</b><br>
+          • 规范定义禁止直接覆盖（不可变版本链 H003@v1 → v2）<br>
+          • 生成 <code>DefinitionRevised</code> 规范事件<br>
+          • 自动执行逆向依赖 Impact 分析，向下游受影响实体级联传播 <code>stale</code>
+        </div>
+      </div>
+
+      <div class="sub-card success">
+        <div class="card-head">
+          <span class="card-name">P0-C Reconciler 完整性巡检</span>
+          <span class="card-tag tag-emerald">Tamper & Drift Guard</span>
+        </div>
+        <div class="card-desc">
+          <b>命令：reconcile / tx-reconcile</b><br>
+          • 自动比对物理文件与索引元数据<br>
+          • 检测断链、文件内容篡改、孤儿文件<br>
+          • 检出状态漂移时立即触发 <code>fail_closed</code>
+        </div>
+      </div>
+
+      <div class="sub-card slate">
+        <div class="card-head">
+          <span class="card-name">SQLite 派生索引 (.index/)</span>
+          <span class="card-tag tag-slate">Derived & Rebuildable</span>
+        </div>
+        <div class="card-desc">
+          • 包含 <code>documents</code>, <code>entities</code>, <code>terms</code>, <code>ngrams</code><br>
+          • 派生缓存，绝不作为主真源，可随删随建<br>
+          • 与文件系统严格保持 Watermark 状态同步
+        </div>
+        <div class="card-meta">researchctl index [--semantic]</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 底部 5 大核心思想 -->
+  <div class="footer-invariants">
+    <div class="inv-item">
+      <div class="inv-title">1. Report 是入口</div>
+      <div class="inv-desc">Report 是阅读起点，不是唯一真源</div>
+    </div>
+    <div class="inv-item">
+      <div class="inv-title">2. Index 是导航</div>
+      <div class="inv-desc">Index 是跳查目录，不是事实证据</div>
+    </div>
+    <div class="inv-item">
+      <div class="inv-title">3. Organized 是工作层</div>
+      <div class="inv-desc">整理文件承上启下，必须绑定 Raw 引用</div>
+    </div>
+    <div class="inv-item">
+      <div class="inv-title">4. Raw 是最终底座</div>
+      <div class="inv-desc">执行日志与测量指标是最终可审计根源</div>
+    </div>
+    <div class="inv-item">
+      <div class="inv-title">5. 锁定精确历史版本</div>
+      <div class="inv-desc">历史来源绑定 Git Commit/Hash，杜绝路径悬空</div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
