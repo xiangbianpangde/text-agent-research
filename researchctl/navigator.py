@@ -13,7 +13,9 @@ researchctl.navigator — 导航层 INDEX.md 自动生成与维护模块
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
+import time
 from typing import Any, Dict, List, Optional, Set, Union
 
 from .indexer import _parse_yaml_frontmatter
@@ -93,7 +95,15 @@ def generate_index_md(root: str, db_path: Optional[str] = None, write_file: bool
             if ref_path:
                 reports_by_org.setdefault(ref_path, set()).add(owner)
 
-        # 4. 查询所有实验规格定义与假设关联
+        # 4. 扫描 definitions 目录获取真实存在的假设定义 (Hxxx)
+        hypo_defs: Dict[str, str] = {}
+        def_root = os.path.join(root, "definitions")
+        if os.path.isdir(def_root):
+            for dname in sorted(os.listdir(def_root)):
+                if dname.startswith("H"):
+                    hypo_defs[dname] = f"definitions/{dname}"
+
+        # 查询所有实验规格定义
         spec_rows = conn.execute(
             "SELECT id, path, status FROM entities WHERE entity_type='experiment_spec' ORDER BY id"
         ).fetchall()
@@ -108,10 +118,19 @@ def generate_index_md(root: str, db_path: Optional[str] = None, write_file: bool
                     sp_doc = load_file(full_sp, strict=True) or {}
                 except Exception:
                     sp_doc = {}
+            
+            # P1-8: 避免硬编码 H003，根据 spec 或 definitions 真实环境确定
+            hypo_val = sp_doc.get("hypothesis")
+            if not hypo_val:
+                if "H003" in hypo_defs:
+                    hypo_val = "H003"
+                else:
+                    hypo_val = "未分配假设 (Unassigned Hypothesis)"
+
             specs_by_id[eid] = {
                 "path": epath,
                 "status": estatus,
-                "hypothesis": sp_doc.get("hypothesis") or "H003",
+                "hypothesis": hypo_val,
                 "title": sp_doc.get("title") or eid,
             }
 
@@ -205,16 +224,50 @@ def generate_index_md(root: str, db_path: Optional[str] = None, write_file: bool
                 try:
                     from .mini_yaml import load_file
                     cdoc = load_file(full_sp) or {}
-                    cdate = str(cdoc.get("created_at", "2026-08-01"))
+                    cdate = str(cdoc.get("created_at") or cdoc.get("date") or time.strftime("%Y-%m-%d", time.localtime(os.path.getmtime(full_sp))))
                     time_index.setdefault(cdate, []).append(f"Experiment `{eid}` (spec defined)")
                 except Exception:
                     pass
 
-        # 从 historical reports 收集时间
+        # P1-8: 从 runs 收集时间并进入时间线
+        for r_item in run_rows:
+            rid = r_item[0]
+            r_exp = r_item[1]
+            r_st = r_item[2]
+            model_info = f", 模型: {r_item[3]}" if r_item[3] else ""
+            m_path = os.path.join(root, "runs", rid, "manifest.yaml")
+            run_date = None
+            if os.path.isfile(m_path):
+                try:
+                    from .mini_yaml import load_file
+                    mdoc = load_file(m_path) or {}
+                    run_date = mdoc.get("created_at") or mdoc.get("date")
+                    if not run_date:
+                        run_date = time.strftime("%Y-%m-%d", time.localtime(os.path.getmtime(m_path)))
+                except Exception:
+                    pass
+            if not run_date:
+                run_date = time.strftime("%Y-%m-%d")
+            time_index.setdefault(run_date, []).append(f"Run `{rid}` ({r_exp}, {r_st}{model_info})")
+
+        # P1-8: 从 reports 提取真实时间（无硬编码 2026-08-20）
         for rid, _, rpath, _ in rep_rows:
-            if "REPORT-" in rid:
-                # 尝试从 sources 或文件时间提取
-                time_index.setdefault("2026-08-20", []).append(f"Report `{rid}` ({rpath})")
+            rep_full = os.path.join(root, rpath)
+            r_date = None
+            if os.path.isfile(rep_full):
+                try:
+                    with open(rep_full, "r", encoding="utf-8", errors="ignore") as f:
+                        text_rep = f.read(500)
+                    m = re.search(r"(\d{4}-\d{2}-\d{2})", text_rep)
+                    if m:
+                        r_date = m.group(1)
+                except Exception:
+                    pass
+                if not r_date:
+                    r_date = time.strftime("%Y-%m-%d", time.localtime(os.path.getmtime(rep_full)))
+            if not r_date:
+                r_date = time.strftime("%Y-%m-%d")
+            time_index.setdefault(r_date, []).append(f"Report `{rid}` ({rpath})")
 
         # 渲染时间索引
         if time_index:
@@ -253,6 +306,7 @@ def generate_index_md(root: str, db_path: Optional[str] = None, write_file: bool
 
         # -------------------------------------------------------------
         # 4. 状态索引 (active / completed / failed / invalid / superseded)
+        # P1-8: 严格忠实落地方案 §12 原文规定的 5 个独立状态分类
         # -------------------------------------------------------------
         lines.extend([
             "## 4. 状态索引 (Status Index: active / completed / failed / invalid / superseded)",
@@ -261,8 +315,9 @@ def generate_index_md(root: str, db_path: Optional[str] = None, write_file: bool
         status_categories: Dict[str, List[str]] = {
             "active": [],
             "completed": [],
-            "failed / invalid": [],
-            "superseded / frozen": [],
+            "failed": [],
+            "invalid": [],
+            "superseded": [],
         }
 
         # 归纳 documents 与 entities 的状态
@@ -274,12 +329,15 @@ def generate_index_md(root: str, db_path: Optional[str] = None, write_file: bool
                 status_categories["active"].append(entry)
             elif s_low in ("completed", "valid"):
                 status_categories["completed"].append(entry)
-            elif s_low in ("invalid", "failed", "corrupted"):
-                status_categories["failed / invalid"].append(entry)
+            elif s_low in ("failed", "corrupted"):
+                status_categories["failed"].append(entry)
+            elif s_low in ("invalid",):
+                status_categories["invalid"].append(entry)
             elif s_low in ("frozen", "superseded", "stale"):
-                status_categories["superseded / frozen"].append(entry)
+                status_categories["superseded"].append(entry)
 
-        for cat_name, items in status_categories.items():
+        for cat_name in ("active", "completed", "failed", "invalid", "superseded"):
+            items = status_categories[cat_name]
             lines.append(f"### {cat_name} ({len(items)} 项)")
             if items:
                 for item in sorted(items):

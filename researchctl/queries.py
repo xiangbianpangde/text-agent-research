@@ -255,7 +255,7 @@ def cmd_impact(args) -> dict:
         target = args.entity
         if not target or not target.strip():
             return _query_envelope(
-                "impact", conn, args.root, status="error",
+                "impact", conn, args.root, status="fail_closed",
                 errors=[{"code": "NOT_FOUND", "detail": "entity 参数不能为空"}],
                 error_semantic="NOT_FOUND", authority="unresolved"
             )
@@ -273,9 +273,10 @@ def cmd_impact(args) -> dict:
         def_name = target.split("@")[0]
         has_def = os.path.isdir(os.path.join(def_dir, def_name)) if os.path.isdir(def_dir) else False
 
+        # 如果实体不在 entities、documents、definitions 任何一处，必须立即 fail-closed 报 NOT_FOUND
         if not ent_row and not doc_row and not has_def:
             return _query_envelope(
-                "impact", conn, args.root, status="error",
+                "impact", conn, args.root, status="fail_closed",
                 errors=[{"code": "NOT_FOUND", "detail": f"目标实体或路径不存在: '{target}'"}],
                 error_semantic="NOT_FOUND", authority="unresolved"
             )
@@ -286,7 +287,7 @@ def cmd_impact(args) -> dict:
             raw_ct = args.change_type.strip()
             if raw_ct not in CHANGE_TYPES:
                 return _query_envelope(
-                    "impact", conn, args.root, status="error",
+                    "impact", conn, args.root, status="fail_closed",
                     errors=[{"code": "DEF_CHANGE_TYPE_INVALID", "detail": f"change_type '{raw_ct}' 不在受控 enum 中: {CHANGE_TYPES}"}],
                     error_semantic="DEF_CHANGE_TYPE_INVALID", authority="unresolved"
                 )
@@ -294,10 +295,24 @@ def cmd_impact(args) -> dict:
         def_impact = []
         # P1-3: Definition 影响分析分支
         if has_def:
-            from .tx.impact import compute_affected
-            # 解析版本，不脑补默认 @v1
+            from .tx.impact import _load_entities, compute_affected
+            all_defs = _load_entities(args.root)
+            # 解析版本，不脑补默认 @v1；且版本必须真实存在（P1-1 反例 B）
             if "@" in target:
-                prev_ref = target
+                def_name, ver = target.split("@", 1)
+                ver_yaml = os.path.join(def_dir, def_name, f"{ver}.yaml")
+                if (def_name, target) in all_defs:
+                    prev_ref = target
+                elif (def_name, ver) in all_defs:
+                    prev_ref = ver
+                elif os.path.isfile(ver_yaml):
+                    prev_ref = target
+                else:
+                    return _query_envelope(
+                        "impact", conn, args.root, status="fail_closed",
+                        errors=[{"code": "NOT_FOUND", "detail": f"目标定义版本不存在: '{target}'"}],
+                        error_semantic="NOT_FOUND", authority="unresolved"
+                    )
             else:
                 appr_file = os.path.join(def_dir, def_name, "APPROVED.yaml")
                 if os.path.isfile(appr_file):
@@ -313,7 +328,7 @@ def cmd_impact(args) -> dict:
 
                 if not prev_ref:
                     return _query_envelope(
-                        "impact", conn, args.root, status="error",
+                        "impact", conn, args.root, status="fail_closed",
                         errors=[{"code": "DEF_VERSION_MISSING", "detail": f"定义 '{def_name}' 缺少已批准版本，需显式指定带有 @version 的引用"}],
                         error_semantic="DEF_VERSION_MISSING", authority="unresolved"
                     )
@@ -338,11 +353,10 @@ def cmd_impact(args) -> dict:
                     )
             else:
                 # 未指定 change_type，做纯拓扑依赖分析，不自动猜测 contract_tightened
-                from .tx.impact import _load_entities, _entity_refs_of
+                from .tx.impact import _entity_refs_of
                 try:
-                    all_entities = _load_entities(args.root)
                     rev_graph: dict = {}
-                    for k, v in all_entities.items():
+                    for k, v in all_defs.items():
                         doc = v["doc"]
                         for r, rel in _entity_refs_of(doc):
                             if "@" in r:
@@ -358,7 +372,7 @@ def cmd_impact(args) -> dict:
                             continue
                         visited.add(curr_k)
                         for dep_k, rel in rev_graph.get(curr_k, []):
-                            dep_info = all_entities.get(dep_k, {})
+                            dep_info = all_defs.get(dep_k, {})
                             def_impact.append({
                                 "entity_id": dep_k[0],
                                 "version_ref": dep_k[1] if len(dep_k) > 1 else None,

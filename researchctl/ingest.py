@@ -110,14 +110,17 @@ def ingest_raw(
                 from .mini_yaml import load_file
                 try:
                     spec_doc = load_file(spec_path, strict=True) or {}
-                    spec_ver = spec_doc.get("version", "1")
-                    exp_spec_ref = f"{exp_clean}@v{spec_ver}"
-                except Exception:
-                    exp_spec_ref = f"{exp_clean}@v1"
+                except Exception as e:
+                    raise ValueError(f"SPEC_PARSE_FAILED: 实验规格解析失败: {spec_path}: {e}")
+                spec_ver = spec_doc.get("version")
+                if not spec_ver or not str(spec_ver).strip():
+                    raise ValueError(f"SPEC_VERSION_MISSING: 实验规格缺少版本定义: {spec_path}")
+                exp_spec_ref = f"{exp_clean}@v{spec_ver}"
             else:
                 raise ValueError(f"SPEC_NOT_FOUND: 实验规格文件不存在: {spec_path}，必须显式传入 --experiment-ref")
 
-        # 步骤 2: Staging 暂存导入（中途失败可靠回滚，绝不遗留半状态）
+        # 步骤 2: Staging 暂存导入（中途失败可靠回滚，绝不遗留半状态，P1-5 闭合）
+        installed_artifacts: list[str] = []
         staging_dir = os.path.join(root, ".index", "staging", f"ingest_{assigned_run_id}_{uuid.uuid4().hex[:8]}")
         os.makedirs(staging_dir, exist_ok=True)
         try:
@@ -152,12 +155,19 @@ def ingest_raw(
 
             _manifest_text, dir_hash = dir_manifest_hash(files_map)
 
-            # 原子移动 staging 目录到目标 raw 目录
+            # 原子安装到目标 raw 目录
             os.makedirs(os.path.dirname(raw_target_dir), exist_ok=True)
             shutil.move(staging_dir, raw_target_dir)
+            installed_artifacts.append(raw_target_dir)
 
             # 步骤 3: 写 runs/<run_id>/manifest.yaml
+            runs_dir_existed = os.path.isdir(runs_dir)
             os.makedirs(runs_dir, exist_ok=True)
+            if not runs_dir_existed:
+                installed_artifacts.append(runs_dir)
+            else:
+                installed_artifacts.append(manifest_path)
+
             manifest_lines = [
                 f"run_id: {assigned_run_id}",
                 f"experiment_ref: {exp_spec_ref}",
@@ -178,8 +188,10 @@ def ingest_raw(
                 "  reference_scope: current",
             ])
 
-            with open(manifest_path, "w", encoding="utf-8") as f:
+            manifest_tmp = manifest_path + f".tmp.{uuid.uuid4().hex[:8]}"
+            with open(manifest_tmp, "w", encoding="utf-8") as f:
                 f.write("\n".join(manifest_lines) + "\n")
+            os.replace(manifest_tmp, manifest_path)
 
             # 步骤 4: 更新索引（原子顺序：吸纳数据 → 渲染 INDEX.md → 封装 scan_fingerprint）
             actual_db = db_path or os.path.join(root, ".index/research.sqlite")
@@ -193,40 +205,56 @@ def ingest_raw(
             p0_wm = build_index(root, actual_db, git_commit=git_commit)
 
             # P1-7: semantic 重建结果必须严格检查，绝不 fail-open 吞异常
+            import sqlite3
+            conn = sqlite3.connect(actual_db)
             try:
-                from .semantic import build_semantic_index, validate_schema_only
-                import sqlite3
-                conn = sqlite3.connect(actual_db)
-                is_semantic_present, _ = validate_schema_only(conn)
+                tbl_rows = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('terms', 'ngrams', 'semantic_metadata')"
+                ).fetchall()
+                sem_tables = set(r[0] for r in tbl_rows)
+            finally:
                 conn.close()
-                if is_semantic_present:
-                    sem_res = build_semantic_index(root, actual_db)
-                    if sem_res.get("status") == "fail_closed":
-                        raise RuntimeError(f"SEMANTIC_REBUILD_FAILED: {sem_res.get('error_semantic')}")
-            except Exception as e:
-                raise RuntimeError(f"SEMANTIC_REBUILD_FAILED: 语义索引刷新失败: {e}")
 
-            return {
-                "query_id": uuid.uuid4().hex[:12],
-                "query_type": "status",
-                "status": "success",
-                "authority": "derived",
-                "source_watermark": p0_wm,
-                "results": [
-                    {
-                        "run_id": assigned_run_id,
-                        "experiment": exp_clean,
-                        "experiment_ref": exp_spec_ref,
-                        "raw_path": f"raw/{exp_clean}/{assigned_run_id}/",
-                        "manifest_path": f"runs/{assigned_run_id}/manifest.yaml",
-                        "content_hash": dir_hash,
-                        "status": status,
-                    }
-                ],
-                "warnings": [],
-                "errors": [],
-                "error_semantic": None,
-            }
+            if len(sem_tables) in (1, 2):
+                raise RuntimeError("SEMANTIC_INDEX_CORRUPT: semantic 表仅部分存在，索引损坏")
+            elif len(sem_tables) == 3:
+                from .semantic import build_semantic_index
+                sem_res = build_semantic_index(root, actual_db)
+                if isinstance(sem_res, dict) and sem_res.get("status") == "fail_closed":
+                    raise RuntimeError(f"SEMANTIC_REBUILD_FAILED: {sem_res.get('error_semantic')}")
+        except Exception as e:
+            # P1-5 回滚保证：清理已安装的 raw 和 manifest 目录/文件，绝不遗留半状态
+            for p in reversed(installed_artifacts):
+                if os.path.isdir(p):
+                    shutil.rmtree(p, ignore_errors=True)
+                elif os.path.isfile(p):
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
+            raise e
         finally:
             if os.path.exists(staging_dir):
                 shutil.rmtree(staging_dir, ignore_errors=True)
+
+        return {
+            "query_id": uuid.uuid4().hex[:12],
+            "query_type": "status",
+            "status": "success",
+            "authority": "derived",
+            "source_watermark": p0_wm,
+            "results": [
+                {
+                    "run_id": assigned_run_id,
+                    "experiment": exp_clean,
+                    "experiment_ref": exp_spec_ref,
+                    "raw_path": f"raw/{exp_clean}/{assigned_run_id}/",
+                    "manifest_path": f"runs/{assigned_run_id}/manifest.yaml",
+                    "content_hash": dir_hash,
+                    "status": status,
+                }
+            ],
+            "warnings": [],
+            "errors": [],
+            "error_semantic": None,
+        }

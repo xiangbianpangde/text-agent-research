@@ -75,14 +75,18 @@ def main():
         check("N1-3 包含 §12 实验索引 (Hypothesis → Experiment)", "## 1. 实验索引 (Hypothesis → Experiment)" in content)
         check("N1-4 包含 §12 时间索引 (Date → Experiment / Run / Report / Event)", "## 2. 时间索引" in content)
         check("N1-5 包含 §12 主题索引 (Topic → Organized Files)", "## 3. 主题索引 (Topic → Organized Files)" in content)
-        check("N1-6 包含 §12 状态索引 (Status Index)", "## 4. 状态索引" in content)
-        check("N1-7 包含 Hypothesis H003 聚合", "H003" in content)
-        check("N1-8 包含历史运行 R051-R053", all(r in content for r in ("R051", "R052", "R053")))
+        check("N1-6 包含 §12 状态索引 (Status Index: active / completed / failed / invalid / superseded)",
+              "## 4. 状态索引 (Status Index: active / completed / failed / invalid / superseded)" in content)
+        check("N1-7 包含五个独立状态分类标题",
+              all(f"### {st}" in content for st in ("active", "completed", "failed", "invalid", "superseded")))
+        check("N1-8 实验索引包含历史运行 R051-R053 列表与模型", all(r in content for r in ("R051", "R052", "R053", "model-a", "model-b")))
+        check("N1-9 时间索引包含运行记录", "Run `R051`" in content or "Run `R052`" in content)
+        check("N1-10 包含真实报告时间（无硬编码固定日期）", "Report `REPORT-001`" in content)
     finally:
         cleanup(tmp)
 
     # -------------------------------------------------------------------------
-    # [N1-Stale] generate-index 缺少 base-freshness 门禁测试 (P1-9)
+    # [N1-Stale] generate-index base-freshness 门禁测试 (P1-9)
     # -------------------------------------------------------------------------
     print("\n[N1-Stale] generate-index base freshness 门禁 (P1-9)")
     tmp, dst = make_copy()
@@ -146,7 +150,7 @@ def main():
 
         # 验证 INDEX.md 自动刷新包含新 Run
         idx_content = open(os.path.join(dst, "index/INDEX.md"), encoding="utf-8").read()
-        check("N2-8 INDEX.md 自动刷新并包含 R054", "R054" in idx_content and "model-z" in idx_content)
+        check("N2-8 INDEX.md 自动刷新并包含 R054 与模型", "R054" in idx_content and "model-z" in idx_content)
 
         # 验证检索系统即时感知该实体且无 drift
         q = run_cmd("query", "--text", "model-z", root=dst)
@@ -182,14 +186,15 @@ def main():
         s_content = open(status_file, encoding="utf-8").read()
         check("N3-3 STATUS.yaml 记录 invalid 与原因", "status: invalid" in s_content and "显存溢出" in s_content)
 
-        # 检查 INDEX.md 状态分类
+        # 检查 INDEX.md 状态分类进入 invalid section
         idx_content = open(os.path.join(dst, "index/INDEX.md"), encoding="utf-8").read()
-        check("N3-4 INDEX.md 将 R054/raw 归入 invalid 分组", "raw/EXP-017/R054" in idx_content)
+        check("N3-4 INDEX.md 包含 invalid 章节且列出 R054",
+              "### invalid" in idx_content and "raw/EXP-017/R054" in idx_content.split("### invalid")[1].split("###")[0])
     finally:
         cleanup(tmp)
 
     # -------------------------------------------------------------------------
-    # [N4] Raw Ingest Hook: 目录冲突安全拒绝与 manifest 覆盖阻断 (P1-5)
+    # [N4] Raw Ingest Hook: 冲突安全拒绝与 manifest 覆盖阻断 (P1-5)
     # -------------------------------------------------------------------------
     print("\n[N4] Raw Ingest Hook 冲突与防覆盖阻断 (P1-5)")
     tmp, dst = make_copy()
@@ -227,9 +232,40 @@ def main():
         )
         check("N4-2 仅存在 manifest.yaml 时也被安全拒绝 TARGET_OCCUPIED (P1-5)",
               res2.get("cli_returncode") != 0 or res2.get("status") == "error")
-        # 确认原 ghost manifest 未被篡改覆盖
         m_check = open(ghost_manifest).read()
         check("N4-3 已有 manifest.yaml 未被覆盖", "R999" in m_check and "raw_ref" not in m_check)
+    finally:
+        cleanup(tmp)
+
+    # -------------------------------------------------------------------------
+    # [N4-Rollback] 中途失败原子回滚测试 (P1-5 回滚保证)
+    # -------------------------------------------------------------------------
+    print("\n[N4-Rollback] ingest-raw 中途失败原子回滚测试 (P1-5)")
+    tmp, dst = make_copy()
+    try:
+        run_cmd("index", root=dst)
+        sample_dir = os.path.join(tmp, "sample_crash")
+        os.makedirs(sample_dir)
+        with open(os.path.join(sample_dir, "data.txt"), "w") as f:
+            f.write("test data")
+
+        # 在 index.sqlite 注入破坏使后续 build_index 抛出异常
+        from researchctl.ingest import ingest_raw
+        import unittest.mock as mock
+        with mock.patch("researchctl.ingest.build_index", side_effect=RuntimeError("injected_build_failure")):
+            crashed = False
+            try:
+                ingest_raw(dst, experiment="EXP-017", source_path=sample_dir, run_id="R888")
+            except RuntimeError as e:
+                if "injected_build_failure" in str(e):
+                    crashed = True
+            check("N4-Rollback-1 模拟中途 build 崩溃触发异常", crashed)
+
+        # 检查回滚：已安装的 raw/EXP-017/R888 与 runs/R888 必须已被彻底逆向清理！
+        raw_r888 = os.path.join(dst, "raw/EXP-017/R888")
+        run_r888 = os.path.join(dst, "runs/R888")
+        check("N4-Rollback-2 raw 目录已被干净回滚清理", not os.path.exists(raw_r888))
+        check("N4-Rollback-3 runs 目录已被干净回滚清理", not os.path.exists(run_r888))
     finally:
         cleanup(tmp)
 
@@ -246,7 +282,6 @@ def main():
         with open(os.path.join(sample_dir, "log.txt"), "w") as f:
             f.write("escape test")
 
-        # 尝试使用 ../ 越界
         res1 = run_cmd(
             "ingest-raw",
             "--experiment", "../../escape",
@@ -267,7 +302,31 @@ def main():
         cleanup(tmp)
 
     # -------------------------------------------------------------------------
-    # [N6] impact 影响链逆向检索严格性测试 (P1-1, P1-2, P1-3, P2-1)
+    # [N5-Spec] Spec 版本解析严谨性测试 (P1-6 消除盲猜 @v1)
+    # -------------------------------------------------------------------------
+    print("\n[N5-Spec] Spec 版本严格解析 (P1-6 消除盲猜 @v1)")
+    tmp, dst = make_copy()
+    try:
+        run_cmd("index", root=dst)
+        sample_dir = os.path.join(tmp, "sample_spec")
+        os.makedirs(sample_dir)
+        with open(os.path.join(sample_dir, "log.txt"), "w") as f:
+            f.write("test")
+
+        # 对不存在 spec 的全新实验，未提供 --experiment-ref 时必须拒绝
+        res = run_cmd(
+            "ingest-raw",
+            "--experiment", "EXP-999-NOSPEC",
+            "--source", sample_dir,
+            root=dst,
+        )
+        check("N5-Spec-1 spec 不存在且未传 ref 时必须拒绝 (P1-6)",
+              res.get("cli_returncode") != 0 or res.get("status") == "error")
+    finally:
+        cleanup(tmp)
+
+    # -------------------------------------------------------------------------
+    # [N6] impact 影响链严格性测试 (P1-1, P1-2, P1-3, P2-1)
     # -------------------------------------------------------------------------
     print("\n[N6] impact 影响链严格性测试 (P1-1, P1-2, P1-3, P2-1)")
     tmp, dst = make_copy()
@@ -283,17 +342,25 @@ def main():
         # 2. 前缀不存在目标 R05 绝不可误命中 (P1-1 复现拦截)
         res_prefix = run_cmd("impact", "R05", root=dst)
         check("N6-4 前缀目标 R05 必须 fail-closed 报 NOT_FOUND (P1-1)",
-              res_prefix.get("status") == "error" and res_prefix.get("error_semantic") == "NOT_FOUND")
+              res_prefix.get("status") == "fail_closed" and res_prefix.get("error_semantic") == "NOT_FOUND")
 
         # 3. 通配符 % 绝不可误命中 (P1-1 SQL 注入/通配符防御)
         res_wildcard = run_cmd("impact", "%", root=dst)
         check("N6-5 通配符 % 必须报 NOT_FOUND (P1-1)",
-              res_wildcard.get("status") == "error" and res_wildcard.get("error_semantic") == "NOT_FOUND")
+              res_wildcard.get("status") == "fail_closed" and res_wildcard.get("error_semantic") == "NOT_FOUND")
 
         # 4. 非法 change_type 拒绝 (P1-3)
         res_bad_ct = run_cmd("impact", "EXP-017", "--change-type", "totally_invalid_type", root=dst)
         check("N6-6 非法 change_type 报 DEF_CHANGE_TYPE_INVALID (P1-3)",
-              res_bad_ct.get("status") == "error" and res_bad_ct.get("error_semantic") == "DEF_CHANGE_TYPE_INVALID")
+              res_bad_ct.get("status") == "fail_closed" and res_bad_ct.get("error_semantic") == "DEF_CHANGE_TYPE_INVALID")
+
+        # 5. 不存在的 Definition 版本如 H003@v999 必须报 NOT_FOUND fail_closed (P1-1 反例 B)
+        # 先创建 definitions/H003 目录
+        h003_dir = os.path.join(dst, "definitions/H003")
+        os.makedirs(h003_dir, exist_ok=True)
+        res_v999 = run_cmd("impact", "H003@v999", root=dst)
+        check("N6-7 不存在的 Definition 版本 H003@v999 报 NOT_FOUND fail_closed (P1-1)",
+              res_v999.get("status") == "fail_closed" and res_v999.get("error_semantic") == "NOT_FOUND")
     finally:
         cleanup(tmp)
 

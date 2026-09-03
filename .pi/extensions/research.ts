@@ -24,7 +24,7 @@ export default function (pi: ExtensionAPI) {
 		name: "research",
 		label: "Research State Retrieval",
 		description:
-			"超长程实验 Agent 检索系统（方案 §19）。用于确定性查询当前结论、依据来源、历史演化、逆向影响链与完整性检测。支持 actions: query, trace, sources, history, impact, reconcile, index。",
+			"超长程实验 Agent 检索系统（方案 §19）。用于确定性查询当前结论、依据来源、历史演化、逆向影响链与完整性检测。支持 actions: query, trace, sources, history, impact, reconcile, index, generate-index, ingest-raw。",
 		parameters: Type.Object({
 			action: Type.Union(
 				[
