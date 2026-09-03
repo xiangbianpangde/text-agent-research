@@ -93,6 +93,16 @@ def main():
         run_cmd("generate-index", root=dst)
         content2 = open(idx_path, encoding="utf-8").read()
         check("N1-12 显式 hypothesis: H003 正确按 H003 聚合", "### H003" in content2)
+
+        # N1-13: 验证 Organized frontmatter 优先级高于 document ID (Sol 建议反例正式固化)
+        fake_org = os.path.join(dst, "organized/EXP-017/fake_result.md")
+        with open(fake_org, "w", encoding="utf-8") as f:
+            f.write("---\nid: EXP-017\nexperiment: EXP-999\n---\n# Result\n")
+        run_cmd("index", root=dst)
+        run_cmd("generate-index", root=dst)
+        c_conf = open(idx_path, encoding="utf-8").read()
+        exp017_sec = c_conf.split("### EXP-017")[1].split("###")[0] if "### EXP-017" in c_conf else c_conf
+        check("N1-13 frontmatter experiment 优先于 document ID（消除 ID fallback 冒领）", "fake_result.md" not in exp017_sec)
     finally:
         cleanup(tmp)
 
