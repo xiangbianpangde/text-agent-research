@@ -8,7 +8,7 @@ import sys
 
 from . import __version__
 from .indexer import build_index
-from .queries import cmd_query, cmd_sources, cmd_trace, cmd_history
+from .queries import cmd_query, cmd_sources, cmd_trace, cmd_history, cmd_impact
 from .reconciler import run_reconcile
 
 
@@ -53,6 +53,12 @@ def main(argv=None) -> int:
     sp = sub.add_parser("history", help="历史报告 / 结论演化")
     sp.add_argument("--semantic", action="store_true", help="P1-C: 忽略该开关（closed table）")
     sp.set_defaults(func=cmd_history)
+
+    sp = sub.add_parser("impact", help="逆向依赖与下游影响链分析（方案 §19）")
+    sp.add_argument("entity", help="目标实体 ID 或路径（如 R051, ORG-EXP017, H003@v1）")
+    sp.add_argument("--change-type", help="可选：预演语义变更类型（如 contract_tightened），计算推演影响分类")
+    sp.add_argument("--semantic", action="store_true", help="P1-C: 忽略该开关（closed table）")
+    sp.set_defaults(func=cmd_impact)
 
     sp = sub.add_parser("reconcile", help="完整性检测（断链/hash/漂移/缺失/orphan）")
     sp.set_defaults(func=cmd_reconcile)

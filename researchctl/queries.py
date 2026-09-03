@@ -248,6 +248,101 @@ def cmd_sources(args) -> dict:
         conn.close()
 
 
+def cmd_impact(args) -> dict:
+    """查询逆向依赖与下游影响链（方案 §19 核心命令）。"""
+    conn = _connect(args.db)
+    try:
+        target = args.entity
+        # 1. 尝试 definitions / P1-B impact planning（若 target 包含 @ 或位于 definitions 目录）
+        def_impact = []
+        try:
+            from .tx.impact import compute_affected
+            def_name = target.split("@")[0]
+            prev_ref = target if "@" in target else f"{target}@v1"
+            def_path = os.path.join(args.root, "definitions", def_name)
+            if os.path.isdir(def_path):
+                change_type = getattr(args, "change_type", None) or "contract_tightened"
+                def_impact = compute_affected(
+                    args.root,
+                    definition=def_name,
+                    previous=prev_ref,
+                    change_types=[change_type],
+                    candidate_subject=f"{def_name}@preview"
+                )
+        except Exception:
+            pass
+
+        # 2. 从 source_refs / entities 遍历下游引用图
+        queue = [target]
+        target_paths = [r[0] for r in conn.execute("SELECT path FROM entities WHERE id=?", (target,)).fetchall()]
+        target_paths += [r[0] for r in conn.execute("SELECT path FROM documents WHERE id=?", (target,)).fetchall()]
+        for p in target_paths:
+            if p:
+                queue.append(p)
+
+        seen = set()
+        downstream = []
+        while queue:
+            curr = queue.pop(0)
+            if curr in seen:
+                continue
+            seen.add(curr)
+
+            rows = conn.execute(
+                "SELECT owner, owner_path, ref_path, source_type FROM source_refs "
+                "WHERE ref_path = ? OR ref_path = ? OR ref_path LIKE ?",
+                (curr, curr.rstrip("/") + "/", f"%{curr}%")
+            ).fetchall()
+
+            for owner, owner_path, ref_path, stype in rows:
+                if owner not in seen:
+                    downstream.append({
+                        "entity_id": owner,
+                        "path": owner_path,
+                        "referenced_source": ref_path,
+                        "source_type": stype,
+                    })
+                    queue.append(owner)
+                    if owner_path:
+                        queue.append(owner_path)
+
+        if not downstream and not def_impact:
+            ent_exists = conn.execute(
+                "SELECT 1 FROM entities WHERE id=? OR path=? UNION SELECT 1 FROM documents WHERE id=? OR path=?",
+                (target, target, target, target)
+            ).fetchone()
+            if not ent_exists:
+                return _query_envelope(
+                    "trace", conn, args.root, status="error",
+                    errors=[{"code": "NOT_FOUND", "detail": f"实体或路径 {target} 不存在"}],
+                    error_semantic="NOT_FOUND", authority="unresolved"
+                )
+
+        results = []
+        for item in def_impact:
+            results.append(result_item(
+                entity_id=item["entity_id"],
+                versioned_ref=item.get("version_ref"),
+                path=item.get("path") or "",
+                relation_type="impacts",
+                status={"lifecycle": item.get("impact"), "stale_reasons": item.get("stale_reasons", [])},
+            ))
+
+        seen_results = set(r["entity_id"] for r in results)
+        for item in downstream:
+            if item["entity_id"] not in seen_results:
+                seen_results.add(item["entity_id"])
+                results.append(result_item(
+                    entity_id=item["entity_id"],
+                    path=item["path"],
+                    relation_type="impacts",
+                ))
+
+        return _query_envelope("trace", conn, args.root, results=results, authority="derived")
+    finally:
+        conn.close()
+
+
 # ---------------- trace ----------------
 
 def cmd_trace(args) -> dict:
