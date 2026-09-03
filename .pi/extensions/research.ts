@@ -101,6 +101,11 @@ export default function (pi: ExtensionAPI) {
 					description: "可选 Run ID（用于 ingest-raw，缺省自动递增分配 Rxxx）",
 				})
 			),
+			experiment_ref: Type.Optional(
+				Type.String({
+					description: "可选实验规格版本（用于 ingest-raw，如 EXP-017@v1）",
+				})
+			),
 			model: Type.Optional(
 				Type.String({
 					description: "可选模型名称（用于 ingest-raw）",
@@ -200,6 +205,7 @@ export default function (pi: ExtensionAPI) {
 					cmdArgs.push("--experiment", params.experiment);
 					cmdArgs.push("--source", params.source);
 					if (params.run_id) cmdArgs.push("--run-id", params.run_id);
+					if (params.experiment_ref) cmdArgs.push("--experiment-ref", params.experiment_ref);
 					if (params.status) cmdArgs.push("--status", params.status);
 					if (params.model) cmdArgs.push("--model", params.model);
 					if (params.context_length) cmdArgs.push("--context-length", params.context_length);

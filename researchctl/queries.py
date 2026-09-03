@@ -253,32 +253,144 @@ def cmd_impact(args) -> dict:
     conn = _connect(args.db)
     try:
         target = args.entity
-        # 1. 尝试 definitions / P1-B impact planning（若 target 包含 @ 或位于 definitions 目录）
-        def_impact = []
-        try:
-            from .tx.impact import compute_affected
-            def_name = target.split("@")[0]
-            prev_ref = target if "@" in target else f"{target}@v1"
-            def_path = os.path.join(args.root, "definitions", def_name)
-            if os.path.isdir(def_path):
-                change_type = getattr(args, "change_type", None) or "contract_tightened"
-                def_impact = compute_affected(
-                    args.root,
-                    definition=def_name,
-                    previous=prev_ref,
-                    change_types=[change_type],
-                    candidate_subject=f"{def_name}@preview"
-                )
-        except Exception:
-            pass
+        if not target or not target.strip():
+            return _query_envelope(
+                "impact", conn, args.root, status="error",
+                errors=[{"code": "NOT_FOUND", "detail": "entity 参数不能为空"}],
+                error_semantic="NOT_FOUND", authority="unresolved"
+            )
+        target = target.strip()
 
-        # 2. 从 source_refs / entities 遍历下游引用图
-        queue = [target]
-        target_paths = [r[0] for r in conn.execute("SELECT path FROM entities WHERE id=?", (target,)).fetchall()]
-        target_paths += [r[0] for r in conn.execute("SELECT path FROM documents WHERE id=?", (target,)).fetchall()]
-        for p in target_paths:
-            if p:
-                queue.append(p)
+        # P1-1: 首先严格精确解析目标，验证其存在性（严禁通配符或模糊命中未建实体）
+        ent_row = conn.execute(
+            "SELECT id, entity_type, path FROM entities WHERE id=? OR path=?", (target, target)
+        ).fetchone()
+        doc_row = conn.execute(
+            "SELECT id, doc_type, path FROM documents WHERE id=? OR path=?", (target, target)
+        ).fetchone() if not ent_row else None
+
+        def_dir = os.path.join(args.root, "definitions")
+        def_name = target.split("@")[0]
+        has_def = os.path.isdir(os.path.join(def_dir, def_name)) if os.path.isdir(def_dir) else False
+
+        if not ent_row and not doc_row and not has_def:
+            return _query_envelope(
+                "impact", conn, args.root, status="error",
+                errors=[{"code": "NOT_FOUND", "detail": f"目标实体或路径不存在: '{target}'"}],
+                error_semantic="NOT_FOUND", authority="unresolved"
+            )
+
+        # P1-3: 如果指定了 --change-type，必须首先校验受控枚举（严格 fail-closed）
+        if getattr(args, "change_type", None):
+            from .tx.impact import CHANGE_TYPES
+            raw_ct = args.change_type.strip()
+            if raw_ct not in CHANGE_TYPES:
+                return _query_envelope(
+                    "impact", conn, args.root, status="error",
+                    errors=[{"code": "DEF_CHANGE_TYPE_INVALID", "detail": f"change_type '{raw_ct}' 不在受控 enum 中: {CHANGE_TYPES}"}],
+                    error_semantic="DEF_CHANGE_TYPE_INVALID", authority="unresolved"
+                )
+
+        def_impact = []
+        # P1-3: Definition 影响分析分支
+        if has_def:
+            from .tx.impact import compute_affected
+            # 解析版本，不脑补默认 @v1
+            if "@" in target:
+                prev_ref = target
+            else:
+                appr_file = os.path.join(def_dir, def_name, "APPROVED.yaml")
+                if os.path.isfile(appr_file):
+                    from .mini_yaml import load_file
+                    try:
+                        appr = load_file(appr_file, strict=True) or {}
+                        prev_ref = appr.get("version_ref")
+                    except Exception:
+                        prev_ref = None
+                else:
+                    r = conn.execute("SELECT current_version FROM entities WHERE id=?", (def_name,)).fetchone()
+                    prev_ref = f"{def_name}@{r[0]}" if r and r[0] else None
+
+                if not prev_ref:
+                    return _query_envelope(
+                        "impact", conn, args.root, status="error",
+                        errors=[{"code": "DEF_VERSION_MISSING", "detail": f"定义 '{def_name}' 缺少已批准版本，需显式指定带有 @version 的引用"}],
+                        error_semantic="DEF_VERSION_MISSING", authority="unresolved"
+                    )
+
+            # 仅当显式指定了 --change-type 时才进行语义变更推演
+            if getattr(args, "change_type", None):
+                raw_ct = args.change_type.strip()
+                # P1-2: compute_affected 失败原样 fail_closed，绝不裸 except pass 吞异常
+                try:
+                    def_impact = compute_affected(
+                        args.root,
+                        definition=def_name,
+                        previous=prev_ref,
+                        change_types=[raw_ct],
+                        candidate_subject=f"{def_name}@preview"
+                    )
+                except Exception as e:
+                    return _query_envelope(
+                        "impact", conn, args.root, status="fail_closed",
+                        errors=[{"code": "IMPACT_INVALID", "detail": f"impact 分析失败: {e}"}],
+                        error_semantic="IMPACT_INVALID", authority="unresolved"
+                    )
+            else:
+                # 未指定 change_type，做纯拓扑依赖分析，不自动猜测 contract_tightened
+                from .tx.impact import _load_entities, _entity_refs_of
+                try:
+                    all_entities = _load_entities(args.root)
+                    rev_graph: dict = {}
+                    for k, v in all_entities.items():
+                        doc = v["doc"]
+                        for r, rel in _entity_refs_of(doc):
+                            if "@" in r:
+                                eid = r.split("@", 1)[0]
+                                rev_graph.setdefault((eid, r), []).append((k, rel))
+
+                    root_k = (def_name, prev_ref)
+                    visited = set()
+                    q = [root_k]
+                    while q:
+                        curr_k = q.pop(0)
+                        if curr_k in visited:
+                            continue
+                        visited.add(curr_k)
+                        for dep_k, rel in rev_graph.get(curr_k, []):
+                            dep_info = all_entities.get(dep_k, {})
+                            def_impact.append({
+                                "entity_id": dep_k[0],
+                                "version_ref": dep_k[1] if len(dep_k) > 1 else None,
+                                "path": dep_info.get("path") or "",
+                                "impact": "downstream_dependent",
+                                "stale_reasons": [{"reason_code": "depends_on_definition", "via_relation": rel}],
+                            })
+                            if dep_k not in visited:
+                                q.append(dep_k)
+                except Exception as e:
+                    return _query_envelope(
+                        "impact", conn, args.root, status="fail_closed",
+                        errors=[{"code": "IMPACT_INVALID", "detail": f"依赖拓扑分析失败: {e}"}],
+                        error_semantic="IMPACT_INVALID", authority="unresolved"
+                    )
+
+        # 2. 从 source_refs 遍历下游物理引用（精确匹配，严禁 SQL LIKE 模糊匹配）
+        queue = []
+        if ent_row:
+            queue.append(ent_row[0])
+            if ent_row[2]:
+                queue.append(ent_row[2])
+        if doc_row:
+            queue.append(doc_row[0])
+            if doc_row[2]:
+                queue.append(doc_row[2])
+        # 检查 runs 表是否有关联 raw_ref_path
+        run_row = conn.execute("SELECT run_id, raw_ref_path FROM runs WHERE run_id=?", (target,)).fetchone()
+        if run_row and run_row[1]:
+            queue.append(run_row[1])
+        if not queue:
+            queue.append(target)
 
         seen = set()
         downstream = []
@@ -288,10 +400,13 @@ def cmd_impact(args) -> dict:
                 continue
             seen.add(curr)
 
+            # P1-1: 精确匹配 ref_path（仅精确值或带/不带尾随斜杠），严禁 LIKE '%curr%'
+            exact_paths = [curr, curr.rstrip("/"), curr.rstrip("/") + "/"]
+            placeholders = ",".join("?" for _ in exact_paths)
             rows = conn.execute(
-                "SELECT owner, owner_path, ref_path, source_type FROM source_refs "
-                "WHERE ref_path = ? OR ref_path = ? OR ref_path LIKE ?",
-                (curr, curr.rstrip("/") + "/", f"%{curr}%")
+                f"SELECT owner, owner_path, ref_path, source_type FROM source_refs "
+                f"WHERE ref_path IN ({placeholders})",
+                exact_paths
             ).fetchall()
 
             for owner, owner_path, ref_path, stype in rows:
@@ -305,18 +420,6 @@ def cmd_impact(args) -> dict:
                     queue.append(owner)
                     if owner_path:
                         queue.append(owner_path)
-
-        if not downstream and not def_impact:
-            ent_exists = conn.execute(
-                "SELECT 1 FROM entities WHERE id=? OR path=? UNION SELECT 1 FROM documents WHERE id=? OR path=?",
-                (target, target, target, target)
-            ).fetchone()
-            if not ent_exists:
-                return _query_envelope(
-                    "trace", conn, args.root, status="error",
-                    errors=[{"code": "NOT_FOUND", "detail": f"实体或路径 {target} 不存在"}],
-                    error_semantic="NOT_FOUND", authority="unresolved"
-                )
 
         results = []
         for item in def_impact:
@@ -338,7 +441,8 @@ def cmd_impact(args) -> dict:
                     relation_type="impacts",
                 ))
 
-        return _query_envelope("trace", conn, args.root, results=results, authority="derived")
+        # P2-1: 正确使用 query_type="impact"
+        return _query_envelope("impact", conn, args.root, results=results, authority="derived")
     finally:
         conn.close()
 

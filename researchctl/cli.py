@@ -227,6 +227,17 @@ def cmd_generate_index(args):
     import uuid
     from .navigator import generate_index_md
     content = generate_index_md(args.root, args.db, write_file=True)
+    if isinstance(content, dict) and content.get("status") == "fail_closed":
+        return {
+            "query_id": uuid.uuid4().hex[:12],
+            "query_type": "status",
+            "status": "fail_closed",
+            "authority": "derived",
+            "results": None,
+            "warnings": [],
+            "errors": [{"code": content.get("error_semantic", "INDEX_STALE"), "detail": content.get("detail", "")}],
+            "error_semantic": content.get("error_semantic", "INDEX_STALE"),
+        }
     return {
         "query_id": uuid.uuid4().hex[:12],
         "query_type": "status",
