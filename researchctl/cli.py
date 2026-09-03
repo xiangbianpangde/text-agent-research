@@ -27,6 +27,7 @@ def main(argv=None) -> int:
 
     sp = sub.add_parser("index", help="构建/重建派生 SQLite 索引")
     sp.add_argument("--commit", default="HEAD", help="git commit 引用（默认 HEAD）")
+    sp.add_argument("--semantic", action="store_true", help="P1-C: 原子全量重建 semantic 派生索引")
     sp.set_defaults(func=cmd_index)
 
     sp = sub.add_parser("query", help="结构化查询（SQLite）+ lexical 关键词检索")
@@ -35,17 +36,22 @@ def main(argv=None) -> int:
     sp.add_argument("--status", help="按状态查询（valid/invalid/completed/...）")
     sp.add_argument("--raw", action="store_true", help="列出所有 raw 实体")
     sp.add_argument("--text", help="lexical 关键词检索（匹配文件内容/路径/实体名）")
+    sp.add_argument("--semantic", action="store_true", help="P1-C: semantic fallback 检索")
+    sp.add_argument("--limit", type=int, default=50, help="限制返回结果数（默认 50）")
     sp.set_defaults(func=cmd_query)
 
     sp = sub.add_parser("sources", help="查询实体来源并校验（含精确版本）")
     sp.add_argument("owner", help="实体 ID：CURRENT / REPORT-001 / ORG-EXP017 / ...")
+    sp.add_argument("--semantic", action="store_true", help="P1-C: 忽略该开关（closed table）")
     sp.set_defaults(func=cmd_sources)
 
     sp = sub.add_parser("trace", help="provenance 追踪链")
     sp.add_argument("entity", help="起点实体 ID")
+    sp.add_argument("--semantic", action="store_true", help="P1-C: 忽略该开关（closed table）")
     sp.set_defaults(func=cmd_trace)
 
     sp = sub.add_parser("history", help="历史报告 / 结论演化")
+    sp.add_argument("--semantic", action="store_true", help="P1-C: 忽略该开关（closed table）")
     sp.set_defaults(func=cmd_history)
 
     sp = sub.add_parser("reconcile", help="完整性检测（断链/hash/漂移/缺失/orphan）")
@@ -107,6 +113,9 @@ def main(argv=None) -> int:
 
 
 def cmd_index(args):
+    if getattr(args, "semantic", False):
+        from .semantic import build_semantic_index
+        return build_semantic_index(args.root, args.db)
     wm = build_index(args.root, args.db, git_commit=args.commit)
     return {
         "query_id": "index",

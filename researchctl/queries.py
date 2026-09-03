@@ -43,7 +43,7 @@ def current_fingerprint(root: str) -> str:
         for fn in sorted(filenames):
             full = os.path.join(dirpath, fn)
             rel = os.path.relpath(full, root)
-            if rel.startswith(".index") or rel.startswith(".git"):
+            if rel.startswith(".index") or rel.startswith(".git") or rel.startswith(".researchctl"):
                 continue
             h = file_hash(full)
             if h:
@@ -85,6 +85,13 @@ def _has_hard_error(status: str) -> bool:
 # ---------------- query ----------------
 
 def cmd_query(args) -> dict:
+    if getattr(args, "semantic", False) and getattr(args, "text", None) and not (
+        getattr(args, "entity", None) or getattr(args, "doc_type", None) or getattr(args, "status", None) or getattr(args, "raw", False)
+    ):
+        from .semantic import query_semantic
+        limit = getattr(args, "limit", 50) or 50
+        return query_semantic(args.root, args.text, db_path=args.db, limit=limit)
+
     conn = _connect(args.db)
     try:
         # 构建 path→id 映射（用于 trace 下钻）

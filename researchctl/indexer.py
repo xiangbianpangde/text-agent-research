@@ -164,7 +164,7 @@ def build_index(root: str, db_path: str, git_commit: str = "HEAD") -> dict:
         for fn in sorted(filenames):
             full = os.path.join(dirpath, fn)
             rel = os.path.relpath(full, root)
-            if rel.startswith(".index") or rel.startswith(".git"):
+            if rel.startswith(".index") or rel.startswith(".git") or rel.startswith(".researchctl"):
                 continue
             h = file_hash(full)
             if h:
