@@ -35,6 +35,8 @@ export default function (pi: ExtensionAPI) {
 					Type.Literal("impact"),
 					Type.Literal("reconcile"),
 					Type.Literal("index"),
+					Type.Literal("generate-index"),
+					Type.Literal("ingest-raw"),
 				],
 				{ description: "检索或维护动作" }
 			),
@@ -82,6 +84,41 @@ export default function (pi: ExtensionAPI) {
 			root: Type.Optional(
 				Type.String({
 					description: "研究项目根目录（默认当前工作目录）",
+				})
+			),
+			source: Type.Optional(
+				Type.String({
+					description: "原始数据目录或文件路径（用于 ingest-raw）",
+				})
+			),
+			experiment: Type.Optional(
+				Type.String({
+					description: "所属实验 ID（用于 ingest-raw，如 EXP-017）",
+				})
+			),
+			run_id: Type.Optional(
+				Type.String({
+					description: "可选 Run ID（用于 ingest-raw，缺省自动递增分配 Rxxx）",
+				})
+			),
+			model: Type.Optional(
+				Type.String({
+					description: "可选模型名称（用于 ingest-raw）",
+				})
+			),
+			context_length: Type.Optional(
+				Type.String({
+					description: "可选上下文长度（用于 ingest-raw，如 128K）",
+				})
+			),
+			seed: Type.Optional(
+				Type.Integer({
+					description: "可选随机种子（用于 ingest-raw）",
+				})
+			),
+			reason: Type.Optional(
+				Type.String({
+					description: "可选原因说明（用于 ingest-raw 标记 invalid 时）",
 				})
 			),
 		}),
@@ -146,6 +183,28 @@ export default function (pi: ExtensionAPI) {
 				case "index": {
 					cmdArgs.push("index");
 					if (params.semantic) cmdArgs.push("--semantic");
+					break;
+				}
+				case "generate-index": {
+					cmdArgs.push("generate-index");
+					break;
+				}
+				case "ingest-raw": {
+					cmdArgs.push("ingest-raw");
+					if (!params.experiment || !params.source) {
+						return {
+							content: [{ type: "text", text: "Error: ingest-raw requires both 'experiment' and 'source' parameters." }],
+							details: { ok: false, error: "experiment and source parameters required" },
+						};
+					}
+					cmdArgs.push("--experiment", params.experiment);
+					cmdArgs.push("--source", params.source);
+					if (params.run_id) cmdArgs.push("--run-id", params.run_id);
+					if (params.status) cmdArgs.push("--status", params.status);
+					if (params.model) cmdArgs.push("--model", params.model);
+					if (params.context_length) cmdArgs.push("--context-length", params.context_length);
+					if (params.seed !== undefined) cmdArgs.push("--seed", String(params.seed));
+					if (params.reason) cmdArgs.push("--reason", params.reason);
 					break;
 				}
 			}

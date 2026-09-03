@@ -99,6 +99,23 @@ def main(argv=None) -> int:
                     help="故障注入点（测试用）：after-plan/after-staging/after-definition-install/...")
     sp.set_defaults(func=cmd_revise_definition)
 
+    # ---- 方案 §12: 导航层 INDEX.md 生成 ----
+    sp = sub.add_parser("generate-index", help="自动生成/刷新全局导航 index/INDEX.md（方案 §12）")
+    sp.set_defaults(func=cmd_generate_index)
+
+    # ---- 方案 §14: Raw Ingest Hook ----
+    sp = sub.add_parser("ingest-raw", help="原始实验数据导入 Hook（分配 ID、计算 hash、写 manifest、刷索引，方案 §14）")
+    sp.add_argument("--experiment", required=True, help="所属实验 ID（如 EXP-017）")
+    sp.add_argument("--source", required=True, help="原始数据目录或文件路径")
+    sp.add_argument("--run-id", dest="run_id", default=None, help="可选：显式指定 Run ID（缺省自动递增分配 Rxxx）")
+    sp.add_argument("--experiment-ref", dest="experiment_ref", default=None, help="可选：引用的实验规格版本（如 EXP-017@v1）")
+    sp.add_argument("--status", default="completed", help="运行状态（completed/invalid/failed）")
+    sp.add_argument("--model", default=None, help="可选：模型名称")
+    sp.add_argument("--context-length", dest="context_length", default=None, help="可选：上下文长度")
+    sp.add_argument("--seed", type=int, default=None, help="可选：随机种子")
+    sp.add_argument("--reason", default=None, help="可选：invalid 时的原因说明")
+    sp.set_defaults(func=cmd_ingest_raw)
+
     args = p.parse_args(argv)
     if args.db is None:
         args.db = os.path.join(args.root, DEFAULT_DB)
@@ -203,6 +220,39 @@ def cmd_revise_definition(args):
         actor=args.actor, authorization_ref=args.authorization_ref,
         approval_ref=args.approval_ref, reason_refs=reason_refs,
         crash_after=args.crash_after,
+    )
+
+
+def cmd_generate_index(args):
+    import uuid
+    from .navigator import generate_index_md
+    content = generate_index_md(args.root, args.db, write_file=True)
+    return {
+        "query_id": uuid.uuid4().hex[:12],
+        "query_type": "status",
+        "status": "success",
+        "authority": "derived",
+        "results": [{"path": "index/INDEX.md", "bytes": len(content.encode("utf-8"))}],
+        "warnings": [],
+        "errors": [],
+        "error_semantic": None,
+    }
+
+
+def cmd_ingest_raw(args):
+    from .ingest import ingest_raw
+    return ingest_raw(
+        args.root,
+        experiment=args.experiment,
+        source_path=args.source,
+        run_id=args.run_id,
+        experiment_ref=args.experiment_ref,
+        status=args.status,
+        model=args.model,
+        context_length=args.context_length,
+        seed=args.seed,
+        invalid_reason=args.reason,
+        db_path=args.db,
     )
 
 
