@@ -1,0 +1,299 @@
+{
+  "benchmark_name": "ResearchCTL-Bench",
+  "benchmark_version": "1.0.0",
+  "composite_score": 100.0,
+  "passed_scenarios": 33,
+  "total_scenarios": 33,
+  "tier": "S-Tier",
+  "tier_name": "S级: 长期科研级证明系统 (Enterprise Long-Horizon Proven)",
+  "iqg_passed": true,
+  "metrics": {
+    "pgem": 1.0,
+    "vlp": 1.0,
+    "sdp": 1.0,
+    "sdr": 1.0,
+    "sf1": 1.0,
+    "ip": 1.0,
+    "ir": 1.0,
+    "if1": 1.0,
+    "fcaa": 1.0,
+    "zhr": 0.0,
+    "civ": 0
+  },
+  "track_scores": {
+    "Track1_DefinitionProvenance": 100.0,
+    "Track2_RunSpecBinding": 100.0,
+    "Track3_ProvenanceTrace": 100.0,
+    "Track4_HistoricalTemporal": 100.0,
+    "Track5_StaleImpact": 100.0,
+    "Track6_IntegrityAdversarial": 100.0,
+    "Track7_RetrievalRouting": 100.0,
+    "Track8_LongHorizonContinuity": 100.0
+  },
+  "scenarios": [
+    {
+      "id": "S01",
+      "track": "Track1_DefinitionProvenance",
+      "name": "Definition Origin Attribution",
+      "passed": true,
+      "score": 1.0,
+      "detail": "成功追溯 H003@v1 提出者 human:alice 与事件 EV-000001"
+    },
+    {
+      "id": "S02",
+      "track": "Track1_DefinitionProvenance",
+      "name": "Definition Authority Source Tracing",
+      "passed": true,
+      "score": 1.0,
+      "detail": "成功解析权威引用与 DOI 锁定"
+    },
+    {
+      "id": "S03",
+      "track": "Track1_DefinitionProvenance",
+      "name": "External Literature Pinning",
+      "passed": true,
+      "score": 1.0,
+      "detail": "外部引用的内容哈希防漂移锁定校验通过"
+    },
+    {
+      "id": "S04",
+      "track": "Track1_DefinitionProvenance",
+      "name": "Definition Evolution & Rationale",
+      "passed": true,
+      "score": 1.0,
+      "detail": "修订事件记录 EV 编号与变更依据 D021"
+    },
+    {
+      "id": "S05",
+      "track": "Track1_DefinitionProvenance",
+      "name": "Definition Lineage Ordering",
+      "passed": true,
+      "score": 1.0,
+      "detail": "有序谱系 H003@v1 -> H003@v2 完整可追溯"
+    },
+    {
+      "id": "S06",
+      "track": "Track1_DefinitionProvenance",
+      "name": "Ambiguous Definition Rejection",
+      "passed": true,
+      "score": 1.0,
+      "detail": "成功拦截歧义版本并 Fail-Closed 拒答"
+    },
+    {
+      "id": "S07",
+      "track": "Track2_RunSpecBinding",
+      "name": "Run Spec Exact Binding",
+      "passed": true,
+      "score": 1.0,
+      "detail": "R052 精确绑定 EXP-017@v1"
+    },
+    {
+      "id": "S08",
+      "track": "Track2_RunSpecBinding",
+      "name": "Spec Evolution Invariant",
+      "passed": true,
+      "score": 1.0,
+      "detail": "规格演化不破坏历史 Run 的 v1 不变量"
+    },
+    {
+      "id": "S09",
+      "track": "Track2_RunSpecBinding",
+      "name": "Runtime Deviation Audit",
+      "passed": true,
+      "score": 1.0,
+      "detail": "执行参数完整登记可审计"
+    },
+    {
+      "id": "S10",
+      "track": "Track3_ProvenanceTrace",
+      "name": "Claim to Organized Mapping",
+      "passed": true,
+      "score": 1.0,
+      "detail": "CURRENT 正确穿透至 organized/EXP-017/result.md"
+    },
+    {
+      "id": "S11",
+      "track": "Track3_ProvenanceTrace",
+      "name": "Organized to Raw Runs Drilling",
+      "passed": true,
+      "score": 1.0,
+      "detail": "整理文件成功穿透下钻至 R052 与 R053 原始 Runs"
+    },
+    {
+      "id": "S12",
+      "track": "Track3_ProvenanceTrace",
+      "name": "End-to-End Metric Penetration",
+      "passed": true,
+      "score": 1.0,
+      "detail": "度量单点端到端穿透到原始 metrics.csv"
+    },
+    {
+      "id": "S13",
+      "track": "Track4_HistoricalTemporal",
+      "name": "Cross-Report Temporal Comparison",
+      "passed": true,
+      "score": 1.0,
+      "detail": "准确区分 CURRENT fresh 与历史报告 stale 演化状态"
+    },
+    {
+      "id": "S14",
+      "track": "Track4_HistoricalTemporal",
+      "name": "Historical Snapshot Recovery",
+      "passed": true,
+      "score": 1.0,
+      "detail": "历史快照依赖从 Git 历史提交精准还原"
+    },
+    {
+      "id": "S15",
+      "track": "Track4_HistoricalTemporal",
+      "name": "As-Of Time Travel Consistency",
+      "passed": true,
+      "score": 1.0,
+      "detail": "报告时序单调递增，历史事件一致性完备"
+    },
+    {
+      "id": "S16",
+      "track": "Track5_StaleImpact",
+      "name": "Definition Revision Downstream Impact",
+      "passed": true,
+      "score": 1.0,
+      "detail": "下游影响拓扑全景精准召回 (IP=1.0, IR=1.0)"
+    },
+    {
+      "id": "S17",
+      "track": "Track5_StaleImpact",
+      "name": "Raw Invalidation Stale Propagation",
+      "passed": true,
+      "score": 1.0,
+      "detail": "失效数据沿因果拓扑精准传导 Stale 状态"
+    },
+    {
+      "id": "S18",
+      "track": "Track5_StaleImpact",
+      "name": "Negative Impact Preservation",
+      "passed": true,
+      "score": 1.0,
+      "detail": "无关实验负向隔离成功，未发生全量标 Stale 作弊"
+    },
+    {
+      "id": "S19",
+      "track": "Track6_IntegrityAdversarial",
+      "name": "Severed Link Detection",
+      "passed": true,
+      "score": 1.0,
+      "detail": "断链检测准确触发 SOURCE_MISSING 并 Fail-Closed"
+    },
+    {
+      "id": "S20",
+      "track": "Track6_IntegrityAdversarial",
+      "name": "Tampered Content Detection",
+      "passed": true,
+      "score": 1.0,
+      "detail": "准确检出内容哈希篡改 (HASH_MISMATCH)"
+    },
+    {
+      "id": "S21",
+      "track": "Track6_IntegrityAdversarial",
+      "name": "Orphan File Audit",
+      "passed": true,
+      "score": 1.0,
+      "detail": "巡检准确检出孤儿受控外文件 (ORPHAN)"
+    },
+    {
+      "id": "S22",
+      "track": "Track6_IntegrityAdversarial",
+      "name": "Nonexistent Prefix Injection Defense",
+      "passed": true,
+      "score": 1.0,
+      "detail": "前缀模糊匹配被坚决拒绝，返回 NOT_FOUND"
+    },
+    {
+      "id": "S23",
+      "track": "Track6_IntegrityAdversarial",
+      "name": "Wildcard & SQL Injection Defense",
+      "passed": true,
+      "score": 1.0,
+      "detail": "通配符 % 严格作为字面量拦截，零 SQL 注入"
+    },
+    {
+      "id": "S24",
+      "track": "Track6_IntegrityAdversarial",
+      "name": "Phantom Entity Hallucination Defense",
+      "passed": true,
+      "score": 1.0,
+      "detail": "虚构实体坚决拒答 (Zero Hallucination, CIV=0)"
+    },
+    {
+      "id": "S25",
+      "track": "Track7_RetrievalRouting",
+      "name": "Vague Concept Recall",
+      "passed": true,
+      "score": 1.0,
+      "detail": "Layer 5 语义检索成功召回模糊相关概念"
+    },
+    {
+      "id": "S26",
+      "track": "Track7_RetrievalRouting",
+      "name": "Anti-RAG Crossing Violation",
+      "passed": true,
+      "score": 1.0,
+      "detail": "精确查询坚决走结构化路线，严禁向量碰巧猜测"
+    },
+    {
+      "id": "S27",
+      "track": "Track7_RetrievalRouting",
+      "name": "Advisory Ranking Semantic Boundary",
+      "passed": true,
+      "score": 1.0,
+      "detail": "语义检索严格约束为 advisory 建议性排名"
+    },
+    {
+      "id": "S28",
+      "track": "Track8_LongHorizonContinuity",
+      "name": "Context Wipeout Recovery",
+      "passed": true,
+      "score": 1.0,
+      "detail": "上下文彻底清空后，100% 成功重建科研全景"
+    },
+    {
+      "id": "S29",
+      "track": "Track8_LongHorizonContinuity",
+      "name": "Index Deletion Catastrophic Recovery",
+      "passed": true,
+      "score": 1.0,
+      "detail": "灾难重建达成规范逻辑转储全等 (CLE Match 100%)"
+    },
+    {
+      "id": "S30",
+      "track": "Track8_LongHorizonContinuity",
+      "name": "Concurrent Writer Collision",
+      "passed": true,
+      "score": 1.0,
+      "detail": "并发写冲突严格触发 TX_LOCKED 拦截"
+    },
+    {
+      "id": "S31",
+      "track": "Track8_LongHorizonContinuity",
+      "name": "Crash-Safety & Idempotent Recovery",
+      "passed": true,
+      "score": 1.0,
+      "detail": "崩溃中途安全保护，reconcile 幂等补齐且无半提交"
+    },
+    {
+      "id": "S32-A",
+      "track": "Track8_LongHorizonContinuity",
+      "name": "Derived Index Drift Recovery",
+      "passed": true,
+      "score": 1.0,
+      "detail": "派生索引自动重新对齐并消除 drift"
+    },
+    {
+      "id": "S32-B",
+      "track": "Track8_LongHorizonContinuity",
+      "name": "Canonical Semantic Drift Defense",
+      "passed": true,
+      "score": 1.0,
+      "detail": "坚决拦截未授权语义篡改，严禁仅凭 reindex 洗白"
+    }
+  ]
+}

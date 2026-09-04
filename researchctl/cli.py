@@ -116,6 +116,14 @@ def main(argv=None) -> int:
     sp.add_argument("--reason", default=None, help="可选：invalid 时的原因说明")
     sp.set_defaults(func=cmd_ingest_raw)
 
+    # ---- ResearchCTL-Bench ----
+    sp = sub.add_parser("bench", help="运行 ResearchCTL-Bench 基准评测套件并输出综合评分报告")
+    sp.add_argument("--json", action="store_true", help="仅输出 JSON 格式评测结果")
+    sp.add_argument("--save-json", metavar="PATH", help="保存评测结果至指定 JSON 文件")
+    sp.add_argument("--track", help="仅运行指定 Track")
+    sp.add_argument("--scenario", help="仅运行指定场景 ID")
+    sp.set_defaults(func=cmd_bench)
+
     args = p.parse_args(argv)
     if args.db is None:
         args.db = os.path.join(args.root, DEFAULT_DB)
@@ -265,6 +273,22 @@ def cmd_ingest_raw(args):
         invalid_reason=args.reason,
         db_path=args.db,
     )
+
+
+def cmd_bench(args):
+    from bench.cli import main as bench_main
+    bench_argv = []
+    if args.json:
+        bench_argv.append("--json")
+    if args.save_json:
+        bench_argv.extend(["--save-json", args.save_json])
+    if args.track:
+        bench_argv.extend(["--track", args.track])
+    if args.scenario:
+        bench_argv.extend(["--scenario", args.scenario])
+    if args.root:
+        bench_argv.extend(["--fixture", args.root])
+    return bench_main(bench_argv)
 
 
 if __name__ == "__main__":
