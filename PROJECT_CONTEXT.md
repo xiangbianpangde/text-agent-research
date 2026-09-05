@@ -2,56 +2,66 @@
 schema_version: 1
 project_id: researchctl
 authority: working_projection
-context_revision: 9
-checkpoint_id: CP-0009
+context_revision: 10
+checkpoint_id: CP-0010
 source_session_id: 01a06a96-0a23-7359-9ce9-3f9d1adacb7f
-covered_through_entry_id: 01a06a96-0a23-7359-9ce9-3f9d1adacb7f:2026-09-05T14:45
+covered_through_entry_id: 01a06a96-0a23-7359-9ce9-3f9d1adacb7f:2026-09-05T16:05
 git_branch: main
-git_head: be62ec1cbd3772f0a693ee23d09a1eee6cddcb4a
-base_context_sha256: 91ae7f0800717a6836009f323ca41d8a8270b84c0186a2e757fe9084f8d83492
-generated_at: 2026-09-05T13:36:17.450Z
+git_head: c47e3b549cd95e15865e215e4994c38b7e311241
+base_context_sha256: 9a03c8db68131e45c5ff0a77d916984013da4f16b689a999deaacb0d6183f52b
+generated_at: 2026-09-05T14:04:01.202Z
+negative_constraints_relaxation:
+  checkpoint_id: CP-0010
+  timestamp: 2026-09-05T14:04:01.202Z
+  actor: 01a06a96-0a23-7359-9ce9-3f9d1adacb7f
+  previous_context_sha256: 9a03c8db68131e45c5ff0a77d916984013da4f16b689a999deaacb0d6183f52b
+  reason: 逐条解除已满足的旧约束：1) “do not begin p0.3c on the current no-go candidate”和2)“do
+    not begin p0.3c before fresh sol pass”已由第六次 Sol 作业 7402609a 的明确 PASS 满足；3)旧
+    28 FAIL 向量已被修复后正式 6/27 Oracle-only 向量取代；4)“do not treat repaired 6/27 as
+    certified until review”已由该 Sol PASS 与后续 P0.3C/P0.4
+    机器验收满足。解除仅因里程碑已达成，并以更严格的新约束“P0 Harness 完成不等于 ResearchCTL 认证，P1/P2
+    必须获得用户新批准”替代。
+  removed_constraints:
+    - do not begin p0.3c on the current no-go candidate
+    - do not treat the current 28 fail vector as independently certified until
+      the harness blockers are repaired
+    - do not begin p0.3c before fresh sol pass on repaired p0.3b
+    - do not treat the repaired 6/27 vector as independently certified until
+      fresh sol review
 ---
 
 # ResearchCTL-Bench Working Context
 
 ## Current Objective
 
-P0.3B was accepted by sixth Sol audit `7402609a-bfa8-4db5-a0af-231ef2e21c62`. P0.3C Oracle-only cutover is implemented and locally verified. Commit P0.3C, then proceed only to P0.4 negative controls. P0 remains incomplete; do not enter P1/P2.
+P0 Harness Construction is complete through P0.4. Do not start P1/P2 automatically; the frozen decision requires new user approval after P0 exit. Current ResearchCTL is not qualified by the formal Oracle benchmark.
 
 ## Authority And Git
 
-- Frozen authority: `ResearchCTL-Bench-P0-Contract.md`; benchmark/CLE spec: `超长程实验 Agent 检索系统 Benchmark 方案 (ResearchCTL-Bench).md`.
-- Commits: `9c3209f` P0.1/P0.2/P0.3A; `0d20baa` initial P0.3B; `be62ec1` accepted P0.3B trust repairs.
-- P0.3C changes uncommitted. Main is three commits ahead of origin, not pushed.
-- `.pi/sol-staging/` and root Pi session HTML are unrelated artifacts and excluded.
+- Authority: `ResearchCTL-Bench-P0-Contract.md` and `超长程实验 Agent 检索系统 Benchmark 方案 (ResearchCTL-Bench).md`.
+- Reports: `benchmark_report.json`, `benchmark_report.md`, `benchmark_report.pdf`.
+- Commits: `9c3209f` P0.1/P0.2/P0.3A; `0d20baa` P0.3B candidate; `be62ec1` accepted P0.3B repairs; `c47e3b5` P0.3C.
+- P0.4 uncommitted. Main four commits ahead of origin, not pushed. Audit staging/session HTML excluded.
 
-## P0.3B Acceptance
+## P0.3 And P0.4
 
-- Sixth Sol verdict: `PASS — P0.3B repair accepted; P0.3C may begin`.
-- Fresh extracted self-contained bundle: Harness 50/50, root stored/fresh fingerprint exact, canonical fixture double rebuild exact, 0 AppleDouble.
-- Query/Gold independence, RFC3339/UTC lifecycle, checkpoint-state CIV, complete ResultRow, fail-closed, source bindings, stale graph, session mechanics, reproducible source.tar, CLE and process cleanup all accepted.
-
-## P0.3C Implementation
-
-- Version v0.6.0.
-- Default CLI scenario registry is pack-owned `bench/packs/p0_seed_v1/pack.json` plus action DSL.
-- Default path does not access/call legacy `registration.runner` or `run_sXX()`.
-- Formal aggregation accepts only `OracleScenarioEvaluation`; score, TP/FP/FN, CIV, VLP, PGEM, FCAA and IQG derive from independent Oracle results.
-- `--legacy-diagnostic` is the only legacy execution path. Its values are nested under `legacy_diagnostic` and cannot change formal fields.
-- P0.4 pending is an explicit eligibility reason and forces Tier N/A.
+- Sixth Sol audit `7402609a-bfa8-4db5-a0af-231ef2e21c62`: `PASS — P0.3B repair accepted; P0.3C may begin`.
+- Default path is pack-owned Oracle-only; legacy requires `--legacy-diagnostic` and cannot alter formal fields.
+- Six controls use the same 33-scenario Oracle path: Always-Pass, Always-Abstain, Universal-Stale, Universal-Impact, Random, Gold-Reader.
+- All controls: certification=false, Tier N/A, passing conclusion=false. Formal passes: 1,2,0,0,0,1. Universal Stale/Impact CIV=6; Random CIV=4.
+- Random retry deterministic. Gold-Reader file read blocked by macOS sandbox-exec. Official ResearchCTL double-run digest matches: `sha256:a0a8d65261fbb267759eee3ee5b432051a88707768274f3840377ca851217cfd`.
+- Bound attestation valid: `sha256:80b13cfa04bdce5e32ca4df0d00ec7dd44060304196bc32a6f5f441311424617`; binds manifest, source/fixture, actions, controls, adapter, executor, evaluator and Oracle; tampering fails.
 
 ## Current Machine State
 
-- `evaluation_engine=oracle_only`, `p0_3_status=complete_p0_3c`, `score_provenance=independent_oracle`.
-- Coverage 33/33; formal 6 PASS / 27 FAIL; composite 20.8; CIV 0; integrity gate false.
-- `certification_eligible=false`, Tier N/A; sole full-run reason `P0_4_NEGATIVE_CONTROLS_PENDING`.
-- Default legacy namespace empty. Explicit S19 legacy diagnostic left formal result unchanged.
-- S29 fixed-CLE incompatibility and S31 opaque reconcile result remain strict FAIL.
-- Harness 53/53 PASS; ResearchCTL regressions 443/443 PASS; trust imports 0; action self-award 0; report audit 0/0; PDF refreshed.
+- v0.7.0; `oracle_only`; P0.3C complete; P0.4 complete; `p0_status=complete_harness`.
+- Official ResearchCTL: 6 PASS / 27 FAIL; composite 20.8; CIV 0; integrity gate false; certification=false; Tier N/A; reasons FORMAL_SCENARIOS_FAILED and INTEGRITY_GATE_FAILED.
+- Harness 56/56; ResearchCTL regressions 443/443; coverage 33/33; trust imports 0; self-award fields 0; report audit 0/0.
+- Source/fixture digest `sha256:205483526cf17db0066b55c0f097a99043443a79ed0c5fa919805537b73eea01`; root fingerprint `sha256:50aef045b805311de1e1111945f1397db6fa69bb1e93b3634a6380cb3c9fc2eb`.
 
-## P0.4 Target
+## Next Gate
 
-Implement and test six controls: Always-Pass, Always-Abstain, Universal-Stale, Universal-Impact, Random, Gold-Reader. Every control must remain ineligible and must not obtain a passing conclusion. Gold-Reader must be blocked by isolation boundaries. P0 completes only after all P0 exit conditions, including clean-environment determinism, pass.
+P1/P2 remain inactive: dynamic Universe, hidden split, real B1/B2/B3, multi-model statistics, remote OCI and leaderboard governance. Require explicit user approval and a separate P1 contract before implementation.
 
 ## Negative Constraints / Do Not Assume
 
@@ -62,14 +72,11 @@ Implement and test six controls: Always-Pass, Always-Abstain, Universal-Stale, U
 - Generic runner/Oracle/DSL/evaluators must not import `researchctl.*`.
 - P0.3 is not complete until default `run_sXX()` self-scoring is cut off and formal metrics are Oracle-only.
 - P0 is not complete until P0.4 six negative controls pass.
-- Do not begin P0.3C on the current NO-GO candidate.
-- Do not treat the current 28 FAIL vector as independently certified until the harness blockers are repaired.
-- Do not begin P0.3C before fresh Sol PASS on repaired P0.3B.
-- Do not treat the repaired 6/27 vector as independently certified until fresh Sol review.
+- P0 Harness completion is not ResearchCTL certification.
+- Do not enter P1/P2 without explicit user approval after reviewing this P0 result.
 
 ## Next Action
 
-1. Commit P0.3C code/tests/reports/context excluding audit artifacts.
-2. Implement P0.4 six negative controls and isolation tests.
-3. Run Harness, 443 regressions, all controls, full Oracle report and clean-environment determinism.
-4. Refresh context and obtain final review before declaring P0 complete.
+1. Commit P0.4 controls/attestation/tests/reports/context.
+2. Present P0 completion separately from ResearchCTL formal failure.
+3. Wait for explicit P1 scope approval; if approved, write a separate P1 contract first.

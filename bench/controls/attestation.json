@@ -1,0 +1,138 @@
+{
+  "schema_version": "negative-control-attestation/v1",
+  "pack_id": "p0-seed-v1",
+  "manifest_digest": "sha256:01178c7b858d4d72afb19ac69e1a027f6655dc1f3e518277e3e400f478b19c7b",
+  "source_hash": "sha256:205483526cf17db0066b55c0f097a99043443a79ed0c5fa919805537b73eea01",
+  "fixture_hash": "sha256:205483526cf17db0066b55c0f097a99043443a79ed0c5fa919805537b73eea01",
+  "action_digest": "sha256:8d2a1f505f65b353b5690342a2ab6456b9a18547d896d7b5a329318a345c9203",
+  "harness_digest": "sha256:5257cc6329c14438bc4623c35922a0b26dbe9c973b1aaa3dd6f4d866672b0c05",
+  "controls": [
+    {
+      "mode": "always-pass",
+      "adapter": "negative-control:always-pass",
+      "total_scenarios": 33,
+      "passed_scenarios": 1,
+      "composite_score": 2.1,
+      "civ": 0,
+      "integrity_gate_passed": false,
+      "iqg_passed": false,
+      "certification_eligible": false,
+      "tier": "N/A",
+      "ineligible_reasons": [
+        "FORMAL_SCENARIOS_FAILED",
+        "INTEGRITY_GATE_FAILED"
+      ],
+      "passed_conclusion": false,
+      "gold_read_blocked": null,
+      "evaluation_digest": "sha256:764485d8c367ec288d4f72ec879168d5464cabaa3df6dcbeb098c59b20788352"
+    },
+    {
+      "mode": "always-abstain",
+      "adapter": "negative-control:always-abstain",
+      "total_scenarios": 33,
+      "passed_scenarios": 2,
+      "composite_score": 4.2,
+      "civ": 0,
+      "integrity_gate_passed": false,
+      "iqg_passed": false,
+      "certification_eligible": false,
+      "tier": "N/A",
+      "ineligible_reasons": [
+        "FORMAL_SCENARIOS_FAILED",
+        "INTEGRITY_GATE_FAILED"
+      ],
+      "passed_conclusion": false,
+      "gold_read_blocked": null,
+      "evaluation_digest": "sha256:1f295eba05b451a36368e6934618008bf62d9df7a760682f8e5a862eea4b7e64"
+    },
+    {
+      "mode": "universal-stale",
+      "adapter": "negative-control:universal-stale",
+      "total_scenarios": 33,
+      "passed_scenarios": 0,
+      "composite_score": 0.0,
+      "civ": 6,
+      "integrity_gate_passed": false,
+      "iqg_passed": false,
+      "certification_eligible": false,
+      "tier": "N/A",
+      "ineligible_reasons": [
+        "FORMAL_SCENARIOS_FAILED",
+        "INTEGRITY_GATE_FAILED"
+      ],
+      "passed_conclusion": false,
+      "gold_read_blocked": null,
+      "evaluation_digest": "sha256:86eef8e7deb2aab9eb0147fe41f761c71d94baa11fae12685e41295c5d17d66e"
+    },
+    {
+      "mode": "universal-impact",
+      "adapter": "negative-control:universal-impact",
+      "total_scenarios": 33,
+      "passed_scenarios": 0,
+      "composite_score": 0.0,
+      "civ": 6,
+      "integrity_gate_passed": false,
+      "iqg_passed": false,
+      "certification_eligible": false,
+      "tier": "N/A",
+      "ineligible_reasons": [
+        "FORMAL_SCENARIOS_FAILED",
+        "INTEGRITY_GATE_FAILED"
+      ],
+      "passed_conclusion": false,
+      "gold_read_blocked": null,
+      "evaluation_digest": "sha256:275a31bbaf5380fd0f7509f12795a7cae32a17c1bb038ffdb680c4acd49438e9"
+    },
+    {
+      "mode": "random",
+      "adapter": "negative-control:random",
+      "total_scenarios": 33,
+      "passed_scenarios": 0,
+      "composite_score": 0.0,
+      "civ": 4,
+      "integrity_gate_passed": false,
+      "iqg_passed": false,
+      "certification_eligible": false,
+      "tier": "N/A",
+      "ineligible_reasons": [
+        "FORMAL_SCENARIOS_FAILED",
+        "INTEGRITY_GATE_FAILED"
+      ],
+      "passed_conclusion": false,
+      "gold_read_blocked": null,
+      "evaluation_digest": "sha256:efb85583f23b54b2782f309dd1b526f89295d08716994c9e3aa616a1d212c2d9"
+    },
+    {
+      "mode": "gold-reader",
+      "adapter": "negative-control:gold-reader",
+      "total_scenarios": 33,
+      "passed_scenarios": 1,
+      "composite_score": 2.1,
+      "civ": 0,
+      "integrity_gate_passed": false,
+      "iqg_passed": false,
+      "certification_eligible": false,
+      "tier": "N/A",
+      "ineligible_reasons": [
+        "FORMAL_SCENARIOS_FAILED",
+        "INTEGRITY_GATE_FAILED"
+      ],
+      "passed_conclusion": false,
+      "gold_read_blocked": true,
+      "evaluation_digest": "sha256:764485d8c367ec288d4f72ec879168d5464cabaa3df6dcbeb098c59b20788352"
+    }
+  ],
+  "random_retry_digest": "sha256:efb85583f23b54b2782f309dd1b526f89295d08716994c9e3aa616a1d212c2d9",
+  "random_deterministic": true,
+  "gold_reader_blocked": true,
+  "all_controls_rejected": true,
+  "official_run": {
+    "command_digest": "sha256:2df282a68c220356ad45c1ed695a84ca80477f357fb28f5bd550dac154e49728",
+    "adapter": "researchctl",
+    "evaluation_digest": "sha256:a0a8d65261fbb267759eee3ee5b432051a88707768274f3840377ca851217cfd"
+  },
+  "official_retry_digest": "sha256:a0a8d65261fbb267759eee3ee5b432051a88707768274f3840377ca851217cfd",
+  "official_deterministic": true,
+  "p0_4_passed": true,
+  "attestation_digest": "sha256:80b13cfa04bdce5e32ca4df0d00ec7dd44060304196bc32a6f5f441311424617"
+}

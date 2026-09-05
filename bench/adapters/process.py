@@ -50,6 +50,7 @@ class ProcessSUTAdapter:
         cwd: Optional[str] = None,
         env: Optional[Mapping[str, str]] = None,
         request_timeout_ms: int = 30_000,
+        denied_read_paths: Optional[Sequence[str]] = None,
     ) -> None:
         if not command or any(not isinstance(part, str) or not part or "\x00" in part for part in command):
             raise ValueError("command must be a non-empty sequence of safe strings")
@@ -59,6 +60,7 @@ class ProcessSUTAdapter:
         self.cwd = os.path.abspath(cwd) if cwd else None
         self.extra_env = dict(env or {})
         self.request_timeout_ms = request_timeout_ms
+        self.denied_read_paths = tuple(os.path.realpath(path) for path in (denied_read_paths or ()))
         self._process: Optional[subprocess.Popen[str]] = None
         self._workspace: Optional[str] = None
         self._sequence = 0
@@ -67,13 +69,17 @@ class ProcessSUTAdapter:
 
     @property
     def metadata(self) -> Dict[str, Any]:
-        return {
+        metadata = {
             "protocol": "sut-adapter/v1",
             "transport": "stdio-ndjson",
             "command_digest": command_digest(self.command),
             "adapter": self._health.get("adapter"),
             "capabilities": self._health.get("capabilities", []),
         }
+        for field in ("control_mode", "gold_read_blocked"):
+            if field in self._health:
+                metadata[field] = self._health[field]
+        return metadata
 
     def _start(self) -> None:
         if self._process is not None and self._process.poll() is None:
@@ -82,8 +88,18 @@ class ProcessSUTAdapter:
         # Participant discovery must not depend on the benchmark's PYTHONPATH.
         env.pop("PYTHONPATH", None)
         env.update(self.extra_env)
+        command = list(self.command)
+        if self.denied_read_paths:
+            if sys.platform != "darwin" or not os.path.isfile("/usr/bin/sandbox-exec"):
+                raise SUTAdapterError("filesystem read isolation is unavailable on this host")
+            rules = " ".join(
+                f"(deny file-read* (subpath {json.dumps(path, ensure_ascii=False)}))"
+                for path in self.denied_read_paths
+            )
+            profile = f"(version 1) (allow default) {rules}"
+            command = ["/usr/bin/sandbox-exec", "-p", profile, *command]
         self._process = subprocess.Popen(
-            list(self.command),
+            command,
             cwd=self.cwd,
             env=env,
             stdin=subprocess.PIPE,

@@ -1,12 +1,14 @@
 {
   "benchmark_name": "ResearchCTL-Bench",
-  "benchmark_version": "0.6.0",
+  "benchmark_version": "0.7.0",
   "benchmark_status": "internal_conformance_only",
   "evaluation_mode": "full",
   "evaluation_engine": "oracle_only",
   "score_provenance": "independent_oracle",
   "integrity_metrics_provenance": "independent_oracle",
   "p0_3_status": "complete_p0_3c",
+  "p0_4_status": "complete",
+  "p0_status": "complete_harness",
   "shadow_review_status": "NOT_APPLICABLE_ORACLE_ONLY",
   "sut": {
     "protocol": "sut-adapter/v1",
@@ -1853,7 +1855,7 @@
   "passed_scenarios": 6,
   "total_scenarios": 33,
   "tier": "N/A",
-  "tier_name": "P0.4 负控制待验收 (Oracle-Only / Not Certifiable)",
+  "tier_name": "独立 Oracle 门禁未通过 (Internal / Not Certifiable)",
   "certification_eligible": false,
   "integrity_gate_passed": false,
   "iqg_passed": false,
@@ -1909,7 +1911,8 @@
     "unexpected_scenario_ids": [],
     "duplicate_scenario_ids": [],
     "ineligible_reasons": [
-      "P0_4_NEGATIVE_CONTROLS_PENDING"
+      "FORMAL_SCENARIOS_FAILED",
+      "INTEGRITY_GATE_FAILED"
     ]
   },
   "metrics": {

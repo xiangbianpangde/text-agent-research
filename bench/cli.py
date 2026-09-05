@@ -127,12 +127,22 @@ def main(argv=None) -> int:
         }
         for scenario_id, actions in oracle_scenarios.items()
     }
+    p0_4_complete = False
+    attestation_path = os.path.join(project_root(), "bench", "controls", "attestation.json")
+    if os.path.isfile(attestation_path):
+        from .controls.runner import validate_attestation
+        try:
+            with open(attestation_path, encoding="utf-8") as handle:
+                p0_4_complete = validate_attestation(json.load(handle))
+        except (OSError, ValueError, json.JSONDecodeError):
+            p0_4_complete = False
     metrics = evaluate_oracle_benchmark(
         oracle_evaluations,
         evaluation_mode=evaluation_mode,
         scenario_metadata=scenario_metadata,
         required_tracks=TRACKS,
         required_scenario_ids=REQUIRED_SCENARIO_IDS,
+        p0_4_complete=p0_4_complete,
     )
     metrics.sut_metadata = sut_metadata or oracle_metadata
     if args.legacy_diagnostic:

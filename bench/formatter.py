@@ -9,7 +9,7 @@ from .evaluator import BenchmarkMetrics
 from .scenarios import TRACKS, TRACK_NAMES
 
 
-BENCHMARK_VERSION = "0.6.0"
+BENCHMARK_VERSION = "0.7.0"
 
 
 def _pct(value: Optional[float]) -> str:
@@ -105,6 +105,8 @@ def format_json_report(metrics: BenchmarkMetrics) -> str:
         "score_provenance": metrics.score_provenance,
         "integrity_metrics_provenance": metrics.integrity_metrics_provenance,
         "p0_3_status": metrics.p0_3_status,
+        "p0_4_status": metrics.p0_4_status,
+        "p0_status": metrics.p0_status,
         "shadow_review_status": metrics.shadow_review_status,
         "sut": metrics.sut_metadata,
         "oracle": {

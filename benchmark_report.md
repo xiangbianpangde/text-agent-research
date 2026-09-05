@@ -1,56 +1,62 @@
-# ResearchCTL-Bench v0.6 P0.3C Oracle-Only Report
+# ResearchCTL-Bench v0.7 P0 Harness Completion Report
 
-> **P0.3 Independent Oracle & Gold Compiler：COMPLETE。** P0 总体仍为 INCOMPLETE；P0.4 六类负控制尚未验收，因此 Tier N/A，本报告不构成公开 Benchmark 认证。
+> **P0 Harness Construction：COMPLETE。** 这表示评测仪器已完成 P0.1–P0.4，不表示 ResearchCTL 被认证。当前 ResearchCTL 正式结果仍未通过，Tier N/A。
 
-## 正式 Oracle 结果
+## 正式 ResearchCTL 结果
 
 | 项目 | 结果 |
 | --- | --- |
 | Evaluation engine | `oracle_only` |
 | P0.3 status | `complete_p0_3c` |
+| P0.4 status | `complete` |
+| P0 status | `complete_harness` |
 | Oracle coverage | 33 / 33 |
 | Formal passed / failed | 6 / 27 |
 | Formal composite | 20.8 / 100 |
 | CIV | 0 |
-| Integrity gate | FAIL（指标不足） |
+| Integrity gate | FAIL |
 | Certification eligibility | `false` |
 | Tier | `N/A` |
-| Ineligible reason | `P0_4_NEGATIVE_CONTROLS_PENDING` |
+| Ineligible reasons | `FORMAL_SCENARIOS_FAILED`, `INTEGRITY_GATE_FAILED` |
 
-严格通过场景：S10、S11、S14、S19、S26、S30。
+严格通过场景：S10、S11、S14、S19、S26、S30。Legacy 33/33 默认不运行，也不影响以上正式结果。
 
-S29 继续因当前 SQLite schema 不满足冻结 §6.7 列合同而失败。S31 的外部 SIGKILL、canonical no-half-commit 与两次恢复固定点检查通过，但 participant 返回的额外 opaque reconcile result 被完整 ResultRow exact evaluator 拒绝。
+## P0.4 六类负控制
 
-## P0.3C 切换证明
+| 控制 | Formal PASS | Composite | CIV | Eligible | Passing conclusion |
+| --- | ---: | ---: | ---: | --- | --- |
+| Always-Pass | 1 / 33 | 2.1 | 0 | false | false |
+| Always-Abstain | 2 / 33 | 4.2 | 0 | false | false |
+| Universal-Stale | 0 / 33 | 0.0 | 6 | false | false |
+| Universal-Impact | 0 / 33 | 0.0 | 6 | false | false |
+| Random | 0 / 33 | 0.0 | 4 | false | false |
+| Gold-Reader | 1 / 33 | 2.1 | 0 | false | false |
 
-- 默认 CLI 的 scenario registry 来自 `bench/packs/p0_seed_v1/pack.json` 和 action DSL。
-- 默认路径不访问或调用 legacy `run_sXX()`。
-- 正式 `passed_scenarios`、composite、TP/FP/FN、CIV、VLP、PGEM、FCAA 与 IQG 全部由 `OracleScenarioEvaluation` 聚合。
-- 默认 `legacy_diagnostic` 为空。
-- `--legacy-diagnostic` 才运行旧场景；其输出只进入独立 namespace，不能改变 formal fields。
-- 部分运行继续为 `diagnostic_partial` 且 Tier N/A。
-- P0.4 未完成始终阻断认证资格。
+- Random 双跑 evaluation digest 一致。
+- 官方 ResearchCTL 双跑 evaluation digest 一致：`sha256:a0a8d65261fbb267759eee3ee5b432051a88707768274f3840377ca851217cfd`。
+- Gold-Reader 对 Oracle pack 的读取由 macOS sandbox 阻断。
+- Attestation 绑定 manifest、33 action、source/fixture、control、adapter、executor、evaluator 与 Oracle 实现摘要。
+- Attestation digest：`sha256:80b13cfa04bdce5e32ca4df0d00ec7dd44060304196bc32a6f5f441311424617`。
 
-## 信任边界
+## P0 退出条件
 
-P0.3B 已经第六次 Sol 审核明确签字：`PASS — P0.3B repair accepted; P0.3C may begin`。其机械证据继续适用：
-
-- 查询/Gold 单源 registry；无隐藏 target 或场景自评分。
-- 严格 RFC3339/UTC、显式 lifecycle 和完整 as-of state。
-- checkpoint-state 八类 CIV。
-- 完整 typed ResultRow、fail-closed 附加答案拒绝、code+ref exactness。
-- `source.tar` 双摘要与确定性 fixture builder。
-- 固定 CLE 事务快照与进程组清理。
-- root fixture fingerprint 在 fresh extraction 后 stored=fresh。
+- Generic runner / Oracle 对 `researchctl.*` 零 import。
+- 同一进程协议测量官方 ResearchCTL 和独立 stub/control participants。
+- 33/33 场景由 manifest/actions 独立编译 Gold。
+- 默认路径不存在 scenario 自评分或 `run_sXX()` 调用。
+- Partial、缺 Track/family、空分母不能获得 Tier。
+- S12/S16/S17/S31 使用独立 evidence/set/state 判定。
+- 六类负控制均无法钻过资格门。
+- 官方 SUT 同 pack 双次运行得到相同 evaluation digest。
 
 ## 机器验证
 
-- P0 Harness：53 项（P0.3C 新增 pack/default/legacy 隔离测试后，以最终测试输出为准）。
+- P0 Harness：56 / 56 PASS。
 - ResearchCTL 原回归：443 / 443 PASS。
-- Trust-boundary `researchctl.*` imports：0。
-- Action self-award fields：0。
-- 默认完整运行：Oracle-only 33/33，无 runner crash。
+- Canonical source/fixture 双次重建：`sha256:205483526cf17db0066b55c0f097a99043443a79ed0c5fa919805537b73eea01`。
+- Root fixture stored/fresh fingerprint：`sha256:50aef045b805311de1e1111945f1397db6fa69bb1e93b3634a6380cb3c9fc2eb`。
+- Action self-award fields：0；trust-boundary ResearchCTL imports：0。
 
-## 下一步
+## 下一步门禁
 
-进入 P0.4 Benchmark-of-the-Benchmark，实施并验收 Always-Pass、Always-Abstain、Universal-Stale、Universal-Impact、Random、Gold-Reader 六类负控制。任何负控制均不得获得 certification eligibility 或合格结论；Gold-Reader 必须被隔离边界阻断。
+P0 Harness 已完成，但用户原决策要求 P1/P2 只有在 P0 退出后再次批准才启动。因此当前不自动进入动态 Universe、hidden split、真实 B1/B2/B3、OCI 或排行榜治理。下一步需要用户再次批准 P1 范围。

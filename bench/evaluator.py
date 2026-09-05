@@ -53,6 +53,8 @@ class BenchmarkMetrics:
     score_provenance: str = "legacy_self_scored_diagnostic"
     integrity_metrics_provenance: str = "legacy_self_scored_diagnostic"
     p0_3_status: str = "not_started"
+    p0_4_status: str = "not_started"
+    p0_status: str = "incomplete"
     shadow_review_status: str = "unreviewed"
     oracle_required: int = 0
     oracle_compiled_scenario_ids: List[str] = dataclasses.field(default_factory=list)
@@ -140,6 +142,7 @@ def evaluate_oracle_benchmark(
     scenario_metadata: Mapping[str, Mapping[str, str]],
     required_tracks: Sequence[str],
     required_scenario_ids: Sequence[str],
+    p0_4_complete: bool = False,
 ) -> BenchmarkMetrics:
     """Aggregate only independent Oracle evaluations into formal metrics."""
     hallucination_codes = {
@@ -197,11 +200,19 @@ def evaluate_oracle_benchmark(
     metrics.oracle_evaluations = [by_id[sid].to_dict() for sid in metrics.oracle_compiled_scenario_ids]
     if metrics.oracle_missing_scenario_ids and "P0_3_ORACLE_COVERAGE_INCOMPLETE" not in metrics.ineligible_reasons:
         metrics.ineligible_reasons.append("P0_3_ORACLE_COVERAGE_INCOMPLETE")
-    metrics.ineligible_reasons.append("P0_4_NEGATIVE_CONTROLS_PENDING")
-    metrics.certification_eligible = False
-    metrics.iqg_passed = False
-    metrics.tier = "N/A"
-    metrics.tier_name = "P0.4 负控制待验收 (Oracle-Only / Not Certifiable)"
+    if metrics.passed_scenarios != metrics.total_scenarios:
+        metrics.ineligible_reasons.append("FORMAL_SCENARIOS_FAILED")
+    if not metrics.integrity_gate_passed:
+        metrics.ineligible_reasons.append("INTEGRITY_GATE_FAILED")
+    metrics.p0_4_status = "complete" if p0_4_complete else "pending_negative_controls"
+    metrics.p0_status = "complete_harness" if p0_4_complete else "incomplete"
+    if not p0_4_complete:
+        metrics.ineligible_reasons.append("P0_4_NEGATIVE_CONTROLS_PENDING")
+    metrics.certification_eligible = not metrics.ineligible_reasons
+    metrics.iqg_passed = metrics.certification_eligible and metrics.integrity_gate_passed
+    if not metrics.certification_eligible:
+        metrics.tier = "N/A"
+        metrics.tier_name = "独立 Oracle 门禁未通过 (Internal / Not Certifiable)"
     return metrics
 
 

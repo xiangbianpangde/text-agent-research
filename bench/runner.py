@@ -62,6 +62,8 @@ class BenchmarkSandbox:
         *,
         sut_command: Optional[Sequence[str]] = None,
         sut_cwd: Optional[str] = None,
+        sut_env: Optional[Dict[str, str]] = None,
+        denied_read_paths: Optional[Sequence[str]] = None,
     ):
         self.tmp_dir = tempfile.mkdtemp(prefix="bench_sb_")
         self.ws = os.path.join(self.tmp_dir, "ws")
@@ -80,6 +82,8 @@ class BenchmarkSandbox:
         self.adapter = ProcessSUTAdapter(
             sut_command or default_researchctl_command(),
             cwd=sut_cwd or project_root(),
+            env=sut_env,
+            denied_read_paths=denied_read_paths,
         )
         self.sut_metadata: Dict[str, object] = {}
 
@@ -821,6 +825,8 @@ def run_oracle_scenario(
     sut_command: Optional[Sequence[str]] = None,
     sut_cwd: Optional[str] = None,
     pack_root: str = DEFAULT_ORACLE_PACK,
+    sut_env: Optional[Dict[str, str]] = None,
+    denied_read_paths: Optional[Sequence[str]] = None,
 ):
     """Compile sealed Gold before SUT startup, then execute and evaluate one anchor."""
     from .dsl.executor import execute_actions
@@ -850,6 +856,8 @@ def run_oracle_scenario(
         fixture_archive,
         sut_command=sut_command,
         sut_cwd=sut_cwd,
+        sut_env=sut_env,
+        denied_read_paths=denied_read_paths,
     )
     try:
         with sandbox:
