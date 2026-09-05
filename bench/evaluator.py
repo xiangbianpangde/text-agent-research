@@ -200,12 +200,16 @@ def evaluate_benchmark(
         metrics.evaluation_engine = "oracle_shadow"
         metrics.score_provenance = "legacy_diagnostic_only"
         metrics.integrity_metrics_provenance = "legacy_diagnostic_only"
-        metrics.p0_3_status = "incomplete_p0_3a"
         metrics.oracle_required = len(required_scenario_ids)
         by_id = {evaluation.scenario_id: evaluation for evaluation in oracle_evaluations}
         metrics.oracle_compiled_scenario_ids = [sid for sid in required_scenario_ids if sid in by_id]
         metrics.oracle_missing_scenario_ids = [sid for sid in required_scenario_ids if sid not in by_id]
         metrics.oracle_evaluations = [by_id[sid].to_dict() for sid in metrics.oracle_compiled_scenario_ids]
+        metrics.p0_3_status = (
+            "incomplete_p0_3b"
+            if not metrics.oracle_missing_scenario_ids
+            else "incomplete_p0_3a"
+        )
         metrics.ineligible_reasons.append("P0_3_SHADOW_MODE")
         if metrics.oracle_missing_scenario_ids:
             metrics.ineligible_reasons.append("P0_3_ORACLE_COVERAGE_INCOMPLETE")

@@ -1,4 +1,4 @@
-"""P0.3A trust-boundary and anchor acceptance tests."""
+"""P0.3A/B trust-boundary, Gold coverage, and state-machine tests."""
 from __future__ import annotations
 
 import ast
@@ -19,7 +19,7 @@ from bench.evaluators.scenario import evaluate_scenario
 from bench.evaluators.sets import set_confusion
 from bench.oracle.compiler import compile_gold
 from bench.oracle.manifest import load_manifest, validate_manifest
-from bench.runner import ORACLE_ANCHOR_IDS, REQUIRED_SCENARIO_IDS, run_oracle_scenario
+from bench.runner import ORACLE_ANCHOR_IDS, ORACLE_SCENARIO_IDS, REQUIRED_SCENARIO_IDS, run_oracle_scenario
 from bench.scenarios import TRACKS
 
 
@@ -95,7 +95,7 @@ class ContractBoundaryTests(unittest.TestCase):
                 if isinstance(node, ast.ImportFrom):
                     self.assertFalse((node.module or "") == "researchctl" or (node.module or "").startswith("researchctl."), path)
         evaluator_text = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "bench" / "evaluators").rglob("*.py"))
-        for scenario_id in ORACLE_ANCHOR_IDS:
+        for scenario_id in ORACLE_SCENARIO_IDS:
             self.assertNotIn(f'"{scenario_id}"', evaluator_text)
 
 
@@ -103,9 +103,31 @@ class CompilerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = load_manifest(PACK / "oracle-manifest.json")
 
-    def test_all_seven_anchor_gold_documents_are_byte_deterministic(self) -> None:
-        self.assertEqual(len(ORACLE_ANCHOR_IDS), 7)
-        for scenario_id in ORACLE_ANCHOR_IDS:
+    def test_all_four_frozen_json_contracts_validate(self) -> None:
+        import jsonschema
+
+        action_schema = json.loads((ROOT / "bench" / "dsl" / "schemas" / "scenario-actions-v1.schema.json").read_text())
+        manifest_schema = json.loads((ROOT / "bench" / "oracle" / "schemas" / "oracle-manifest-v1.schema.json").read_text())
+        gold_schema = json.loads((ROOT / "bench" / "oracle" / "schemas" / "compiled-gold-v1.schema.json").read_text())
+        prediction_schema = json.loads((ROOT / "bench" / "dsl" / "schemas" / "prediction-v1.schema.json").read_text())
+        jsonschema.validate(self.manifest.document, manifest_schema)
+        jsonschema.validate(prediction("schema-check"), prediction_schema)
+        for scenario_id in ORACLE_SCENARIO_IDS:
+            document = json.loads((PACK / "scenarios" / f"{scenario_id}.json").read_text())
+            jsonschema.validate(document, action_schema)
+            jsonschema.validate(
+                compile_gold(self.manifest, load_scenario(PACK / "scenarios" / f"{scenario_id}.json")),
+                gold_schema,
+            )
+
+    def test_all_33_gold_documents_are_byte_deterministic(self) -> None:
+        self.assertEqual(tuple(REQUIRED_SCENARIO_IDS), ORACLE_SCENARIO_IDS)
+        self.assertEqual(len(ORACLE_SCENARIO_IDS), 33)
+        self.assertEqual(
+            {path.stem for path in (PACK / "scenarios").glob("*.json")},
+            set(REQUIRED_SCENARIO_IDS),
+        )
+        for scenario_id in ORACLE_SCENARIO_IDS:
             actions = load_scenario(PACK / "scenarios" / f"{scenario_id}.json")
             first = compile_gold(self.manifest, actions)
             second = compile_gold(self.manifest, actions)
@@ -171,7 +193,30 @@ class GenericEvaluatorTests(unittest.TestCase):
         self.assertFalse(result.version_correct)
         self.assertGreaterEqual(result.civ_count, 1)
 
-    def test_oracle_shadow_forces_ineligible_until_all_33_are_cut_over(self) -> None:
+    def test_full_oracle_shadow_coverage_remains_ineligible_until_cutover(self) -> None:
+        legacy = [
+            ScenarioResult(scenario_id, TRACKS[index % len(TRACKS)], "legacy", True, 1.0)
+            for index, scenario_id in enumerate(REQUIRED_SCENARIO_IDS)
+        ]
+        evaluations = [
+            type("Evaluation", (), {"scenario_id": scenario_id, "to_dict": lambda self: {"scenario_id": self.scenario_id}})()
+            for scenario_id in REQUIRED_SCENARIO_IDS
+        ]
+        metrics = evaluate_benchmark(
+            legacy,
+            evaluation_mode="full",
+            required_tracks=TRACKS,
+            required_scenario_ids=REQUIRED_SCENARIO_IDS,
+            oracle_evaluations=evaluations,
+        )
+        self.assertEqual(metrics.p0_3_status, "incomplete_p0_3b")
+        self.assertEqual(len(metrics.oracle_compiled_scenario_ids), 33)
+        self.assertFalse(metrics.certification_eligible)
+        self.assertEqual(metrics.tier, "N/A")
+        self.assertIn("P0_3_SHADOW_MODE", metrics.ineligible_reasons)
+        self.assertNotIn("P0_3_ORACLE_COVERAGE_INCOMPLETE", metrics.ineligible_reasons)
+
+    def test_partial_oracle_shadow_reports_incomplete_coverage(self) -> None:
         legacy = [ScenarioResult("S03", TRACKS[0], "legacy", True, 1.0)]
         fake = type("Evaluation", (), {"scenario_id": "S03", "to_dict": lambda self: {"scenario_id": "S03"}})()
         metrics = evaluate_benchmark(
@@ -186,7 +231,18 @@ class GenericEvaluatorTests(unittest.TestCase):
         self.assertIn("P0_3_ORACLE_COVERAGE_INCOMPLETE", metrics.ineligible_reasons)
 
 
-class CrashAnchorTests(unittest.TestCase):
+class StateAnchorTests(unittest.TestCase):
+    def test_s29_rejects_participant_schema_incompatible_with_frozen_cle(self) -> None:
+        evaluation, _metadata, _gold = run_oracle_scenario("S29")
+        self.assertFalse(evaluation.passed)
+        self.assertTrue(any("CLE schema mismatch" in error for error in evaluation.execution_errors))
+
+    def test_s30_observes_real_lock_collision(self) -> None:
+        evaluation, _metadata, _gold = run_oracle_scenario("S30")
+        self.assertTrue(evaluation.passed, evaluation.to_dict())
+        self.assertTrue(evaluation.fail_closed_expected)
+        self.assertTrue(evaluation.fail_closed_satisfied)
+
     def test_s31_uses_external_sigkill_and_proves_fixed_point(self) -> None:
         evaluation, _metadata, _gold = run_oracle_scenario("S31")
         self.assertTrue(evaluation.passed, evaluation.to_dict())

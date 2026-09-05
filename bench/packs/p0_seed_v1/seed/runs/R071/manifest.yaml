@@ -1,0 +1,10 @@
+run_id: R071
+experiment_ref: EXP-017@v1
+status: completed
+model: model-a
+context_length: 128K
+batch_size: 16
+raw_ref:
+  path: raw/EXP-017/R071/
+  source_type: directory
+  reference_scope: current

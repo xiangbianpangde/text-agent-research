@@ -1,15 +1,17 @@
-# Independent Oracle — P0.3A
+# Independent Oracle — P0.3B
 
 Status: **INCOMPLETE (`oracle_shadow`)**.
 
-P0.3A freezes four contracts:
+P0.3A froze four contracts:
 
 - `oracle-manifest/v1`: objective initial universe;
 - `scenario-actions/v1`: execution and world mutations only;
 - `prediction/v1`: participant claims only;
 - `compiled-gold/v1`: generated expectations and state transitions.
 
-The trust path is:
+P0.3B migrates all 33 canonical scenario IDs onto that shadow path. This is full **Oracle coverage**, not a passing benchmark result and not the P0.3 trust-path cutover.
+
+## Trust Path
 
 ```text
 oracle manifest + action DSL ──compile before SUT start──> sealed Gold
@@ -22,16 +24,19 @@ sealed Gold + prediction/observations ──generic eval───>│ derived sc
 
 `compile_gold(manifest, actions)` accepts no adapter, workspace, prediction or SUT input. `execute_actions(...)` receives no compiled Gold. Scenario files cannot contain `passed`, `score`, `expected_*`, `gold_*`, TP/FP/FN, CIV, version correctness or graph-match fields.
 
-## P0.3A anchors
+## P0.3B State
 
-The first seven migrated scenarios are S03, S07, S12, S16, S17, S24 and S31. They span pinned external truth, exact version binding, exact scientific evidence, impact/stale set difference, fail-closed/CIV behavior and externally killed transaction recovery.
-
-A full v0.4 run therefore reports:
+A full v0.5 run reports:
 
 - `evaluation_engine: oracle_shadow`;
-- `oracle.coverage.compiled: 7` of 33;
-- `p0_3_status: incomplete_p0_3a`;
+- `oracle.coverage.compiled: 33` of 33;
+- `p0_3_status: incomplete_p0_3b`;
 - `certification_eligible: false`;
-- `tier: N/A`.
+- `tier: N/A`;
+- `coverage.ineligible_reasons: ["P0_3_SHADOW_MODE"]`.
 
-Legacy 33-scenario results remain visible only as diagnostics and do not establish Oracle-scored benchmark quality. P0.3 can be declared complete only after P0.3C cuts the active path over to 33/33 independently compiled Gold scenarios.
+The official ResearchCTL adapter currently passes 5 strict Oracle scenarios and fails 28. Those failures expose missing `prediction/v1` facts, evidence, graph, exact condition, routing or frozen-CLE support. They must remain visible; legacy 33/33 values are diagnostic only and do not establish Oracle-scored quality.
+
+## P0.3C Exit
+
+P0.3 can be declared complete only after the default path stops calling all legacy `run_sXX()` self-scoring functions, formal metrics are aggregated only from Oracle evaluations, and no mixed legacy/Oracle score remains. P0 remains incomplete after that until P0.4 negative controls pass.

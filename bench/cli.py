@@ -12,7 +12,7 @@ from .evaluator import evaluate_benchmark
 from .formatter import format_terminal_dashboard, format_json_report
 from .runner import (
     BenchmarkSandbox,
-    ORACLE_ANCHOR_IDS,
+    ORACLE_SCENARIO_IDS,
     REQUIRED_SCENARIO_IDS,
     SCENARIO_REGISTRY,
     run_oracle_scenario,
@@ -92,7 +92,7 @@ def main(argv=None) -> int:
 
     oracle_evaluations = []
     for registration in selected:
-        if registration.scenario_id not in ORACLE_ANCHOR_IDS:
+        if registration.scenario_id not in ORACLE_SCENARIO_IDS:
             continue
         oracle_evaluation, oracle_metadata, _gold = run_oracle_scenario(
             registration.scenario_id,

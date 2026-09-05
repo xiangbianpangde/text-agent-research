@@ -19,15 +19,28 @@ def encode_operation(operation: str, params: Mapping[str, Any]) -> List[str]:
     """No arbitrary shell is accepted; operations form a closed semantic table."""
     if operation == "index":
         return ["index"]
-    if operation == "query_entity":
+    if operation in ("query_entity", "query_facts", "query_lineage", "query_state", "query_exact_routing"):
         value = params.get("entity_id") or params.get("entity_ref") or params.get("ref")
         return ["query", "--entity", _required({"value": value}, "value")]
     if operation == "query_external_basis":
         value = params.get("entity_id") or params.get("definition_ref") or params.get("ref")
         return ["query", "--entity", _required({"value": value}, "value")]
-    if operation == "trace_evidence":
+    if operation in ("trace_evidence", "trace_graph"):
         value = params.get("entity") or params.get("ref")
         return ["trace", _required({"value": value}, "value")]
+    if operation == "query_sources":
+        value = params.get("owner") or params.get("entity") or params.get("ref")
+        return ["sources", _required({"value": value}, "value")]
+    if operation == "query_history":
+        return ["history"]
+    if operation == "reconcile_integrity":
+        return ["reconcile"]
+    if operation == "query_text_semantic":
+        return ["query", "--text", _required(params, "text"), "--semantic"]
+    if operation == "query_text_lexical":
+        return ["query", "--text", _required(params, "text")]
+    if operation == "query_project_state":
+        return ["query", "--doc-type", "report_current"]
     if operation in ("impact", "stale_status"):
         value = params.get("entity") or params.get("ref")
         return ["impact", _required({"value": value}, "value")]

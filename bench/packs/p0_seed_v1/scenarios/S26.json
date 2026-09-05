@@ -1,0 +1,1 @@
+{"schema_version":"scenario-actions/v1","scenario_id":"S26","track":"Track7_RetrievalRouting","name":"Anti-RAG Crossing Violation","initial_fixture":"p0-seed-v1","steps":[{"step":1,"action":"invoke","operation":"index","params":{}},{"step":2,"action":"invoke","capture_id":"exact-routing","operation":"query_exact_routing","params":{"ref":"run:R052","entity_id":"R052"}}]}

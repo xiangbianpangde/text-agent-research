@@ -1,12 +1,12 @@
 {
   "benchmark_name": "ResearchCTL-Bench",
-  "benchmark_version": "0.4.0",
+  "benchmark_version": "0.5.0",
   "benchmark_status": "internal_conformance_only",
   "evaluation_mode": "full",
   "evaluation_engine": "oracle_shadow",
   "score_provenance": "legacy_diagnostic_only",
   "integrity_metrics_provenance": "legacy_diagnostic_only",
-  "p0_3_status": "incomplete_p0_3a",
+  "p0_3_status": "incomplete_p0_3b",
   "sut": {
     "protocol": "sut-adapter/v1",
     "transport": "stdio-ndjson",
@@ -22,48 +22,119 @@
     ]
   },
   "oracle": {
+    "passed_scenarios": 5,
+    "failed_scenarios": 28,
     "coverage": {
       "required": 33,
-      "compiled": 7,
+      "compiled": 33,
       "compiled_scenario_ids": [
-        "S03",
-        "S07",
-        "S12",
-        "S16",
-        "S17",
-        "S24",
-        "S31"
-      ],
-      "missing_scenario_ids": [
         "S01",
         "S02",
+        "S03",
         "S04",
         "S05",
         "S06",
+        "S07",
         "S08",
         "S09",
         "S10",
         "S11",
+        "S12",
         "S13",
         "S14",
         "S15",
+        "S16",
+        "S17",
         "S18",
         "S19",
         "S20",
         "S21",
         "S22",
         "S23",
+        "S24",
         "S25",
         "S26",
         "S27",
         "S28",
         "S29",
         "S30",
+        "S31",
         "S32-A",
         "S32-B"
-      ]
+      ],
+      "missing_scenario_ids": []
     },
     "evaluations": [
+      {
+        "scenario_id": "S01",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "origin"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "origin"
+          },
+          {
+            "kind": "asserted_facts_exact",
+            "passed": false,
+            "capture_id": "origin"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:d2b490110c1fbf396c27acc874b424506b73317d71159f65f3155fc6aef29999",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S02",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "authority"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "authority"
+          },
+          {
+            "kind": "asserted_facts_exact",
+            "passed": false,
+            "capture_id": "authority"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:407c322ebd599ba939108a209bc951cf71826cb7dd70890bfd74782d5743158c",
+        "execution_errors": []
+      },
       {
         "scenario_id": "S03",
         "passed": false,
@@ -101,7 +172,112 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:34c107ac7c13c34159b8f8595e531943cf3b732494dbf0bf50713bc4bc0a214b",
+        "gold_digest": "sha256:b77a43cf156fd44c6f04f3b08795983fc0e7150de1e564258174730434543399",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S04",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "evolution"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "evolution"
+          },
+          {
+            "kind": "asserted_facts_exact",
+            "passed": false,
+            "capture_id": "evolution"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:317c4ad9ef36071c8d5c3c9985b8d6c3cf4cdceb010633743382cf788171b2b2",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S05",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "lineage"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "lineage"
+          },
+          {
+            "kind": "asserted_facts_exact",
+            "passed": false,
+            "capture_id": "lineage"
+          },
+          {
+            "kind": "lineage_exact",
+            "passed": false,
+            "capture_id": "lineage"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:478bd697ed95fdb251dda1c56e6c3bbe36e7f66471c50c437b9625a87d7ef7c2",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S06",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "ambiguous"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "ambiguous"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": true,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:9dc5fae6a516fdc8f835987344e48da7d234b64b0cf3a48c547b91d2f0494464",
         "execution_errors": []
       },
       {
@@ -150,7 +326,183 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:76cfeff5081b467e6c8794cdacc6dba567b690c06ddd84fa205dc6ebd68fa3e9",
+        "gold_digest": "sha256:b89c065dec955ec55b417fc310ebb6c1f7a0ccf0c2636abc45e004a542d303b6",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S08",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "historical-binding"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "historical-binding"
+          },
+          {
+            "kind": "result_set_exact",
+            "passed": true,
+            "capture_id": "historical-binding",
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "tp_items": [
+              "run:R052"
+            ],
+            "fp_items": [],
+            "fn_items": [],
+            "exact": true
+          },
+          {
+            "kind": "version_binding_exact",
+            "passed": false,
+            "capture_id": "historical-binding"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": false,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:159fa24a34a624ac63af589ca57ac74cd661caa58464217861cbb4f478dff228",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S09",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "runtime-deviation"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "runtime-deviation"
+          },
+          {
+            "kind": "asserted_facts_exact",
+            "passed": false,
+            "capture_id": "runtime-deviation"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:741dfcf51206b14dc75f19a423846835420d19a96ccc02bc1750dd3e4855d3ce",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S10",
+        "passed": true,
+        "score": 1.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "claim-source"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "claim-source"
+          },
+          {
+            "kind": "result_set_exact",
+            "passed": true,
+            "capture_id": "claim-source",
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "tp_items": [
+              "organized:EXP-017"
+            ],
+            "fp_items": [],
+            "fn_items": [],
+            "exact": true
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:d699ea5358f9faee64f3d5701b7e39c6a27a72c0d9940e6aa493b29a058eadc5",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S11",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "organized-runs"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "organized-runs"
+          },
+          {
+            "kind": "result_set_exact",
+            "passed": false,
+            "capture_id": "organized-runs",
+            "tp": 0,
+            "fp": 1,
+            "fn": 3,
+            "tp_items": [],
+            "fp_items": [
+              "organized:EXP-017"
+            ],
+            "fn_items": [
+              "run:R051",
+              "run:R052",
+              "run:R053"
+            ],
+            "exact": false
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:92c5fa94b4e42a0fb1e73bcabda0e23e969742c4182e1b99e5a1326f641ab560",
         "execution_errors": []
       },
       {
@@ -190,7 +542,123 @@
         "graph_exact_match": false,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:2b5d956a1e2883a7171baad909a188726cf0a832f29a06c6da4ceeed93687248",
+        "gold_digest": "sha256:73148f756c052f22f64366ac9f654410f54f723ff6fd58d58fd60f54d605c9d3",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S13",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "report-history"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "report-history"
+          },
+          {
+            "kind": "asserted_facts_exact",
+            "passed": false,
+            "capture_id": "report-history"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:83910eb9bd4a2cefed14d66e090d477973a9718fcce5b21983505dff0011b028",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S14",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "historical-source"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "historical-source"
+          },
+          {
+            "kind": "result_set_exact",
+            "passed": false,
+            "capture_id": "historical-source",
+            "tp": 1,
+            "fp": 0,
+            "fn": 1,
+            "tp_items": [
+              "organized:EXP-017"
+            ],
+            "fp_items": [],
+            "fn_items": [
+              "report:REPORT-001"
+            ],
+            "exact": false
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:bdbe4b8e87c323c792c8f6e5f00a8265a6474226338a81dcdd321b24bd2aff62",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S15",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "as-of-history"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "as-of-history"
+          },
+          {
+            "kind": "asserted_facts_exact",
+            "passed": false,
+            "capture_id": "as-of-history"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:11bcd910669040c2efae9adb41b3c7ae1b22b41f703c80cf86a7665fed97e22a",
         "execution_errors": []
       },
       {
@@ -214,12 +682,16 @@
             "capture_id": "impact-after-change",
             "tp": 0,
             "fp": 0,
-            "fn": 3,
+            "fn": 7,
             "tp_items": [],
             "fp_items": [],
             "fn_items": [
               "claim:CURRENT#accuracy",
+              "claim:REPORT-002#accuracy",
               "organized:EXP-017",
+              "report:CURRENT",
+              "report:REPORT-002",
+              "report:REPORT-003",
               "run:R052"
             ],
             "exact": false
@@ -228,7 +700,7 @@
         "civ_count": 0,
         "impact_tp": 0,
         "impact_fp": 0,
-        "impact_fn": 3,
+        "impact_fn": 7,
         "stale_tp": 0,
         "stale_fp": 0,
         "stale_fn": 0,
@@ -236,7 +708,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:0e71e166fea26adc4088c1098db11809529d604be6594c2df0ca44d333165478",
+        "gold_digest": "sha256:da9891ca31148a79878260c926ac30af086f5d55efa84f10db569f9fc9f5accb",
         "execution_errors": []
       },
       {
@@ -265,12 +737,16 @@
             "capture_id": "stale-after-invalidation",
             "tp": 0,
             "fp": 0,
-            "fn": 3,
+            "fn": 7,
             "tp_items": [],
             "fp_items": [],
             "fn_items": [
               "claim:CURRENT#accuracy",
+              "claim:REPORT-002#accuracy",
               "organized:EXP-017",
+              "report:CURRENT",
+              "report:REPORT-002",
+              "report:REPORT-003",
               "run:R052"
             ],
             "exact": false
@@ -282,12 +758,202 @@
         "impact_fn": 0,
         "stale_tp": 0,
         "stale_fp": 0,
-        "stale_fn": 3,
+        "stale_fn": 7,
         "version_correct": null,
         "graph_exact_match": false,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:1dff45df5630402d170e02e50c37c49f5c07c6d30810bcfb2319b0997d4b9245",
+        "gold_digest": "sha256:3c35efeb4d442b5dff5c7bbb2ee4274dd766516d1f126373b8871a240e822aa1",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S18",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "unrelated-state"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "unrelated-state"
+          },
+          {
+            "kind": "asserted_facts_exact",
+            "passed": true,
+            "capture_id": "unrelated-state"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:4e482e093da287e52efec9557de041b4ca54a4aa28c317b6987aceed3fa2a20a",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S19",
+        "passed": true,
+        "score": 1.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "missing-source"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "missing-source"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": true,
+        "fail_closed_satisfied": true,
+        "gold_digest": "sha256:c33e8c59765dc8b3f225e20adc1ce3c80e121753e465a97006df37ad388f8dfc",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S20",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "tamper-detection"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "tamper-detection"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": true,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:351525ac2867927893da46d9429b5148e76db6f31ec43406483156f971c98e86",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S21",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "orphan-detection"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "orphan-detection"
+          },
+          {
+            "kind": "integrity_issues_exact",
+            "passed": false,
+            "capture_id": "orphan-detection"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:409d04975e1c5a307188bccb21f2acff8ebf72aa94eeb3c92140b35f8a088c3b",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S22",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "prefix-defense"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "prefix-defense"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": true,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:72d9bf7ad1058b2861d5f5e9d22f5317b805e7e30351f00b86ac18dd863903d3",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S23",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "wildcard-defense"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "wildcard-defense"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": true,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:3bba9cea345d4ea71b76594650b92d9476c4c514387e65fe2967e21a985ae510",
         "execution_errors": []
       },
       {
@@ -317,7 +983,275 @@
         "graph_exact_match": null,
         "fail_closed_expected": true,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:af083004a3f437d87f853f828cc74776d39d988b184dab67fe52ed5e89f6a416",
+        "gold_digest": "sha256:999c2713e656d56ced15fd87f47671f6077edc200350b6b26444b3c4deb58e24",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S25",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "semantic-recall"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "semantic-recall"
+          },
+          {
+            "kind": "result_set_exact",
+            "passed": false,
+            "capture_id": "semantic-recall",
+            "tp": 0,
+            "fp": 0,
+            "fn": 1,
+            "tp_items": [],
+            "fp_items": [],
+            "fn_items": [
+              "discussion:MEMORY-001"
+            ],
+            "exact": false
+          },
+          {
+            "kind": "routing_policy",
+            "passed": false,
+            "capture_id": "semantic-recall"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "semantic-recall"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:0a28e8d1a0e63196874f1fb86b0527ab1f585e166306c053439cbf0073cd96d4",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S26",
+        "passed": true,
+        "score": 1.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "exact-routing"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "exact-routing"
+          },
+          {
+            "kind": "result_set_exact",
+            "passed": true,
+            "capture_id": "exact-routing",
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "tp_items": [
+              "run:R052"
+            ],
+            "fp_items": [],
+            "fn_items": [],
+            "exact": true
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "exact-routing"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:71e61be6645ed5865a2d0ea8fdf910ef91c14ab48f23f4ff6fc351d059b9f436",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S27",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "advisory-ranking"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "advisory-ranking"
+          },
+          {
+            "kind": "result_set_exact",
+            "passed": false,
+            "capture_id": "advisory-ranking",
+            "tp": 0,
+            "fp": 0,
+            "fn": 1,
+            "tp_items": [],
+            "fp_items": [],
+            "fn_items": [
+              "discussion:MEMORY-001"
+            ],
+            "exact": false
+          },
+          {
+            "kind": "routing_policy",
+            "passed": false,
+            "capture_id": "advisory-ranking"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "advisory-ranking"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:f4714820010bb0ea2e476655b9a8cc3f0b87be3a6e7394d4cb9050c1a5b612ae",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S28",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "project-state"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "project-state"
+          },
+          {
+            "kind": "asserted_facts_exact",
+            "passed": false,
+            "capture_id": "project-state"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "project-state"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:b505cc4e81fa4afeff84f7c4debae715fe73e07811e8b4b1336a28867fb6e38a",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S29",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "observation_present",
+            "passed": false,
+            "capture_id": "index-before"
+          },
+          {
+            "kind": "observation_present",
+            "passed": false,
+            "capture_id": "index-after"
+          },
+          {
+            "kind": "execution_errors",
+            "passed": false,
+            "errors": [
+              "step 2 snapshot_index: StateObservationError: CLE schema mismatch in documents: missing ['meta_json', 'parent_id', 'section']",
+              "step 5 snapshot_index: StateObservationError: CLE schema mismatch in documents: missing ['meta_json', 'parent_id', 'section']"
+            ]
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:662679ca66eb96c6663c69a6d116b8654e196479f62d75dee384947580ac58ac",
+        "execution_errors": [
+          "step 2 snapshot_index: StateObservationError: CLE schema mismatch in documents: missing ['meta_json', 'parent_id', 'section']",
+          "step 5 snapshot_index: StateObservationError: CLE schema mismatch in documents: missing ['meta_json', 'parent_id', 'section']"
+        ]
+      },
+      {
+        "scenario_id": "S30",
+        "passed": true,
+        "score": 1.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "writer-collision"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "writer-collision"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": true,
+        "fail_closed_satisfied": true,
+        "gold_digest": "sha256:e4852bfb9537ee7c5620892a3a17392a5b42f70572160c4aa290783809e7c08a",
         "execution_errors": []
       },
       {
@@ -420,7 +1354,96 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:c186e44d3923ff0ee10dcc3863cade9c2a5ee2edd6b6cbe310d4ffa178d5421b",
+        "gold_digest": "sha256:29ffdefa633c089638518994116e89938e33de07f59fb267688364968bf60b44",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S32-A",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "index-drift"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "index-drift"
+          },
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "recovered-query"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "recovered-query"
+          },
+          {
+            "kind": "result_set_exact",
+            "passed": true,
+            "capture_id": "recovered-query",
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "tp_items": [
+              "spec:EXP-017@v1"
+            ],
+            "fp_items": [],
+            "fn_items": [],
+            "exact": true
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": true,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:66de2acfdb5020f6e25c98ddede783625a46da241e6546af31356650a3353929",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S32-B",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "semantic-drift"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "semantic-drift"
+          },
+          {
+            "kind": "integrity_issues_exact",
+            "passed": false,
+            "capture_id": "semantic-drift"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:1db2219af1749cbcdafe60f9aa538e97b7d7a55a2a5770bdf19cb3a7f88c3404",
         "execution_errors": []
       }
     ]
@@ -485,8 +1508,7 @@
     "unexpected_scenario_ids": [],
     "duplicate_scenario_ids": [],
     "ineligible_reasons": [
-      "P0_3_SHADOW_MODE",
-      "P0_3_ORACLE_COVERAGE_INCOMPLETE"
+      "P0_3_SHADOW_MODE"
     ]
   },
   "metrics": {

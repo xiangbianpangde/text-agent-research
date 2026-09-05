@@ -17,16 +17,38 @@ TOP_KEYS = frozenset({"schema_version", "scenario_id", "track", "name", "initial
 COMMON_STEP_KEYS = frozenset({"step", "action"})
 STEP_KEYS = {
     "invoke": COMMON_STEP_KEYS | {"capture_id", "operation", "params", "timeout_ms"},
-    "mutate": COMMON_STEP_KEYS | {"type", "target", "content_hash", "content", "reason"},
+    "mutate": COMMON_STEP_KEYS | {
+        "type", "target", "content_hash", "content", "reason", "new_ref",
+        "entity_id", "version_ref", "path", "properties",
+    },
+    "advance_time": COMMON_STEP_KEYS | {"new_timestamp"},
+    "context_reset": COMMON_STEP_KEYS,
+    "restart_sut": COMMON_STEP_KEYS,
+    "new_session": COMMON_STEP_KEYS | {"session_id"},
+    "invoke_while_locked": COMMON_STEP_KEYS | {
+        "capture_id", "operation", "params", "lock_path", "timeout_ms",
+    },
     "external_crash": COMMON_STEP_KEYS | {"capture_id", "operation", "params", "pause_at", "timeout_ms"},
     "snapshot_state": COMMON_STEP_KEYS | {"capture_id", "require_no_tx_residue"},
+    "snapshot_index": COMMON_STEP_KEYS | {"capture_id"},
 }
 REQUIRED_STEP_KEYS = {
     "invoke": COMMON_STEP_KEYS | {"operation", "params"},
     "mutate": COMMON_STEP_KEYS | {"type", "target"},
+    "advance_time": COMMON_STEP_KEYS | {"new_timestamp"},
+    "context_reset": COMMON_STEP_KEYS,
+    "restart_sut": COMMON_STEP_KEYS,
+    "new_session": COMMON_STEP_KEYS | {"session_id"},
+    "invoke_while_locked": COMMON_STEP_KEYS | {"capture_id", "operation", "params", "lock_path"},
     "external_crash": COMMON_STEP_KEYS | {"capture_id", "operation", "params", "pause_at"},
     "snapshot_state": COMMON_STEP_KEYS | {"capture_id"},
+    "snapshot_index": COMMON_STEP_KEYS | {"capture_id"},
 }
+MUTATION_TYPES = frozenset({
+    "external_update", "semantic_change", "raw_invalidation", "create_version",
+    "duplicate_version", "delete_file", "tamper_file", "create_file",
+    "delete_tree", "touch_file", "corrupt_index", "semantic_tamper", "runtime_deviation",
+})
 FORBIDDEN_EVALUATION_KEYS = frozenset({
     "passed", "score", "expected_status", "expected_error", "expected_behavior",
     "expected_post_state", "gold_results", "gold_provenance_graph",
@@ -115,15 +137,27 @@ def validate_scenario(document: Any, *, path: str = "<memory>") -> ScenarioActio
             if capture_id in captures:
                 raise ScenarioContractError(f"duplicate capture_id: {capture_id}")
             captures.add(capture_id)
-        if action in ("invoke", "external_crash"):
+        if action in ("invoke", "invoke_while_locked", "external_crash"):
             _string(step["operation"], f"steps[{index}].operation")
             if not isinstance(step["params"], dict):
                 raise ScenarioContractError(f"steps[{index}].params must be an object")
             timeout = step.get("timeout_ms", 30_000)
             if not isinstance(timeout, int) or isinstance(timeout, bool) or not 1 <= timeout <= 600_000:
                 raise ScenarioContractError("timeout_ms must be an integer in [1, 600000]")
-        if action == "mutate" and step["type"] not in ("external_update", "semantic_change", "raw_invalidation"):
-            raise ScenarioContractError(f"unsupported mutation: {step['type']}")
+        if action == "mutate":
+            if step["type"] not in MUTATION_TYPES:
+                raise ScenarioContractError(f"unsupported mutation: {step['type']}")
+            if step["type"] in ("create_version", "duplicate_version"):
+                for field in ("new_ref", "entity_id", "version_ref", "path"):
+                    _string(step.get(field), f"steps[{index}].{field}")
+                if "properties" in step and not isinstance(step["properties"], dict):
+                    raise ScenarioContractError(f"steps[{index}].properties must be an object")
+        if action == "advance_time":
+            _string(step["new_timestamp"], f"steps[{index}].new_timestamp")
+        if action == "new_session":
+            _string(step["session_id"], f"steps[{index}].session_id")
+        if action == "invoke_while_locked":
+            _string(step["lock_path"], f"steps[{index}].lock_path")
         if action == "snapshot_state" and not isinstance(step.get("require_no_tx_residue", False), bool):
             raise ScenarioContractError("require_no_tx_residue must be boolean")
         normalized.append(dict(step))

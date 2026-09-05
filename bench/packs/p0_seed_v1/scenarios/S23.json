@@ -1,0 +1,1 @@
+{"schema_version":"scenario-actions/v1","scenario_id":"S23","track":"Track6_IntegrityAdversarial","name":"Wildcard and SQL Injection Defense","initial_fixture":"p0-seed-v1","steps":[{"step":1,"action":"invoke","operation":"index","params":{}},{"step":2,"action":"invoke","capture_id":"wildcard-defense","operation":"query_entity","params":{"ref":"entity:%","entity_id":"%"}}]}

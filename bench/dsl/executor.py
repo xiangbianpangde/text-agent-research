@@ -1,7 +1,9 @@
 """Execute scenario actions through one SUT adapter and capture claims/observations only."""
 from __future__ import annotations
 
+import contextlib
 import dataclasses
+import fcntl
 import hashlib
 import os
 import shutil
@@ -16,7 +18,7 @@ from bench.oracle.manifest import OracleManifest
 from .command_codec import encode_operation
 from .loader import ScenarioActions, ScenarioContractError, validate_prediction
 from .mutations import apply_physical_mutation
-from bench.evaluators.state import snapshot_paths, tx_residue_empty
+from bench.evaluators.state import canonical_index_digest, snapshot_paths, tx_residue_empty
 
 
 @dataclasses.dataclass
@@ -92,6 +94,18 @@ def _wait_for_file(path: Path, timeout_ms: int) -> bool:
     return False
 
 
+@contextlib.contextmanager
+def _held_lock(workspace: str, relative: str):
+    path = Path(workspace) / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def execute_actions(
     actions: ScenarioActions,
     manifest: OracleManifest,
@@ -108,10 +122,23 @@ def execute_actions(
             if action == "mutate":
                 apply_physical_mutation(workspace, manifest, step)
                 continue
+            if action == "advance_time":
+                continue
+            if action == "context_reset":
+                adapter.reset_context()
+                continue
+            if action in ("restart_sut", "new_session"):
+                adapter.restart()
+                continue
             if action == "snapshot_state":
                 observation = snapshot_paths(workspace, snapshot_profile)
                 observation["tx_residue_empty"] = tx_residue_empty(workspace)
                 record.observations[step["capture_id"]] = observation
+                continue
+            if action == "snapshot_index":
+                record.observations[step["capture_id"]] = canonical_index_digest(
+                    str(Path(workspace) / ".index" / "research.sqlite")
+                )
                 continue
             arguments = encode_operation(step["operation"], step["params"])
             timeout_ms = int(step.get("timeout_ms", 30_000))
@@ -140,7 +167,11 @@ def execute_actions(
                 adapter.recover_after_hard_kill()
                 continue
 
-            result = adapter.invoke(arguments, capture_id=step.get("capture_id", ""), timeout_ms=timeout_ms)
+            if action == "invoke_while_locked":
+                with _held_lock(workspace, step["lock_path"]):
+                    result = adapter.invoke(arguments, capture_id=step["capture_id"], timeout_ms=timeout_ms)
+            else:
+                result = adapter.invoke(arguments, capture_id=step.get("capture_id", ""), timeout_ms=timeout_ms)
             if "capture_id" not in step:
                 continue
             if not isinstance(result.payload, dict):

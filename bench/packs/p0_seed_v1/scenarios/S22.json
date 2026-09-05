@@ -1,0 +1,1 @@
+{"schema_version":"scenario-actions/v1","scenario_id":"S22","track":"Track6_IntegrityAdversarial","name":"Nonexistent Prefix Injection Defense","initial_fixture":"p0-seed-v1","steps":[{"step":1,"action":"invoke","operation":"index","params":{}},{"step":2,"action":"invoke","capture_id":"prefix-defense","operation":"query_entity","params":{"ref":"run:R05","entity_id":"R05"}}]}

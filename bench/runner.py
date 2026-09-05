@@ -792,9 +792,10 @@ SCENARIO_REGISTRY = [
 SCENARIO_RUNNERS = [registration.runner for registration in SCENARIO_REGISTRY]
 REQUIRED_SCENARIO_IDS = [registration.scenario_id for registration in SCENARIO_REGISTRY]
 
-# P0.3A deliberately covers only the high-risk primitives. These IDs are not a
-# certification subset: every P0.3A report remains ineligible and Tier N/A.
+# P0.3B compiles all canonical scenarios in shadow mode. The seven anchors stay
+# named for focused regression tests, but the active Oracle coverage is 33/33.
 ORACLE_ANCHOR_IDS = ("S03", "S07", "S12", "S16", "S17", "S24", "S31")
+ORACLE_SCENARIO_IDS = tuple(REQUIRED_SCENARIO_IDS)
 DEFAULT_ORACLE_PACK = os.path.join(os.path.dirname(__file__), "packs", "p0_seed_v1")
 
 
@@ -813,8 +814,8 @@ def run_oracle_scenario(
     from .oracle.compiler import compile_gold
     from .oracle.manifest import load_manifest
 
-    if scenario_id not in ORACLE_ANCHOR_IDS:
-        raise ValueError(f"scenario is not migrated to P0.3A Oracle: {scenario_id}")
+    if scenario_id not in ORACLE_SCENARIO_IDS:
+        raise ValueError(f"scenario is not registered for P0.3B Oracle shadow: {scenario_id}")
     manifest = load_manifest(os.path.join(pack_root, "oracle-manifest.json"))
     actions = load_scenario(os.path.join(pack_root, "scenarios", f"{scenario_id}.json"))
     gold = compile_gold(manifest, actions)  # Trust boundary: before adapter process starts.

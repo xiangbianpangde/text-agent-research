@@ -1,9 +1,13 @@
-id: H003
-version: v1
+schema_version: 1
+entity_id: H003
+version_ref: H003@v1
+previous: null
 introduced_by: human:alice
 introduced_event: EV-000001
 authority_refs:
   - kind: paper
-    locator: external/paper-H003-pinned.txt
-    pin: sha256:pending
-statement: Pinned historical conclusion
+    locator: external/paper-H003-latest.txt
+    pin: sha256:72cc99173d6924299156f514de6e0d52b92fe0bc36b772aa39c825dc1c3257a2
+body:
+  kind: Hypothesis
+  threshold: 0.9

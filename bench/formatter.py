@@ -9,7 +9,7 @@ from .evaluator import BenchmarkMetrics
 from .scenarios import TRACKS, TRACK_NAMES
 
 
-BENCHMARK_VERSION = "0.4.0"
+BENCHMARK_VERSION = "0.5.0"
 
 
 def _pct(value: Optional[float]) -> str:
@@ -107,6 +107,8 @@ def format_json_report(metrics: BenchmarkMetrics) -> str:
         "p0_3_status": metrics.p0_3_status,
         "sut": metrics.sut_metadata,
         "oracle": {
+            "passed_scenarios": sum(1 for item in metrics.oracle_evaluations if item.get("passed")),
+            "failed_scenarios": sum(1 for item in metrics.oracle_evaluations if not item.get("passed")),
             "coverage": {
                 "required": metrics.oracle_required,
                 "compiled": len(metrics.oracle_compiled_scenario_ids),

@@ -96,14 +96,18 @@ def evaluate_scenario(
             add("observation_present", observed is not None, capture_id=capture_id)
             if observed is None:
                 continue
-            for key in ("external_termination", "signal", "tx_residue_empty"):
+            for key in ("external_termination", "signal", "tx_residue_empty", "index_present"):
                 if key in expected_observation:
                     add(key, observed.get(key) == expected_observation[key], capture_id=capture_id)
             equal_to = expected_observation.get("equals_capture")
             if equal_to:
                 baseline = execution.observations.get(equal_to)
-                exact = baseline is not None and observed.get("canonical_digest") == baseline.get("canonical_digest")
-                add("canonical_state_exact", exact, capture_id=capture_id, equals_capture=equal_to)
+                if "cle_digest" in observed:
+                    exact = baseline is not None and observed.get("cle_digest") == baseline.get("cle_digest")
+                    add("canonical_index_exact", exact, capture_id=capture_id, equals_capture=equal_to)
+                else:
+                    exact = baseline is not None and observed.get("canonical_digest") == baseline.get("canonical_digest")
+                    add("canonical_state_exact", exact, capture_id=capture_id, equals_capture=equal_to)
             continue
 
         prediction = execution.predictions.get(capture_id)
@@ -117,6 +121,8 @@ def evaluate_scenario(
             condition_ok = condition_ok and not (prediction.get("results") or [])
             fail_checks.append(condition_ok)
         add("expected_condition", condition_ok, capture_id=capture_id)
+        if condition["behavior"] == "fail_closed":
+            continue
 
         if "results" in checkpoint and checkpoint["results"]:
             gold_refs = {row["ref"] for row in checkpoint["results"]}
@@ -140,6 +146,13 @@ def evaluate_scenario(
             exact = _canonical_rows(prediction.get("asserted_facts") or []) == _canonical_rows(checkpoint["asserted_facts"])
             add("asserted_facts_exact", exact, capture_id=capture_id)
 
+        if "lineage" in checkpoint:
+            actual = sorted(
+                str(row.get("version_ref")) for row in prediction.get("results") or []
+                if isinstance(row, dict) and row.get("version_ref")
+            )
+            add("lineage_exact", actual == checkpoint["lineage"], capture_id=capture_id)
+
         if "evidence" in checkpoint:
             exact = _canonical_rows(prediction.get("evidence") or []) == _canonical_rows(checkpoint["evidence"])
             add("evidence_exact", exact, capture_id=capture_id)
@@ -148,6 +161,28 @@ def evaluate_scenario(
             exact = graph_exact_match(prediction.get("provenance_graph"), checkpoint["provenance_graph"])
             graph_checks.append(exact)
             add("provenance_graph_exact", exact, capture_id=capture_id)
+
+        if "required_routing" in checkpoint:
+            actual_route = prediction.get("retrieval_mode")
+            route_ok = actual_route in checkpoint["required_routing"]
+            if actual_route in checkpoint.get("forbidden_routing", []):
+                route_ok = False
+            add("routing_policy", route_ok, capture_id=capture_id)
+        if "ranking_authority" in checkpoint:
+            add(
+                "ranking_authority",
+                prediction.get("ranking_authority") == checkpoint["ranking_authority"],
+                capture_id=capture_id,
+            )
+
+        if "integrity_issues" in checkpoint:
+            actual_issues = []
+            for row in [*(prediction.get("warnings") or []), *(prediction.get("errors") or [])]:
+                if isinstance(row, dict) and isinstance(row.get("code"), str):
+                    actual_issues.append({"code": row["code"], "ref": row.get("ref")})
+            expected_codes = sorted(row["code"] for row in checkpoint["integrity_issues"])
+            actual_codes = sorted(row["code"] for row in actual_issues)
+            add("integrity_issues_exact", actual_codes == expected_codes, capture_id=capture_id)
 
         if "impact_set" in checkpoint:
             confusion = set_confusion(_predicted_refs(prediction, manifest), checkpoint["impact_set"])
