@@ -801,13 +801,17 @@ SCENARIO_REGISTRY = [
 ]
 
 SCENARIO_RUNNERS = [registration.runner for registration in SCENARIO_REGISTRY]
-REQUIRED_SCENARIO_IDS = [registration.scenario_id for registration in SCENARIO_REGISTRY]
+LEGACY_SCENARIO_IDS = tuple(registration.scenario_id for registration in SCENARIO_REGISTRY)
 
-# P0.3B compiles all canonical scenarios in shadow mode. The seven anchors stay
-# named for focused regression tests, but the active Oracle coverage is 33/33.
+DEFAULT_ORACLE_PACK = os.path.join(os.path.dirname(__file__), "packs", "p0_seed_v1")
+with open(os.path.join(DEFAULT_ORACLE_PACK, "pack.json"), encoding="utf-8") as _pack_file:
+    _pack_registry = json.load(_pack_file)
+REQUIRED_SCENARIO_IDS = list(_pack_registry["required_scenario_ids"])
+
+# Seven high-risk anchors remain named for focused regression tests. The formal
+# P0.3C path is the complete pack-owned registry, not the legacy function list.
 ORACLE_ANCHOR_IDS = ("S03", "S07", "S12", "S16", "S17", "S24", "S31")
 ORACLE_SCENARIO_IDS = tuple(REQUIRED_SCENARIO_IDS)
-DEFAULT_ORACLE_PACK = os.path.join(os.path.dirname(__file__), "packs", "p0_seed_v1")
 
 
 def run_oracle_scenario(

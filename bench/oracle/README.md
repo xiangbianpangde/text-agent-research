@@ -1,42 +1,41 @@
-# Independent Oracle — P0.3B
+# Independent Oracle — P0.3C
 
-Status: **INCOMPLETE (`oracle_shadow`)**.
+Status: **COMPLETE (`oracle_only`)**. P0 remains **INCOMPLETE** until P0.4 negative controls pass.
 
-P0.3A froze four contracts:
-
-- `oracle-manifest/v1`: objective initial universe;
-- `scenario-actions/v1`: execution and world mutations only;
-- `prediction/v1`: participant claims only;
-- `compiled-gold/v1`: generated expectations and state transitions.
-
-P0.3B migrates all 33 canonical scenario IDs onto that shadow path. This is full **Oracle coverage**, not a passing benchmark result and not the P0.3 trust-path cutover.
-
-## Trust Path
+## Default Trust Path
 
 ```text
-oracle manifest + action DSL ──compile before SUT start──> sealed Gold
-                                                        ┌──────────────┐
-action DSL ──execute through sut-adapter/v1────────────>│ prediction + │
-                                                        │ observations │
-sealed Gold + prediction/observations ──generic eval───>│ derived score│
-                                                        └──────────────┘
+pack.json + oracle-manifest/v1 + scenario-actions/v1
+  ├─ compile before participant start → compiled-gold/v1
+  └─ execute through sut-adapter/v1 → prediction/v1 + observations
+
+compiled Gold + prediction/observations → OracleScenarioEvaluation → formal metrics
 ```
 
-`compile_gold(manifest, actions)` accepts no adapter, workspace, prediction or SUT input. `execute_actions(...)` receives no compiled Gold. Scenario files cannot contain `passed`, `score`, `expected_*`, `gold_*`, TP/FP/FN, CIV, version correctness or graph-match fields.
+The default CLI does not invoke legacy `run_sXX()` functions. The pack-owned `pack.json` registry and action files own scenario selection and metadata. Formal score, TP/FP/FN, CIV, version accuracy, graph exactness, refusal accuracy and integrity metrics derive only from Oracle evaluations.
 
-## P0.3B State
+Legacy scenarios remain available only through `--legacy-diagnostic`. Their values are nested under `legacy_diagnostic` and cannot alter formal Oracle fields.
 
-A full v0.5 run reports:
+## Machine Contracts
 
-- `evaluation_engine: oracle_shadow`;
-- `oracle.coverage.compiled: 33` of 33;
-- `p0_3_status: incomplete_p0_3b`;
-- `certification_eligible: false`;
-- `tier: N/A`;
-- `coverage.ineligible_reasons: ["P0_3_SHADOW_MODE"]`.
+- `oracle-manifest/v1`: objective universe, lifecycle, facts, evidence, relations and query registry.
+- `scenario-actions/v1`: execution and world mutations only; no expected results or scores.
+- `prediction/v1`: closed participant output with complete typed ResultRow objects.
+- `compiled-gold/v1`: deterministic pre-SUT state/checkpoints/digests.
 
-The official ResearchCTL adapter currently passes 5 strict Oracle scenarios and fails 28. Those failures expose missing `prediction/v1` facts, evidence, graph, exact condition, routing or frozen-CLE support. They must remain visible; legacy 33/33 values are diagnostic only and do not establish Oracle-scored quality.
+## Current Official Participant
 
-## P0.3C Exit
+A full v0.6 run reports:
 
-P0.3 can be declared complete only after the default path stops calling all legacy `run_sXX()` self-scoring functions, formal metrics are aggregated only from Oracle evaluations, and no mixed legacy/Oracle score remains. P0 remains incomplete after that until P0.4 negative controls pass.
+- `evaluation_engine: oracle_only`;
+- `p0_3_status: complete_p0_3c`;
+- Oracle coverage 33/33;
+- formal 6 PASS / 27 FAIL, composite 20.8;
+- CIV 0;
+- legacy diagnostic absent by default;
+- `certification_eligible: false`, Tier N/A;
+- ineligible reason `P0_4_NEGATIVE_CONTROLS_PENDING`.
+
+The 27 strict failures are preserved. In particular, S29 rejects the participant's schema-incompatible SQLite index under frozen CLE, and S31 rejects an extra opaque reconciliation result even though external SIGKILL/no-half-commit/fixed-point observations pass.
+
+P0.4 must now prove that Always-Pass, Always-Abstain, Universal-Stale, Universal-Impact, Random and Gold-Reader controls cannot obtain eligibility or a passing conclusion.

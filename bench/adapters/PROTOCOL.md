@@ -134,7 +134,7 @@ A successful `invoke` additionally requires:
 }
 ```
 
-`payload` is a strict `prediction/v1` object for P0.3 execution. It contains claims, result sets, evidence and routing declarations, but cannot contain `passed`, `score`, TP/FP/FN, CIV, version correctness or graph-match fields. Benchmark semantics are compared with sealed independent Gold; participants cannot self-award scores.
+`payload` is a strict `prediction/v1` object for P0.3 execution. It contains claims, result sets, evidence and routing declarations, but cannot contain `passed`, `score`, TP/FP/FN, CIV, version correctness or graph-match fields. Benchmark semantics are compared with sealed independent Gold; participants cannot self-award scores. In v0.6 the default benchmark path is Oracle-only; legacy self-scored scenarios require the explicit `--legacy-diagnostic` flag and never affect formal fields.
 
 ## Harness CLI
 
@@ -168,8 +168,8 @@ Completed here:
 - command digest and adapter identity in machine reports;
 - independent weak stub measured through the same runner.
 
-Not claimed here:
+Subsequent status:
 
-- independent Gold or semantic scoring (P0.3);
-- hostile filesystem/container isolation and Gold-reader defense (P0.4);
+- independent Gold and Oracle-only scoring completed in P0.3;
+- hostile filesystem/container isolation and Gold-reader defense remain P0.4;
 - OCI submission or remote leaderboard operation (P2).

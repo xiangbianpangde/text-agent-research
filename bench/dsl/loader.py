@@ -204,6 +204,29 @@ def validate_scenario(document: Any, *, path: str = "<memory>") -> ScenarioActio
     return ScenarioActions(document=output, digest=digest_json(output), path=path)
 
 
+def load_pack_registry(pack_root: str | Path) -> Mapping[str, Any]:
+    root = Path(pack_root)
+    try:
+        value = json.loads((root / "pack.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ScenarioContractError(f"cannot load benchmark pack registry: {exc}") from exc
+    expected = {"schema_version", "pack_id", "required_scenario_ids"}
+    if not isinstance(value, dict) or set(value) != expected:
+        raise ScenarioContractError("benchmark pack registry keys mismatch")
+    if value["schema_version"] != "benchmark-pack/v1":
+        raise ScenarioContractError("unsupported benchmark pack registry schema")
+    if not isinstance(value["required_scenario_ids"], list) or any(
+        not isinstance(item, str) or not item for item in value["required_scenario_ids"]
+    ):
+        raise ScenarioContractError("required_scenario_ids must be a string array")
+    if len(value["required_scenario_ids"]) != len(set(value["required_scenario_ids"])):
+        raise ScenarioContractError("required_scenario_ids contains duplicates")
+    files = {path.stem for path in (root / "scenarios").glob("*.json")}
+    if files != set(value["required_scenario_ids"]):
+        raise ScenarioContractError("pack registry does not match scenario action files")
+    return value
+
+
 def load_scenario(path: str | Path) -> ScenarioActions:
     source = Path(path)
     try:

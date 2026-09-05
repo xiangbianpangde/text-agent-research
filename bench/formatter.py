@@ -9,7 +9,7 @@ from .evaluator import BenchmarkMetrics
 from .scenarios import TRACKS, TRACK_NAMES
 
 
-BENCHMARK_VERSION = "0.5.0"
+BENCHMARK_VERSION = "0.6.0"
 
 
 def _pct(value: Optional[float]) -> str:
@@ -44,7 +44,7 @@ def format_terminal_dashboard(metrics: BenchmarkMetrics) -> str:
         f"  {bold}Oracle coverage:{reset}       {len(metrics.oracle_compiled_scenario_ids)} / {metrics.oracle_required}",
         f"  {bold}SUT adapter:{reset}            {metrics.sut_metadata.get('adapter') or 'unknown'}",
         f"  {bold}SUT command digest:{reset}     {metrics.sut_metadata.get('command_digest') or 'unknown'}",
-        f"  {bold}Diagnostic score:{reset}      {_score(metrics.composite_score)} / 100.0",
+        f"  {bold}Formal Oracle score:{reset}   {_score(metrics.composite_score)} / 100.0",
         f"  {bold}Scenario coverage:{reset}     {len(metrics.covered_scenario_ids)} / "
         f"{len(metrics.covered_scenario_ids) + len(metrics.missing_scenario_ids)} "
         f"({metrics.coverage_rate * 100.0:.1f}%)",
@@ -81,7 +81,7 @@ def format_terminal_dashboard(metrics: BenchmarkMetrics) -> str:
         "",
         f"{bold}{cyan}{'=' * 88}{reset}",
         (
-            f"{bold}{yellow} DIAGNOSTIC ONLY — partial or incomplete runs never receive a tier.{reset}"
+            f"{bold}{yellow} NOT CERTIFIABLE — required P0 gates remain incomplete.{reset}"
             if not metrics.certification_eligible
             else (
                 f"{bold}{green} INTERNAL CONFORMANCE PASS — not a public benchmark certification.{reset}"
@@ -178,7 +178,7 @@ def format_talk_report_html(metrics: BenchmarkMetrics) -> str:
         for result in metrics.scenario_results
     )
     verdict = (
-        "Diagnostic only: coverage is incomplete, so no tier is available."
+        "Not certifiable: required P0 gates remain incomplete, so no tier is available."
         if not metrics.certification_eligible
         else (
             "Internal conformance passed; this is not a public benchmark certification."

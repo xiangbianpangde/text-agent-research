@@ -8,7 +8,7 @@ contracts introduce an independent SUT adapter and Oracle.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 
 MetricValue = Optional[float]
@@ -114,6 +114,95 @@ def _duplicate_ids(ids: Sequence[str]) -> List[str]:
             duplicates.add(value)
         seen.add(value)
     return sorted(duplicates)
+
+
+def legacy_diagnostic_payload(metrics: BenchmarkMetrics) -> Dict[str, Any]:
+    return {
+        "composite_score": metrics.composite_score,
+        "passed_scenarios": metrics.passed_scenarios,
+        "total_scenarios": metrics.total_scenarios,
+        "integrity_gate_passed": metrics.integrity_gate_passed,
+        "metrics": {
+            "pgem": metrics.pgem, "vlp": metrics.vlp,
+            "sdp": metrics.sdp, "sdr": metrics.sdr, "sf1": metrics.sf1,
+            "ip": metrics.ip, "ir": metrics.ir, "if1": metrics.if1,
+            "fcaa": metrics.fcaa, "zhr": metrics.zhr, "civ": metrics.civ,
+        },
+        "track_scores": dict(metrics.track_scores),
+        "scenarios": [dataclasses.asdict(result) for result in metrics.scenario_results],
+    }
+
+
+def evaluate_oracle_benchmark(
+    oracle_evaluations: Sequence[Any],
+    *,
+    evaluation_mode: str,
+    scenario_metadata: Mapping[str, Mapping[str, str]],
+    required_tracks: Sequence[str],
+    required_scenario_ids: Sequence[str],
+) -> BenchmarkMetrics:
+    """Aggregate only independent Oracle evaluations into formal metrics."""
+    hallucination_codes = {
+        "PHANTOM_ENTITY_ASSERTED", "PHANTOM_VERSION_ASSERTED",
+        "UNVERIFIED_FACT_ASSERTED_AS_AUTHORITATIVE",
+        "AMBIGUITY_SILENTLY_RESOLVED",
+    }
+    results: List[ScenarioResult] = []
+    for evaluation in oracle_evaluations:
+        metadata = scenario_metadata[evaluation.scenario_id]
+        failed_checks = [check["kind"] for check in evaluation.checks if not check["passed"]]
+        results.append(ScenarioResult(
+            scenario_id=evaluation.scenario_id,
+            track=metadata["track"],
+            name=metadata["name"],
+            passed=evaluation.passed,
+            score=evaluation.score,
+            detail=(
+                "Independent Oracle checks passed"
+                if evaluation.passed
+                else "Failed checks: " + ", ".join(failed_checks or ["CIV"])
+            ),
+            civ_count=evaluation.civ_count,
+            is_hallucination=any(
+                violation.get("code") in hallucination_codes
+                for violation in evaluation.civ_violations
+            ),
+            is_fail_closed_expected=evaluation.fail_closed_expected,
+            fail_closed_satisfied=evaluation.fail_closed_satisfied,
+            stale_tp=evaluation.stale_tp,
+            stale_fp=evaluation.stale_fp,
+            stale_fn=evaluation.stale_fn,
+            impact_tp=evaluation.impact_tp,
+            impact_fp=evaluation.impact_fp,
+            impact_fn=evaluation.impact_fn,
+            version_correct=evaluation.version_correct,
+            graph_exact_match=evaluation.graph_exact_match,
+        ))
+
+    metrics = evaluate_benchmark(
+        results,
+        evaluation_mode=evaluation_mode,
+        required_tracks=required_tracks,
+        required_scenario_ids=required_scenario_ids,
+    )
+    metrics.evaluation_engine = "oracle_only"
+    metrics.score_provenance = "independent_oracle"
+    metrics.integrity_metrics_provenance = "independent_oracle"
+    metrics.p0_3_status = "complete_p0_3c"
+    metrics.shadow_review_status = "NOT_APPLICABLE_ORACLE_ONLY"
+    metrics.oracle_required = len(required_scenario_ids)
+    by_id = {evaluation.scenario_id: evaluation for evaluation in oracle_evaluations}
+    metrics.oracle_compiled_scenario_ids = [sid for sid in required_scenario_ids if sid in by_id]
+    metrics.oracle_missing_scenario_ids = [sid for sid in required_scenario_ids if sid not in by_id]
+    metrics.oracle_evaluations = [by_id[sid].to_dict() for sid in metrics.oracle_compiled_scenario_ids]
+    if metrics.oracle_missing_scenario_ids and "P0_3_ORACLE_COVERAGE_INCOMPLETE" not in metrics.ineligible_reasons:
+        metrics.ineligible_reasons.append("P0_3_ORACLE_COVERAGE_INCOMPLETE")
+    metrics.ineligible_reasons.append("P0_4_NEGATIVE_CONTROLS_PENDING")
+    metrics.certification_eligible = False
+    metrics.iqg_passed = False
+    metrics.tier = "N/A"
+    metrics.tier_name = "P0.4 负控制待验收 (Oracle-Only / Not Certifiable)"
+    return metrics
 
 
 def evaluate_benchmark(
@@ -291,20 +380,7 @@ def evaluate_benchmark(
         metrics.tier_name = "内部一致性套件未通过 (Internal Conformance Failed)"
 
     if oracle_evaluations is not None:
-        metrics.legacy_diagnostic = {
-            "composite_score": metrics.composite_score,
-            "passed_scenarios": metrics.passed_scenarios,
-            "total_scenarios": metrics.total_scenarios,
-            "integrity_gate_passed": metrics.integrity_gate_passed,
-            "metrics": {
-                "pgem": metrics.pgem, "vlp": metrics.vlp,
-                "sdp": metrics.sdp, "sdr": metrics.sdr, "sf1": metrics.sf1,
-                "ip": metrics.ip, "ir": metrics.ir, "if1": metrics.if1,
-                "fcaa": metrics.fcaa, "zhr": metrics.zhr, "civ": metrics.civ,
-            },
-            "track_scores": dict(metrics.track_scores),
-            "scenarios": [dataclasses.asdict(result) for result in results],
-        }
+        metrics.legacy_diagnostic = legacy_diagnostic_payload(metrics)
         metrics.composite_score = None
         metrics.passed_scenarios = None
         metrics.pgem = metrics.vlp = metrics.sdp = metrics.sdr = metrics.sf1 = None

@@ -107,30 +107,35 @@ class CliSafetyTests(unittest.TestCase):
     def _run_json(*args: str) -> dict:
         completed = subprocess.run(
             [sys.executable, "-m", "bench", *args, "--json"],
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
         )
-        return json.loads(completed.stdout)
+        report = json.loads(completed.stdout)
+        report["_returncode"] = completed.returncode
+        return report
 
     def test_single_hardcoded_scenario_is_diagnostic_only(self) -> None:
         report = self._run_json("--scenario", "S03")
 
         self.assertEqual(report["total_scenarios"], 1)
-        self.assertIsNone(report["composite_score"])
-        self.assertEqual(report["legacy_diagnostic"]["composite_score"], 100.0)
+        self.assertEqual(report["composite_score"], 0.0)
+        self.assertEqual(report["legacy_diagnostic"], {})
         self.assertEqual(report["evaluation_mode"], "diagnostic_partial")
         self.assertFalse(report["certification_eligible"])
-        self.assertIsNone(report["iqg_passed"])
+        self.assertFalse(report["iqg_passed"])
         self.assertEqual(report["tier"], "N/A")
         self.assertIsNone(report["metrics"]["pgem"])
+        self.assertEqual(report["evaluation_engine"], "oracle_only")
+        self.assertEqual(report["p0_3_status"], "complete_p0_3c")
+        self.assertEqual(report["_returncode"], 1)
 
     def test_track_filter_runs_only_the_selected_track(self) -> None:
         report = self._run_json("--track", "Track1_DefinitionProvenance")
 
         self.assertEqual(report["total_scenarios"], 6)
         self.assertEqual(
-            {scenario["track"] for scenario in report["legacy_diagnostic"]["scenarios"]},
+            {scenario["track"] for scenario in report["scenarios"]},
             {"Track1_DefinitionProvenance"},
         )
         self.assertEqual(report["evaluation_mode"], "diagnostic_partial")
@@ -150,7 +155,7 @@ class CliSafetyTests(unittest.TestCase):
                 "S03",
                 "--json",
             ],
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
         )
@@ -158,6 +163,8 @@ class CliSafetyTests(unittest.TestCase):
 
         self.assertEqual(report["evaluation_mode"], "diagnostic_partial")
         self.assertEqual(report["tier"], "N/A")
+        self.assertEqual(report["evaluation_engine"], "oracle_only")
+        self.assertEqual(completed.returncode, 1)
 
 
 if __name__ == "__main__":

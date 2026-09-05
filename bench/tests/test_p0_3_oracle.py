@@ -13,13 +13,14 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from bench.adapters import ProcessSUTAdapter
 from bench.adapters.process import SUTAdapterError
 from bench.dsl.command_codec import encode_operation
 from bench.dsl.executor import ExecutionRecord
-from bench.dsl.loader import ScenarioContractError, load_scenario, validate_prediction, validate_scenario
+from bench.dsl.loader import ScenarioContractError, load_pack_registry, load_scenario, validate_prediction, validate_scenario
 from bench.evaluator import ScenarioResult, evaluate_benchmark
 from bench.evaluators.graph import graph_exact_match
 from bench.evaluators.integrity import CIV_CODES, classify_civ
@@ -131,6 +132,11 @@ class CompilerTests(unittest.TestCase):
                 compile_gold(self.manifest, load_scenario(PACK / "scenarios" / f"{scenario_id}.json")),
                 gold_schema,
             )
+
+    def test_pack_registry_is_complete_and_independent_of_legacy_functions(self) -> None:
+        registry = load_pack_registry(PACK)
+        self.assertEqual(tuple(registry["required_scenario_ids"]), ORACLE_SCENARIO_IDS)
+        self.assertEqual(len(registry["required_scenario_ids"]), 33)
 
     def test_all_33_gold_documents_are_byte_deterministic(self) -> None:
         self.assertEqual(tuple(REQUIRED_SCENARIO_IDS), ORACLE_SCENARIO_IDS)
@@ -650,6 +656,66 @@ class RuntimeIsolationTests(unittest.TestCase):
                 self.assertTrue(not status or status.startswith("Z"), status)
             finally:
                 adapter.shutdown()
+
+
+class OracleOnlyCutoverTests(unittest.TestCase):
+    @staticmethod
+    def _evaluation(passed: bool):
+        from bench.evaluators.scenario import OracleScenarioEvaluation
+        return OracleScenarioEvaluation(
+            scenario_id="S01", passed=passed, score=1.0 if passed else 0.0,
+            checks=[{"kind": "synthetic", "passed": passed}], civ_count=0,
+        )
+
+    def test_default_cli_never_calls_legacy_runner(self) -> None:
+        import contextlib
+        import io
+        import bench.cli as cli_module
+
+        legacy_runner = mock.Mock(side_effect=AssertionError("legacy runner called"))
+        registration = SimpleNamespace(scenario_id="S01", track=TRACKS[0], runner=legacy_runner)
+        with mock.patch.object(cli_module, "ORACLE_SCENARIO_IDS", ("S01",)), mock.patch.object(
+            cli_module, "REQUIRED_SCENARIO_IDS", ["S01"]
+        ), mock.patch.object(cli_module, "SCENARIO_REGISTRY", [registration]), mock.patch.object(
+            cli_module, "run_oracle_scenario", return_value=(self._evaluation(True), {"adapter": "stub"}, {})
+        ):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                cli_module.main(["--json"])
+        report = json.loads(output.getvalue())
+        legacy_runner.assert_not_called()
+        self.assertEqual(report["evaluation_engine"], "oracle_only")
+        self.assertEqual(report["legacy_diagnostic"], {})
+
+    def test_legacy_flag_is_diagnostic_and_cannot_change_formal_result(self) -> None:
+        import contextlib
+        import io
+        import bench.cli as cli_module
+
+        legacy_runner = mock.Mock(return_value=ScenarioResult("S01", TRACKS[0], "legacy", True, 1.0))
+        registration = SimpleNamespace(scenario_id="S01", track=TRACKS[0], runner=legacy_runner)
+
+        class Sandbox:
+            sut_metadata = {"adapter": "stub"}
+            def __init__(self, *args, **kwargs): pass
+            def __enter__(self): return self
+            def __exit__(self, *args): return None
+
+        with mock.patch.object(cli_module, "ORACLE_SCENARIO_IDS", ("S01",)), mock.patch.object(
+            cli_module, "REQUIRED_SCENARIO_IDS", ["S01"]
+        ), mock.patch.object(cli_module, "SCENARIO_REGISTRY", [registration]), mock.patch.object(
+            cli_module, "BenchmarkSandbox", Sandbox
+        ), mock.patch.object(
+            cli_module, "run_oracle_scenario", return_value=(self._evaluation(False), {"adapter": "stub"}, {})
+        ):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                cli_module.main(["--legacy-diagnostic", "--json"])
+        report = json.loads(output.getvalue())
+        legacy_runner.assert_called_once()
+        self.assertEqual(report["passed_scenarios"], 0)
+        self.assertEqual(report["legacy_diagnostic"]["passed_scenarios"], 1)
+        self.assertEqual(report["score_provenance"], "independent_oracle")
 
 
 class StateAnchorTests(unittest.TestCase):

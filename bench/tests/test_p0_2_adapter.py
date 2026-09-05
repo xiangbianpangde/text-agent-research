@@ -115,8 +115,9 @@ class AdapterLifecycleTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 1)
         self.assertEqual(report["sut"]["adapter"], "independent-stub")
         self.assertEqual(report["total_scenarios"], 1)
-        self.assertIsNone(report["passed_scenarios"])
-        self.assertEqual(report["legacy_diagnostic"]["passed_scenarios"], 0)
+        self.assertEqual(report["passed_scenarios"], 0)
+        self.assertEqual(report["legacy_diagnostic"], {})
+        self.assertEqual(report["evaluation_engine"], "oracle_only")
         self.assertEqual(report["tier"], "N/A")
         self.assertFalse(report["certification_eligible"])
 

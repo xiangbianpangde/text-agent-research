@@ -2,58 +2,56 @@
 schema_version: 1
 project_id: researchctl
 authority: working_projection
-context_revision: 8
-checkpoint_id: CP-0008
+context_revision: 9
+checkpoint_id: CP-0009
 source_session_id: 01a06a96-0a23-7359-9ce9-3f9d1adacb7f
-covered_through_entry_id: 01a06a96-0a23-7359-9ce9-3f9d1adacb7f:2026-09-05T14:30
+covered_through_entry_id: 01a06a96-0a23-7359-9ce9-3f9d1adacb7f:2026-09-05T14:45
 git_branch: main
-git_head: 0d20baa61242d905bf9fe464b0dd244f3b62fbf3
-base_context_sha256: 18eec4062b6c8b2ab980affacc06aac4ea9103d42d9d1c9041e894c281f5ed4c
-generated_at: 2026-09-05T13:19:45.598Z
+git_head: be62ec1cbd3772f0a693ee23d09a1eee6cddcb4a
+base_context_sha256: 91ae7f0800717a6836009f323ca41d8a8270b84c0186a2e757fe9084f8d83492
+generated_at: 2026-09-05T13:36:17.450Z
 ---
 
 # ResearchCTL-Bench Working Context
 
 ## Current Objective
 
-Sixth Sol audit `7402609a-bfa8-4db5-a0af-231ef2e21c62` returned `PASS — P0.3B repair accepted; P0.3C may begin`. Commit the accepted P0.3B repair checkpoint, then implement P0.3C Oracle-only default path. P0 remains incomplete; do not enter P1/P2.
+P0.3B was accepted by sixth Sol audit `7402609a-bfa8-4db5-a0af-231ef2e21c62`. P0.3C Oracle-only cutover is implemented and locally verified. Commit P0.3C, then proceed only to P0.4 negative controls. P0 remains incomplete; do not enter P1/P2.
 
 ## Authority And Git
 
 - Frozen authority: `ResearchCTL-Bench-P0-Contract.md`; benchmark/CLE spec: `超长程实验 Agent 检索系统 Benchmark 方案 (ResearchCTL-Bench).md`.
-- Accepted machine report: `benchmark_report.json`, `shadow_review_status=PASS_P0_3B_ACCEPTED`.
-- `9c3209f`: P0.1/P0.2/P0.3A; `0d20baa`: initial P0.3B. Accepted repair tree is uncommitted and must become the next checkpoint.
-- Main two commits ahead of origin, not pushed. Root Pi session HTML and `.pi/sol-staging/` are excluded.
+- Commits: `9c3209f` P0.1/P0.2/P0.3A; `0d20baa` initial P0.3B; `be62ec1` accepted P0.3B trust repairs.
+- P0.3C changes uncommitted. Main is three commits ahead of origin, not pushed.
+- `.pi/sol-staging/` and root Pi session HTML are unrelated artifacts and excluded.
 
-## Accepted P0.3B Evidence
+## P0.3B Acceptance
 
-- Six Sol review rounds; final gate checks passed: exact audit bundle hash, 0 AppleDouble, fresh extraction 50/50 Harness, root fixture stored/fresh fingerprint exact, source.tar double rebuild exact, all prior trust checks closed.
-- Final Sol verdict: `PASS — P0.3B repair accepted; P0.3C may begin`.
-- Query registry and structured mutations close hidden Gold channels.
-- Strict RFC3339/UTC, explicit object lifecycle, full as-of state and virtual-clock binding.
-- Eight CIV classes use checkpoint compiled state; dynamic versions and cutoff facts covered.
-- Complete typed ResultRow, optional string ref only, evaluator revalidation, full-row exactness.
-- Fail-closed Gold suppresses positive channels; attached answers fail.
-- Historical binding, downstream stale graph, unrelated freshness and session CURRENT/INDEX mechanics accepted.
-- Canonical `source.tar` has 306 members, no AppleDouble/links/traversal; source/fixture hash `sha256:205483526cf17db0066b55c0f097a99043443a79ed0c5fa919805537b73eea01`; deterministic builder.
-- CLE fixed schema/order/normalization and explicit transaction; process-group cleanup closed.
-- Deterministic root scan sorts os.walk subdirs/files; root fingerprint `sha256:50aef045b805311de1e1111945f1397db6fa69bb1e93b3634a6380cb3c9fc2eb` stored=fresh after extraction.
+- Sixth Sol verdict: `PASS — P0.3B repair accepted; P0.3C may begin`.
+- Fresh extracted self-contained bundle: Harness 50/50, root stored/fresh fingerprint exact, canonical fixture double rebuild exact, 0 AppleDouble.
+- Query/Gold independence, RFC3339/UTC lifecycle, checkpoint-state CIV, complete ResultRow, fail-closed, source bindings, stale graph, session mechanics, reproducible source.tar, CLE and process cleanup all accepted.
+
+## P0.3C Implementation
+
+- Version v0.6.0.
+- Default CLI scenario registry is pack-owned `bench/packs/p0_seed_v1/pack.json` plus action DSL.
+- Default path does not access/call legacy `registration.runner` or `run_sXX()`.
+- Formal aggregation accepts only `OracleScenarioEvaluation`; score, TP/FP/FN, CIV, VLP, PGEM, FCAA and IQG derive from independent Oracle results.
+- `--legacy-diagnostic` is the only legacy execution path. Its values are nested under `legacy_diagnostic` and cannot change formal fields.
+- P0.4 pending is an explicit eligibility reason and forces Tier N/A.
 
 ## Current Machine State
 
-- v0.5.0 `oracle_shadow`, P0.3B accepted, coverage 33/33.
-- Strict vector 6 PASS (`S10`,`S11`,`S14`,`S19`,`S26`,`S30`) / 27 FAIL; CIV 0.
+- `evaluation_engine=oracle_only`, `p0_3_status=complete_p0_3c`, `score_provenance=independent_oracle`.
+- Coverage 33/33; formal 6 PASS / 27 FAIL; composite 20.8; CIV 0; integrity gate false.
+- `certification_eligible=false`, Tier N/A; sole full-run reason `P0_4_NEGATIVE_CONTROLS_PENDING`.
+- Default legacy namespace empty. Explicit S19 legacy diagnostic left formal result unchanged.
 - S29 fixed-CLE incompatibility and S31 opaque reconcile result remain strict FAIL.
-- Formal score/passed/integrity/IQG null; Tier N/A; certification false. Legacy diagnostic isolated.
-- Harness 50/50 PASS; ResearchCTL regressions 443/443 PASS; trust imports 0; action self-award fields 0.
-- Accepted report audit: 0 errors / 0 warnings; PDF refreshed.
+- Harness 53/53 PASS; ResearchCTL regressions 443/443 PASS; trust imports 0; action self-award 0; report audit 0/0; PDF refreshed.
 
-## P0.3C Target
+## P0.4 Target
 
-- Default CLI/runner executes only the 33 Oracle action scenarios; no active call to legacy `run_sXX()`.
-- Formal metrics aggregate only from `OracleScenarioEvaluation` and compiled Gold.
-- Legacy path remains available only behind an explicit diagnostic flag and is nested as diagnostic output.
-- Full and partial Oracle modes retain coverage/eligibility safety. P0.3 completion must not imply P0 completion or public certification.
+Implement and test six controls: Always-Pass, Always-Abstain, Universal-Stale, Universal-Impact, Random, Gold-Reader. Every control must remain ineligible and must not obtain a passing conclusion. Gold-Reader must be blocked by isolation boundaries. P0 completes only after all P0 exit conditions, including clean-environment determinism, pass.
 
 ## Negative Constraints / Do Not Assume
 
@@ -71,7 +69,7 @@ Sixth Sol audit `7402609a-bfa8-4db5-a0af-231ef2e21c62` returned `PASS — P0.3B 
 
 ## Next Action
 
-1. Git commit accepted P0.3B repair tree excluding audit staging/session HTML.
-2. Implement P0.3C Oracle-only orchestration and aggregation with explicit legacy diagnostic flag.
-3. Add no-active-run_sXX and no-mixed-metrics regressions; run full Harness/443/shadow.
-4. Refresh context after P0.3C checkpoint; P0 then proceeds only to P0.4.
+1. Commit P0.3C code/tests/reports/context excluding audit artifacts.
+2. Implement P0.4 six negative controls and isolation tests.
+3. Run Harness, 443 regressions, all controls, full Oracle report and clean-environment determinism.
+4. Refresh context and obtain final review before declaring P0 complete.
