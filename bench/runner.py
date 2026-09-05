@@ -6,12 +6,15 @@ import json
 import os
 import shutil
 import sqlite3
-import subprocess
 import tempfile
-from typing import Callable, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
+from .adapters import ProcessSUTAdapter, default_researchctl_command
+from .adapters.process import project_root
 from .evaluator import ScenarioResult
-from .scenarios import ScenarioDef, TRACKS
+from .legacy_fixture import DEFAULT_BODY, dump_mapping, hold_freeze_lock, write_bootstrap
+from .scenarios import TRACKS
 
 
 def canonical_dump(db_path: str) -> str:
@@ -50,29 +53,41 @@ def canonical_dump(db_path: str) -> str:
 
 
 class BenchmarkSandbox:
-    """隔离沙箱，保证每个 Scenario 运行在完全独立的 Git 副本中。"""
+    """Per-scenario workspace connected to a process-level participant adapter."""
 
-    def __init__(self, base_fixture: str = "fixture"):
+    def __init__(
+        self,
+        base_fixture: str = "fixture",
+        *,
+        sut_command: Optional[Sequence[str]] = None,
+        sut_cwd: Optional[str] = None,
+    ):
         self.tmp_dir = tempfile.mkdtemp(prefix="bench_sb_")
         self.ws = os.path.join(self.tmp_dir, "ws")
         shutil.copytree(base_fixture, self.ws)
         self.db_path = os.path.join(self.ws, ".index", "research.sqlite")
+        self.adapter = ProcessSUTAdapter(
+            sut_command or default_researchctl_command(),
+            cwd=sut_cwd or project_root(),
+        )
+        self.sut_metadata: Dict[str, object] = {}
 
     def cleanup(self):
+        self.adapter.shutdown()
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def __enter__(self):
+        self.adapter.prepare(self.ws)
+        self.adapter.health()
+        self.sut_metadata = self.adapter.metadata
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.cleanup()
 
     def run_cmd(self, cmd_args: List[str]) -> Tuple[int, str, str]:
-        env = dict(os.environ)
-        env["PYTHONPATH"] = os.getcwd()
-        full_cmd = ["python3", "-m", "researchctl.cli", "--root", self.ws] + cmd_args
-        res = subprocess.run(full_cmd, cwd=self.ws, capture_output=True, text=True, env=env)
-        return res.returncode, res.stdout, res.stderr
+        result = self.adapter.invoke(cmd_args)
+        return result.exit_code, result.stdout, result.stderr
 
     def run_json(self, cmd_args: List[str]) -> Tuple[int, Optional[dict]]:
         code, out, _ = self.run_cmd(cmd_args)
@@ -96,29 +111,27 @@ class BenchmarkSandbox:
 
 def run_s01_definition_origin(sb: BenchmarkSandbox) -> ScenarioResult:
     """S01: Definition Origin Attribution."""
-    from researchctl.tests.p1b_bootstrap import write_bootstrap
-    from researchctl.mini_yaml import load_file
     write_bootstrap(sb.ws)
     def_path = os.path.join(sb.ws, "definitions", "H003", "H003@v1.yaml")
     with open(def_path, "a", encoding="utf-8") as f:
         f.write("\nintroduced_by: 'human:alice'\nintroduced_event: 'EV-000001'\n")
-    
-    data = load_file(def_path)
-    passed = (data.get("introduced_by") == "human:alice" and data.get("introduced_event") == "EV-000001")
+
+    with open(def_path, encoding="utf-8") as f:
+        data = f.read()
+    passed = "introduced_by: 'human:alice'" in data and "introduced_event: 'EV-000001'" in data
     return ScenarioResult(
         scenario_id="S01",
         track="Track1_DefinitionProvenance",
         name="Definition Origin Attribution",
         passed=passed,
         score=1.0 if passed else 0.0,
-        detail="成功追溯 H003@v1 提出者 human:alice 与事件 EV-000001" if passed else f"元数据提取失败: {data}",
+        detail="成功追溯 H003@v1 提出者 human:alice 与事件 EV-000001" if passed else "元数据提取失败",
         version_correct=True if passed else False,
     )
 
 
 def run_s02_definition_authority(sb: BenchmarkSandbox) -> ScenarioResult:
     """S02: Definition Authority Source Tracing."""
-    from researchctl.tests.p1b_bootstrap import write_bootstrap
     write_bootstrap(sb.ws)
     def_path = os.path.join(sb.ws, "definitions", "H003", "H003@v1.yaml")
     with open(def_path, "a", encoding="utf-8") as f:
@@ -155,15 +168,13 @@ def run_s03_external_literature_pinning(sb: BenchmarkSandbox) -> ScenarioResult:
 
 def run_s04_definition_evolution_rationale(sb: BenchmarkSandbox) -> ScenarioResult:
     """S04: Definition Evolution & Rationale."""
-    from researchctl.tests.p1b_bootstrap import write_bootstrap, DEFAULT_BODY
-    from researchctl.mini_yaml import dump
     write_bootstrap(sb.ws)
     ddir = os.path.join(sb.ws, ".index", "tx", "staging_input")
     os.makedirs(ddir, exist_ok=True)
     inp_path = os.path.join(ddir, "rev-s04.yaml")
     with open(inp_path, "w", encoding="utf-8") as f:
-        f.write(dump(DEFAULT_BODY))
-    
+        f.write(dump_mapping(DEFAULT_BODY))
+
     code, stdout, _ = sb.run_cmd([
         "revise-definition", "--idempotency-key", "rev-s04",
         "--definition", "H003", "--expected-previous", "H003@v1",
@@ -185,15 +196,13 @@ def run_s04_definition_evolution_rationale(sb: BenchmarkSandbox) -> ScenarioResu
 
 def run_s05_definition_lineage_ordering(sb: BenchmarkSandbox) -> ScenarioResult:
     """S05: Definition Lineage Ordering."""
-    from researchctl.tests.p1b_bootstrap import write_bootstrap, DEFAULT_BODY
-    from researchctl.mini_yaml import dump
     write_bootstrap(sb.ws)
     ddir = os.path.join(sb.ws, ".index", "tx", "staging_input")
     os.makedirs(ddir, exist_ok=True)
     inp_path = os.path.join(ddir, "rev-s05.yaml")
     with open(inp_path, "w", encoding="utf-8") as f:
-        f.write(dump(DEFAULT_BODY))
-        
+        f.write(dump_mapping(DEFAULT_BODY))
+
     code, stdout, _ = sb.run_cmd([
         "revise-definition", "--idempotency-key", "rev-s05",
         "--definition", "H003", "--expected-previous", "H003@v1",
@@ -654,8 +663,7 @@ def run_s29_index_deletion_catastrophic_recovery(sb: BenchmarkSandbox) -> Scenar
 
 def run_s30_concurrent_writer_collision(sb: BenchmarkSandbox) -> ScenarioResult:
     """S30: Concurrent Writer Collision."""
-    from researchctl.tx.fs import freeze_lock
-    with freeze_lock(sb.ws):
+    with hold_freeze_lock(sb.ws):
         code, payload = sb.run_json([
             "freeze-report", "--idempotency-key", "col-1",
             "--actor", "bob", "--authorization-ref", "AUTH-0001"
@@ -716,7 +724,6 @@ def run_s32a_derived_index_drift_recovery(sb: BenchmarkSandbox) -> ScenarioResul
 def run_s32b_canonical_semantic_drift_defense(sb: BenchmarkSandbox) -> ScenarioResult:
     """S32-B: Canonical Semantic Drift Defense."""
     # 未经事务门禁原地修改定义文件
-    from researchctl.tests.p1b_bootstrap import write_bootstrap
     write_bootstrap(sb.ws)
     def_file = os.path.join(sb.ws, "definitions", "H003", "H003@v1.yaml")
     with open(def_file, "a", encoding="utf-8") as f:
@@ -737,48 +744,112 @@ def run_s32b_canonical_semantic_drift_defense(sb: BenchmarkSandbox) -> ScenarioR
     )
 
 
-SCENARIO_RUNNERS = [
-    run_s01_definition_origin,
-    run_s02_definition_authority,
-    run_s03_external_literature_pinning,
-    run_s04_definition_evolution_rationale,
-    run_s05_definition_lineage_ordering,
-    run_s06_ambiguous_definition_rejection,
-    run_s07_run_spec_exact_binding,
-    run_s08_spec_evolution_invariant,
-    run_s09_runtime_deviation_audit,
-    run_s10_claim_to_organized,
-    run_s11_organized_to_raw_runs,
-    run_s12_end_to_end_metric_penetration,
-    run_s13_cross_report_temporal_comparison,
-    run_s14_historical_snapshot_recovery,
-    run_s15_as_of_time_travel_consistency,
-    run_s16_definition_revision_downstream_impact,
-    run_s17_raw_invalidation_stale_propagation,
-    run_s18_negative_impact_preservation,
-    run_s19_severed_link_detection,
-    run_s20_tampered_content_detection,
-    run_s21_orphan_file_audit,
-    run_s22_nonexistent_prefix_injection,
-    run_s23_wildcard_sql_injection,
-    run_s24_phantom_entity_hallucination,
-    run_s25_vague_concept_recall,
-    run_s26_anti_rag_crossing_violation,
-    run_s27_advisory_ranking_semantic_boundary,
-    run_s28_context_wipeout_recovery,
-    run_s29_index_deletion_catastrophic_recovery,
-    run_s30_concurrent_writer_collision,
-    run_s31_crash_safety_idempotent_recovery,
-    run_s32a_derived_index_drift_recovery,
-    run_s32b_canonical_semantic_drift_defense,
+@dataclass(frozen=True)
+class ScenarioRegistration:
+    """Current conformance scenario registry used for deterministic selection/coverage."""
+
+    scenario_id: str
+    track: str
+    runner: Callable[[BenchmarkSandbox], ScenarioResult]
+
+
+SCENARIO_REGISTRY = [
+    ScenarioRegistration("S01", TRACKS[0], run_s01_definition_origin),
+    ScenarioRegistration("S02", TRACKS[0], run_s02_definition_authority),
+    ScenarioRegistration("S03", TRACKS[0], run_s03_external_literature_pinning),
+    ScenarioRegistration("S04", TRACKS[0], run_s04_definition_evolution_rationale),
+    ScenarioRegistration("S05", TRACKS[0], run_s05_definition_lineage_ordering),
+    ScenarioRegistration("S06", TRACKS[0], run_s06_ambiguous_definition_rejection),
+    ScenarioRegistration("S07", TRACKS[1], run_s07_run_spec_exact_binding),
+    ScenarioRegistration("S08", TRACKS[1], run_s08_spec_evolution_invariant),
+    ScenarioRegistration("S09", TRACKS[1], run_s09_runtime_deviation_audit),
+    ScenarioRegistration("S10", TRACKS[2], run_s10_claim_to_organized),
+    ScenarioRegistration("S11", TRACKS[2], run_s11_organized_to_raw_runs),
+    ScenarioRegistration("S12", TRACKS[2], run_s12_end_to_end_metric_penetration),
+    ScenarioRegistration("S13", TRACKS[3], run_s13_cross_report_temporal_comparison),
+    ScenarioRegistration("S14", TRACKS[3], run_s14_historical_snapshot_recovery),
+    ScenarioRegistration("S15", TRACKS[3], run_s15_as_of_time_travel_consistency),
+    ScenarioRegistration("S16", TRACKS[4], run_s16_definition_revision_downstream_impact),
+    ScenarioRegistration("S17", TRACKS[4], run_s17_raw_invalidation_stale_propagation),
+    ScenarioRegistration("S18", TRACKS[4], run_s18_negative_impact_preservation),
+    ScenarioRegistration("S19", TRACKS[5], run_s19_severed_link_detection),
+    ScenarioRegistration("S20", TRACKS[5], run_s20_tampered_content_detection),
+    ScenarioRegistration("S21", TRACKS[5], run_s21_orphan_file_audit),
+    ScenarioRegistration("S22", TRACKS[5], run_s22_nonexistent_prefix_injection),
+    ScenarioRegistration("S23", TRACKS[5], run_s23_wildcard_sql_injection),
+    ScenarioRegistration("S24", TRACKS[5], run_s24_phantom_entity_hallucination),
+    ScenarioRegistration("S25", TRACKS[6], run_s25_vague_concept_recall),
+    ScenarioRegistration("S26", TRACKS[6], run_s26_anti_rag_crossing_violation),
+    ScenarioRegistration("S27", TRACKS[6], run_s27_advisory_ranking_semantic_boundary),
+    ScenarioRegistration("S28", TRACKS[7], run_s28_context_wipeout_recovery),
+    ScenarioRegistration("S29", TRACKS[7], run_s29_index_deletion_catastrophic_recovery),
+    ScenarioRegistration("S30", TRACKS[7], run_s30_concurrent_writer_collision),
+    ScenarioRegistration("S31", TRACKS[7], run_s31_crash_safety_idempotent_recovery),
+    ScenarioRegistration("S32-A", TRACKS[7], run_s32a_derived_index_drift_recovery),
+    ScenarioRegistration("S32-B", TRACKS[7], run_s32b_canonical_semantic_drift_defense),
 ]
 
+SCENARIO_RUNNERS = [registration.runner for registration in SCENARIO_REGISTRY]
+REQUIRED_SCENARIO_IDS = [registration.scenario_id for registration in SCENARIO_REGISTRY]
 
-def run_all_scenarios(base_fixture: str = "fixture") -> List[ScenarioResult]:
-    """全量执行 33 个规范场景并收集结果。"""
+# P0.3A deliberately covers only the high-risk primitives. These IDs are not a
+# certification subset: every P0.3A report remains ineligible and Tier N/A.
+ORACLE_ANCHOR_IDS = ("S03", "S07", "S12", "S16", "S17", "S24", "S31")
+DEFAULT_ORACLE_PACK = os.path.join(os.path.dirname(__file__), "packs", "p0_seed_v1")
+
+
+def run_oracle_scenario(
+    scenario_id: str,
+    base_fixture: str = "fixture",
+    *,
+    sut_command: Optional[Sequence[str]] = None,
+    sut_cwd: Optional[str] = None,
+    pack_root: str = DEFAULT_ORACLE_PACK,
+):
+    """Compile sealed Gold before SUT startup, then execute and evaluate one anchor."""
+    from .dsl.executor import execute_actions, materialize_overlay
+    from .dsl.loader import load_scenario
+    from .evaluators.scenario import evaluate_scenario
+    from .oracle.compiler import compile_gold
+    from .oracle.manifest import load_manifest
+
+    if scenario_id not in ORACLE_ANCHOR_IDS:
+        raise ValueError(f"scenario is not migrated to P0.3A Oracle: {scenario_id}")
+    manifest = load_manifest(os.path.join(pack_root, "oracle-manifest.json"))
+    actions = load_scenario(os.path.join(pack_root, "scenarios", f"{scenario_id}.json"))
+    gold = compile_gold(manifest, actions)  # Trust boundary: before adapter process starts.
+
+    sandbox = BenchmarkSandbox(
+        base_fixture,
+        sut_command=sut_command,
+        sut_cwd=sut_cwd,
+    )
+    materialize_overlay(pack_root, sandbox.ws, manifest, actions)
+    try:
+        with sandbox:
+            execution = execute_actions(actions, manifest, sandbox.adapter, sandbox.ws)
+            evaluation = evaluate_scenario(gold, execution, manifest)
+            metadata = dict(sandbox.sut_metadata)
+    finally:
+        # __exit__ normally cleaned up; this also covers prepare/start failures.
+        sandbox.cleanup()
+    return evaluation, metadata, gold
+
+
+def run_all_scenarios(
+    base_fixture: str = "fixture",
+    *,
+    sut_command: Optional[Sequence[str]] = None,
+    sut_cwd: Optional[str] = None,
+) -> List[ScenarioResult]:
+    """Run all legacy conformance scenarios through one adapter contract."""
     results: List[ScenarioResult] = []
     for fn in SCENARIO_RUNNERS:
-        with BenchmarkSandbox(base_fixture) as sb:
+        with BenchmarkSandbox(
+            base_fixture,
+            sut_command=sut_command,
+            sut_cwd=sut_cwd,
+        ) as sb:
             res = fn(sb)
             results.append(res)
     return results

@@ -1,4 +1,4 @@
-"""ResearchCTL-Bench: 超长程实验 Agent 检索系统基准评测套件。"""
+"""ResearchCTL-Bench internal conformance harness (P0 construction)."""
 from __future__ import annotations
 
-__version__ = "1.0.0"
+__version__ = "0.4.0"

@@ -1,0 +1,9 @@
+id: H003
+version: v1
+introduced_by: human:alice
+introduced_event: EV-000001
+authority_refs:
+  - kind: paper
+    locator: external/paper-H003-pinned.txt
+    pin: sha256:pending
+statement: Pinned historical conclusion

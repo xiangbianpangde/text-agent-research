@@ -117,7 +117,7 @@ def main(argv=None) -> int:
     sp.set_defaults(func=cmd_ingest_raw)
 
     # ---- ResearchCTL-Bench ----
-    sp = sub.add_parser("bench", help="运行 ResearchCTL-Bench 基准评测套件并输出综合评分报告")
+    sp = sub.add_parser("bench", help="运行 ResearchCTL-Bench 内部一致性套件（非公开 benchmark 认证）")
     sp.add_argument("--json", action="store_true", help="仅输出 JSON 格式评测结果")
     sp.add_argument("--save-json", metavar="PATH", help="保存评测结果至指定 JSON 文件")
     sp.add_argument("--track", help="仅运行指定 Track")
@@ -138,6 +138,11 @@ def main(argv=None) -> int:
     except Exception as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
+
+    # bench owns its human/JSON formatter and exit semantics. Do not append a
+    # second JSON scalar after its report.
+    if args.func is cmd_bench:
+        return int(out)
 
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0

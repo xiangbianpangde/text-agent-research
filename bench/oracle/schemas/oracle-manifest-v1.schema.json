@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "oracle-manifest/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "universe_id", "clock", "entities", "artifacts", "facts", "evidence_atoms", "relations", "snapshots", "external_sources"],
+  "properties": {
+    "schema_version": {"const": "oracle-manifest/v1"},
+    "universe_id": {"type": "string", "minLength": 1},
+    "clock": {"type": "string", "minLength": 1},
+    "entities": {"type": "array", "items": {"$ref": "#/$defs/object"}},
+    "artifacts": {"type": "array", "items": {"$ref": "#/$defs/object"}},
+    "facts": {"type": "array", "items": {"$ref": "#/$defs/fact"}},
+    "evidence_atoms": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+    "relations": {"type": "array", "items": {"$ref": "#/$defs/relation"}},
+    "snapshots": {"type": "array", "items": {"$ref": "#/$defs/snapshot"}},
+    "external_sources": {"type": "array", "items": {"$ref": "#/$defs/external"}}
+  },
+  "$defs": {
+    "object": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ref", "kind", "entity_id", "version_ref", "path", "status", "content_hash", "git_commit"],
+      "properties": {
+        "ref": {"type": "string"}, "kind": {"type": "string"}, "entity_id": {"type": "string"},
+        "version_ref": {"type": ["string", "null"]}, "path": {"type": ["string", "null"]},
+        "status": {"type": "string"}, "content_hash": {"type": ["string", "null"]},
+        "git_commit": {"type": ["string", "null"]}
+      }
+    },
+    "fact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["fact_id", "subject", "predicate", "value"],
+      "properties": {"fact_id": {"type": "string"}, "subject": {"type": "string"}, "predicate": {"type": "string"}, "value": {}}
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["atom_id", "kind", "artifact_ref", "row_key", "column", "value_type", "value", "argv"],
+      "properties": {
+        "atom_id": {"type": "string"}, "kind": {"enum": ["metric_cell", "command"]},
+        "artifact_ref": {"type": "string"}, "row_key": {"type": "array"},
+        "column": {"type": ["string", "null"]}, "value_type": {"type": ["string", "null"]},
+        "value": {}, "argv": {"type": ["array", "null"], "items": {"type": "string"}}
+      }
+    },
+    "relation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_ref", "target_ref", "relation"],
+      "properties": {"source_ref": {"type": "string"}, "target_ref": {"type": "string"}, "relation": {"type": "string"}}
+    },
+    "snapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["snapshot_id", "as_of", "paths"],
+      "properties": {"snapshot_id": {"type": "string"}, "as_of": {"type": "string"}, "paths": {"type": "array", "items": {"type": "string"}}}
+    },
+    "external": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ref", "pinned_content_hash", "pinned_value", "latest_content_hash", "latest_value"],
+      "properties": {"ref": {"type": "string"}, "pinned_content_hash": {"type": "string"}, "pinned_value": {}, "latest_content_hash": {"type": "string"}, "latest_value": {}}
+    }
+  }
+}

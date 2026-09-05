@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "compiled-gold/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scenario_id", "compiler_version", "manifest_digest", "action_digest", "pre_state", "checkpoints", "post_state", "gold_digest"],
+  "properties": {
+    "schema_version": {"const": "compiled-gold/v1"},
+    "scenario_id": {"type": "string"},
+    "compiler_version": {"const": "oracle-compiler/v1"},
+    "manifest_digest": {"type": "string"},
+    "action_digest": {"type": "string"},
+    "pre_state": {"type": "object"},
+    "checkpoints": {"type": "array", "items": {"type": "object"}},
+    "post_state": {"type": "object"},
+    "gold_digest": {"type": "string"}
+  }
+}

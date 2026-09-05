@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prediction/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "capture_id", "status", "error_semantic", "warnings", "errors", "results", "provenance_graph", "asserted_facts", "evidence", "retrieval_mode", "ranking_authority"],
+  "properties": {
+    "schema_version": {"const": "prediction/v1"},
+    "capture_id": {"type": "string"},
+    "status": {"enum": ["success", "warning", "error", "fail_closed", "review_required"]},
+    "error_semantic": {"type": ["string", "null"]},
+    "warnings": {"type": "array"}, "errors": {"type": "array"},
+    "results": {"type": ["array", "null"]},
+    "provenance_graph": {"type": ["object", "null"]},
+    "asserted_facts": {"type": "array"}, "evidence": {"type": "array"},
+    "retrieval_mode": {"type": ["string", "null"]},
+    "ranking_authority": {"type": ["string", "null"]}
+  }
+}

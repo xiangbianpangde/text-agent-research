@@ -1,12 +1,494 @@
 {
   "benchmark_name": "ResearchCTL-Bench",
-  "benchmark_version": "1.0.0",
+  "benchmark_version": "0.4.0",
+  "benchmark_status": "internal_conformance_only",
+  "evaluation_mode": "full",
+  "evaluation_engine": "oracle_shadow",
+  "score_provenance": "legacy_diagnostic_only",
+  "integrity_metrics_provenance": "legacy_diagnostic_only",
+  "p0_3_status": "incomplete_p0_3a",
+  "sut": {
+    "protocol": "sut-adapter/v1",
+    "transport": "stdio-ndjson",
+    "command_digest": "sha256:2df282a68c220356ad45c1ed695a84ca80477f357fb28f5bd550dac154e49728",
+    "adapter": "researchctl",
+    "capabilities": [
+      "health",
+      "invoke",
+      "prepare",
+      "reset_context",
+      "restart",
+      "shutdown"
+    ]
+  },
+  "oracle": {
+    "coverage": {
+      "required": 33,
+      "compiled": 7,
+      "compiled_scenario_ids": [
+        "S03",
+        "S07",
+        "S12",
+        "S16",
+        "S17",
+        "S24",
+        "S31"
+      ],
+      "missing_scenario_ids": [
+        "S01",
+        "S02",
+        "S04",
+        "S05",
+        "S06",
+        "S08",
+        "S09",
+        "S10",
+        "S11",
+        "S13",
+        "S14",
+        "S15",
+        "S18",
+        "S19",
+        "S20",
+        "S21",
+        "S22",
+        "S23",
+        "S25",
+        "S26",
+        "S27",
+        "S28",
+        "S29",
+        "S30",
+        "S32-A",
+        "S32-B"
+      ]
+    },
+    "evaluations": [
+      {
+        "scenario_id": "S03",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "external-basis"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "external-basis"
+          },
+          {
+            "kind": "asserted_facts_exact",
+            "passed": false,
+            "capture_id": "external-basis"
+          },
+          {
+            "kind": "evidence_exact",
+            "passed": false,
+            "capture_id": "external-basis"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:34c107ac7c13c34159b8f8595e531943cf3b732494dbf0bf50713bc4bc0a214b",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S07",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "run-binding"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "run-binding"
+          },
+          {
+            "kind": "result_set_exact",
+            "passed": true,
+            "capture_id": "run-binding",
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "tp_items": [
+              "run:R052"
+            ],
+            "fp_items": [],
+            "fn_items": [],
+            "exact": true
+          },
+          {
+            "kind": "version_binding_exact",
+            "passed": false,
+            "capture_id": "run-binding"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": false,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:76cfeff5081b467e6c8794cdacc6dba567b690c06ddd84fa205dc6ebd68fa3e9",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S12",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "metric-evidence"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "metric-evidence"
+          },
+          {
+            "kind": "evidence_exact",
+            "passed": false,
+            "capture_id": "metric-evidence"
+          },
+          {
+            "kind": "provenance_graph_exact",
+            "passed": false,
+            "capture_id": "metric-evidence"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": false,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:2b5d956a1e2883a7171baad909a188726cf0a832f29a06c6da4ceeed93687248",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S16",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "impact-after-change"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "impact-after-change"
+          },
+          {
+            "kind": "impact_set_exact",
+            "passed": false,
+            "capture_id": "impact-after-change",
+            "tp": 0,
+            "fp": 0,
+            "fn": 3,
+            "tp_items": [],
+            "fp_items": [],
+            "fn_items": [
+              "claim:CURRENT#accuracy",
+              "organized:EXP-017",
+              "run:R052"
+            ],
+            "exact": false
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 3,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:0e71e166fea26adc4088c1098db11809529d604be6594c2df0ca44d333165478",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S17",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "stale-after-invalidation"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "stale-after-invalidation"
+          },
+          {
+            "kind": "provenance_graph_exact",
+            "passed": false,
+            "capture_id": "stale-after-invalidation"
+          },
+          {
+            "kind": "stale_set_exact",
+            "passed": false,
+            "capture_id": "stale-after-invalidation",
+            "tp": 0,
+            "fp": 0,
+            "fn": 3,
+            "tp_items": [],
+            "fp_items": [],
+            "fn_items": [
+              "claim:CURRENT#accuracy",
+              "organized:EXP-017",
+              "run:R052"
+            ],
+            "exact": false
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 3,
+        "version_correct": null,
+        "graph_exact_match": false,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:1dff45df5630402d170e02e50c37c49f5c07c6d30810bcfb2319b0997d4b9245",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S24",
+        "passed": false,
+        "score": 0.0,
+        "checks": [
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "phantom-version"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": false,
+            "capture_id": "phantom-version"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": true,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:af083004a3f437d87f853f828cc74776d39d988b184dab67fe52ed5e89f6a416",
+        "execution_errors": []
+      },
+      {
+        "scenario_id": "S31",
+        "passed": true,
+        "score": 1.0,
+        "checks": [
+          {
+            "kind": "observation_present",
+            "passed": true,
+            "capture_id": "canonical-pre"
+          },
+          {
+            "kind": "observation_present",
+            "passed": true,
+            "capture_id": "after-staging-kill"
+          },
+          {
+            "kind": "external_termination",
+            "passed": true,
+            "capture_id": "after-staging-kill"
+          },
+          {
+            "kind": "signal",
+            "passed": true,
+            "capture_id": "after-staging-kill"
+          },
+          {
+            "kind": "observation_present",
+            "passed": true,
+            "capture_id": "canonical-after-crash"
+          },
+          {
+            "kind": "canonical_state_exact",
+            "passed": true,
+            "capture_id": "canonical-after-crash",
+            "equals_capture": "canonical-pre"
+          },
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "reconcile-1"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "reconcile-1"
+          },
+          {
+            "kind": "observation_present",
+            "passed": true,
+            "capture_id": "canonical-recovered-1"
+          },
+          {
+            "kind": "tx_residue_empty",
+            "passed": true,
+            "capture_id": "canonical-recovered-1"
+          },
+          {
+            "kind": "canonical_state_exact",
+            "passed": true,
+            "capture_id": "canonical-recovered-1",
+            "equals_capture": "canonical-pre"
+          },
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "reconcile-2"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "reconcile-2"
+          },
+          {
+            "kind": "observation_present",
+            "passed": true,
+            "capture_id": "canonical-recovered-2"
+          },
+          {
+            "kind": "tx_residue_empty",
+            "passed": true,
+            "capture_id": "canonical-recovered-2"
+          },
+          {
+            "kind": "canonical_state_exact",
+            "passed": true,
+            "capture_id": "canonical-recovered-2",
+            "equals_capture": "canonical-recovered-1"
+          }
+        ],
+        "civ_count": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null,
+        "fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "gold_digest": "sha256:c186e44d3923ff0ee10dcc3863cade9c2a5ee2edd6b6cbe310d4ffa178d5421b",
+        "execution_errors": []
+      }
+    ]
+  },
   "composite_score": 100.0,
   "passed_scenarios": 33,
   "total_scenarios": 33,
-  "tier": "S-Tier",
-  "tier_name": "S级: 长期科研级证明系统 (Enterprise Long-Horizon Proven)",
-  "iqg_passed": true,
+  "tier": "N/A",
+  "tier_name": "诊断运行，不具备认证资格 (Diagnostic / Incomplete)",
+  "certification_eligible": false,
+  "integrity_gate_passed": true,
+  "iqg_passed": false,
+  "coverage": {
+    "rate": 1.0,
+    "covered_tracks": [
+      "Track1_DefinitionProvenance",
+      "Track2_RunSpecBinding",
+      "Track3_ProvenanceTrace",
+      "Track4_HistoricalTemporal",
+      "Track5_StaleImpact",
+      "Track6_IntegrityAdversarial",
+      "Track7_RetrievalRouting",
+      "Track8_LongHorizonContinuity"
+    ],
+    "missing_tracks": [],
+    "covered_scenario_ids": [
+      "S01",
+      "S02",
+      "S03",
+      "S04",
+      "S05",
+      "S06",
+      "S07",
+      "S08",
+      "S09",
+      "S10",
+      "S11",
+      "S12",
+      "S13",
+      "S14",
+      "S15",
+      "S16",
+      "S17",
+      "S18",
+      "S19",
+      "S20",
+      "S21",
+      "S22",
+      "S23",
+      "S24",
+      "S25",
+      "S26",
+      "S27",
+      "S28",
+      "S29",
+      "S30",
+      "S31",
+      "S32-A",
+      "S32-B"
+    ],
+    "missing_scenario_ids": [],
+    "unexpected_scenario_ids": [],
+    "duplicate_scenario_ids": [],
+    "ineligible_reasons": [
+      "P0_3_SHADOW_MODE",
+      "P0_3_ORACLE_COVERAGE_INCOMPLETE"
+    ]
+  },
   "metrics": {
     "pgem": 1.0,
     "vlp": 1.0,

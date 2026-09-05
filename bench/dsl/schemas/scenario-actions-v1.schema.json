@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scenario-actions/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scenario_id", "track", "name", "initial_fixture", "steps"],
+  "properties": {
+    "schema_version": {"const": "scenario-actions/v1"},
+    "scenario_id": {"type": "string"}, "track": {"type": "string"}, "name": {"type": "string"},
+    "initial_fixture": {"type": "string"},
+    "steps": {"type": "array", "items": {"oneOf": [
+      {"$ref": "#/$defs/invoke"}, {"$ref": "#/$defs/mutate"}, {"$ref": "#/$defs/externalCrash"}, {"$ref": "#/$defs/snapshot"}
+    ]}}
+  },
+  "$defs": {
+    "invoke": {"type": "object", "additionalProperties": false, "required": ["step", "action", "operation", "params"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "invoke"}, "capture_id": {"type": "string"}, "operation": {"type": "string"}, "params": {"type": "object"}, "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 600000}}},
+    "mutate": {"type": "object", "additionalProperties": false, "required": ["step", "action", "type", "target"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "mutate"}, "type": {"enum": ["external_update", "semantic_change", "raw_invalidation"]}, "target": {"type": "string"}, "content_hash": {"type": "string"}, "content": {"type": "string"}, "reason": {"type": "string"}}},
+    "externalCrash": {"type": "object", "additionalProperties": false, "required": ["step", "action", "capture_id", "operation", "params", "pause_at"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "external_crash"}, "capture_id": {"type": "string"}, "operation": {"type": "string"}, "params": {"type": "object"}, "pause_at": {"type": "string"}, "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 600000}}},
+    "snapshot": {"type": "object", "additionalProperties": false, "required": ["step", "action", "capture_id"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "snapshot_state"}, "capture_id": {"type": "string"}, "require_no_tx_residue": {"type": "boolean"}}}
+  }
+}

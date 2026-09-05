@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ResearchCTL-Bench 一键基准评测运行脚本。
+"""ResearchCTL-Bench 内部一致性套件运行脚本（P0，非公开认证）。
 
 用法：
     python3 run_benchmark.py

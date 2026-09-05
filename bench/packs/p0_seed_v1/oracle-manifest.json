@@ -1,0 +1,49 @@
+{
+  "schema_version": "oracle-manifest/v1",
+  "universe_id": "p0-seed-v1",
+  "clock": "2026-08-20T00:00:00Z",
+  "entities": [
+    {"ref":"definition:H003@v1","kind":"definition","entity_id":"H003","version_ref":"H003@v1","path":"definitions/H003/H003@v1.yaml","status":"valid","content_hash":"sha256:c3d656b4c3215e2d3b0bc21f667cea9d43ca4c919e8315ade8a09f147dec635e","git_commit":null},
+    {"ref":"external:paper-H003","kind":"external_source","entity_id":"paper-H003","version_ref":"paper-H003@pinned","path":"external/paper-H003-latest.txt","status":"valid","content_hash":"sha256:514e0a4b9e5d04d2503ebe0f5193c341e5135177619c85d90647007f643c8931","git_commit":null},
+    {"ref":"spec:EXP-017@v1","kind":"experiment_spec","entity_id":"EXP-017","version_ref":"EXP-017@v1","path":"experiments/EXP-017/spec.yaml","status":"frozen","content_hash":null,"git_commit":null},
+    {"ref":"run:R052","kind":"run","entity_id":"R052","version_ref":null,"path":"runs/R052/manifest.yaml","status":"completed","content_hash":null,"git_commit":null},
+    {"ref":"metric:M001","kind":"metric_definition","entity_id":"M001","version_ref":"M001@v1","path":null,"status":"valid","content_hash":null,"git_commit":null},
+    {"ref":"raw:R052","kind":"raw_run","entity_id":"raw/EXP-017/R052/","version_ref":null,"path":"raw/EXP-017/R052","status":"valid","content_hash":null,"git_commit":null},
+    {"ref":"organized:EXP-017","kind":"organized_result","entity_id":"ORG-EXP017","version_ref":"ORG-EXP017@v3","path":"organized/EXP-017/result.md","status":"valid","content_hash":null,"git_commit":null},
+    {"ref":"claim:CURRENT#accuracy","kind":"report_claim","entity_id":"CURRENT#accuracy","version_ref":null,"path":"reports/CURRENT.md","status":"fresh","content_hash":null,"git_commit":null},
+    {"ref":"metric:M002","kind":"metric_definition","entity_id":"M002","version_ref":"M002@v1","path":null,"status":"valid","content_hash":null,"git_commit":null},
+    {"ref":"run:EXP020-R001","kind":"run","entity_id":"EXP020-R001","version_ref":null,"path":null,"status":"completed","content_hash":null,"git_commit":null},
+    {"ref":"organized:EXP-020","kind":"organized_result","entity_id":"ORG-EXP020","version_ref":"ORG-EXP020@v1","path":null,"status":"valid","content_hash":null,"git_commit":null}
+  ],
+  "artifacts": [
+    {"ref":"artifact:R052:metrics","kind":"metrics_csv","entity_id":"raw/EXP-017/R052/metrics.csv","version_ref":null,"path":"raw/EXP-017/R052/metrics.csv","status":"valid","content_hash":"sha256:581e42c3d1095c03b4cacfde0948cbefd4a7170acc5d7dbf1cbca9548628d466","git_commit":null},
+    {"ref":"artifact:R052:execution-log","kind":"execution_log","entity_id":"raw/EXP-017/R052/execution.log","version_ref":null,"path":"raw/EXP-017/R052/execution.log","status":"valid","content_hash":"sha256:cfbbe4516d74dba1506cd35a0da8696ec44103af0a4acfa1f0dc4ca5e2dfa859","git_commit":null}
+  ],
+  "facts": [
+    {"fact_id":"fact:H003:authority","subject":"definition:H003@v1","predicate":"authority_source","value":"external:paper-H003"},
+    {"fact_id":"fact:H003:pinned-value","subject":"definition:H003@v1","predicate":"pinned_external_value","value":"Pinned historical conclusion"},
+    {"fact_id":"fact:R052:binding","subject":"run:R052","predicate":"bound_version","value":"EXP-017@v1"}
+  ],
+  "evidence_atoms": [
+    {"atom_id":"metric:R052:step100:accuracy","kind":"metric_cell","artifact_ref":"artifact:R052:metrics","row_key":[{"column":"step","value":"100"}],"column":"accuracy","value_type":"decimal","value":"0.723","argv":null},
+    {"atom_id":"command:R052","kind":"command","artifact_ref":"artifact:R052:execution-log","row_key":[],"column":null,"value_type":null,"value":null,"argv":["python","train.py","--experiment","EXP-017@v1","--run","R052","--metric","M001","--seed","7"]}
+  ],
+  "relations": [
+    {"source_ref":"definition:H003@v1","target_ref":"external:paper-H003","relation":"authorized_by"},
+    {"source_ref":"run:R052","target_ref":"spec:EXP-017@v1","relation":"bound_to"},
+    {"source_ref":"run:R052","target_ref":"metric:M001","relation":"measured_by"},
+    {"source_ref":"run:R052","target_ref":"raw:R052","relation":"uses"},
+    {"source_ref":"raw:R052","target_ref":"artifact:R052:metrics","relation":"contains"},
+    {"source_ref":"raw:R052","target_ref":"artifact:R052:execution-log","relation":"contains"},
+    {"source_ref":"organized:EXP-017","target_ref":"run:R052","relation":"organized_from"},
+    {"source_ref":"claim:CURRENT#accuracy","target_ref":"organized:EXP-017","relation":"based_on"},
+    {"source_ref":"run:EXP020-R001","target_ref":"metric:M002","relation":"measured_by"},
+    {"source_ref":"organized:EXP-020","target_ref":"run:EXP020-R001","relation":"organized_from"}
+  ],
+  "snapshots": [
+    {"snapshot_id":"canonical","as_of":"2026-08-20T00:00:00Z","paths":["reports/CURRENT.md","reports/CURRENT.sources.yaml","reports/history","events"]}
+  ],
+  "external_sources": [
+    {"ref":"external:paper-H003","pinned_content_hash":"sha256:72cc99173d6924299156f514de6e0d52b92fe0bc36b772aa39c825dc1c3257a2","pinned_value":"Pinned historical conclusion","latest_content_hash":"sha256:72cc99173d6924299156f514de6e0d52b92fe0bc36b772aa39c825dc1c3257a2","latest_value":"Pinned historical conclusion"}
+  ]
+}
