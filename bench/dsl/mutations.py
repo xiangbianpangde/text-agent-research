@@ -1,6 +1,7 @@
 """Benchmark-owned physical mutations; these change the test world, not Gold."""
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from pathlib import Path
@@ -37,15 +38,18 @@ def apply_physical_mutation(workspace: str, manifest: OracleManifest, action: Ma
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(str(action.get("content", "")), encoding="utf-8")
         return
-    if kind == "create_version":
+    if kind in ("create_version", "duplicate_version"):
         path = _safe_path(workspace, str(action["path"]))
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(str(action.get("content", "")), encoding="utf-8")
-        return
-    if kind == "duplicate_version":
-        path = _safe_path(workspace, str(action["path"]))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(str(action.get("content", "")), encoding="utf-8")
+        document = {
+            "entity_id": action["entity_id"],
+            "version_ref": action["version_ref"],
+            **dict(action.get("properties") or {}),
+        }
+        path.write_text(
+            json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
         return
     if kind == "raw_invalidation":
         obj = state_objects.get(target)

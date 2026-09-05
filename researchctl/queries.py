@@ -39,7 +39,8 @@ def current_fingerprint(root: str) -> str:
     import hashlib
     from .hashing import file_hash
     lines = []
-    for dirpath, _sub, filenames in os.walk(root):
+    for dirpath, subdirs, filenames in os.walk(root):
+        subdirs.sort()
         for fn in sorted(filenames):
             full = os.path.join(dirpath, fn)
             rel = os.path.relpath(full, root)
@@ -551,7 +552,21 @@ def cmd_history(args) -> dict:
             "SELECT id,doc_type,path,content_hash FROM documents WHERE doc_type IN ('report_current','report_historical') ORDER BY id"
         ).fetchall()
         results = []
+        cutoff = getattr(args, "as_of", None)
         for (rid, rtype, rpath, rhash) in rows:
+            if cutoff and rtype == "report_current":
+                continue
+            if cutoff and rtype == "report_historical":
+                from .mini_yaml import load_file
+                sidecar = os.path.join(args.root, os.path.splitext(rpath)[0] + ".sources.yaml")
+                frozen_at = None
+                if os.path.isfile(sidecar):
+                    try:
+                        frozen_at = (load_file(sidecar, strict=True) or {}).get("frozen_at")
+                    except Exception:
+                        frozen_at = None
+                if not frozen_at or str(frozen_at) > str(cutoff)[:10]:
+                    continue
             full = os.path.join(args.root, rpath)
             summary = ""
             if os.path.exists(full):
@@ -592,6 +607,9 @@ def cmd_history(args) -> dict:
             results[-1]["summary"] = summary
             results[-1]["sources"] = src_list
         # history 直接读报告文件 + 来源校验 → canonical
-        return _query_envelope("history", conn, args.root, results=results, authority="canonical")
+        envelope = _query_envelope("history", conn, args.root, results=results, authority="canonical")
+        if cutoff:
+            envelope["as_of"] = cutoff
+        return envelope
     finally:
         conn.close()

@@ -18,10 +18,28 @@ def _condition(status: str, error: str | None, behavior: str) -> Dict[str, Any]:
     return {"status": status, "error_semantic": error, "behavior": behavior}
 
 
+def _binding_drift(state: Any, refs: set[str]) -> bool:
+    for ref in refs:
+        obj = state.objects.get(ref)
+        if not obj or obj["kind"] not in {"source_binding", "historical_source"}:
+            continue
+        resolved = [
+            state.objects[edge["target_ref"]]
+            for edge in state.relations
+            if edge["source_ref"] == ref
+            and edge["relation"] == "resolves_to"
+            and edge["target_ref"] in state.objects
+        ]
+        if resolved and any(obj.get("content_hash") != target.get("content_hash") for target in resolved):
+            return True
+    return False
+
+
 def expected_condition(state: Any, operation: str, params: Mapping[str, Any]) -> Dict[str, Any]:
     """Derive expected behavior from Oracle state, never from an authored expected field."""
     target = str(
-        params.get("ref")
+        params.get("target_ref")
+        or params.get("ref")
         or params.get("entity_ref")
         or params.get("definition_ref")
         or params.get("entity")
@@ -38,6 +56,30 @@ def expected_condition(state: Any, operation: str, params: Mapping[str, Any]) ->
         dependencies = {row["ref"] for row in state.dependency_subgraph(obj["ref"])["nodes"]}
         if dependencies & state.missing_refs:
             return _condition("fail_closed", "SOURCE_MISSING", "fail_closed")
+        relation_types = set(params.get("relation_types") or [])
+        selected = {
+            edge["target_ref"] for edge in state.relations
+            if edge["source_ref"] == obj["ref"]
+            and (not relation_types or edge["relation"] in relation_types)
+        }
+        if _binding_drift(state, selected):
+            return _condition("warning", None, "warning_attached")
+        if "historical_based_on" in relation_types:
+            historical = [state.objects[ref] for ref in selected if ref in state.objects]
+            current_by_path = {
+                row.get("path"): row for row in state.objects.values()
+                if row["kind"] not in {"historical_source", "source_binding"} and row.get("path")
+            }
+            if any(
+                item.get("path") in current_by_path
+                and item.get("content_hash") != current_by_path[item.get("path")].get("content_hash")
+                for item in historical
+            ):
+                return _condition("warning", None, "warning_attached")
+    if operation in ("trace_evidence", "trace_graph") and obj is not None:
+        dependency_refs = {row["ref"] for row in state.dependency_subgraph(obj["ref"])["nodes"]}
+        if _binding_drift(state, dependency_refs):
+            return _condition("warning", None, "warning_attached")
     if target in state.hash_mismatch_refs:
         return _condition("fail_closed", "HASH_MISMATCH", "fail_closed")
     if target in state.missing_refs:

@@ -115,6 +115,7 @@ def execute_actions(
     """Execute without reading compiled Gold or deriving any expected answer."""
     record = ExecutionRecord(scenario_id=actions.scenario_id)
     snapshot_profile = _snapshot_profile(manifest)
+    virtual_time = str(manifest.document["clock"])
 
     for step in actions.steps:
         action = step["action"]
@@ -123,12 +124,25 @@ def execute_actions(
                 apply_physical_mutation(workspace, manifest, step)
                 continue
             if action == "advance_time":
+                virtual_time = str(step["new_timestamp"])
                 continue
             if action == "context_reset":
                 adapter.reset_context()
                 continue
-            if action in ("restart_sut", "new_session"):
+            if action == "restart_sut":
                 adapter.restart()
+                continue
+            if action == "new_session":
+                before = adapter.health().get("pid")
+                adapter.restart()
+                after = adapter.health().get("pid")
+                if "capture_id" in step:
+                    record.observations[step["capture_id"]] = {
+                        "session_id": step["session_id"],
+                        "process_restarted": before is not None and after is not None and before != after,
+                        "previous_pid": before,
+                        "current_pid": after,
+                    }
                 continue
             if action == "snapshot_state":
                 observation = snapshot_paths(workspace, snapshot_profile)
@@ -140,7 +154,8 @@ def execute_actions(
                     str(Path(workspace) / ".index" / "research.sqlite")
                 )
                 continue
-            arguments = encode_operation(step["operation"], step["params"])
+            arguments = encode_operation(step["operation"], step["params"], manifest)
+            query_id = step["params"].get("query_id")
             timeout_ms = int(step.get("timeout_ms", 30_000))
             if action == "external_crash":
                 barrier_rel = f".bench-control/{step['capture_id']}.json"
@@ -149,6 +164,8 @@ def execute_actions(
                     arguments,
                     capture_id=step["capture_id"],
                     timeout_ms=timeout_ms,
+                    virtual_time=virtual_time,
+                    query_id=query_id,
                     test_control={"pause_at": step["pause_at"], "barrier_path": barrier_rel},
                 )
                 reached = _wait_for_file(barrier, timeout_ms)
@@ -169,9 +186,21 @@ def execute_actions(
 
             if action == "invoke_while_locked":
                 with _held_lock(workspace, step["lock_path"]):
-                    result = adapter.invoke(arguments, capture_id=step["capture_id"], timeout_ms=timeout_ms)
+                    result = adapter.invoke(
+                        arguments,
+                        capture_id=step["capture_id"],
+                        timeout_ms=timeout_ms,
+                        virtual_time=virtual_time,
+                        query_id=query_id,
+                    )
             else:
-                result = adapter.invoke(arguments, capture_id=step.get("capture_id", ""), timeout_ms=timeout_ms)
+                result = adapter.invoke(
+                    arguments,
+                    capture_id=step.get("capture_id", ""),
+                    timeout_ms=timeout_ms,
+                    virtual_time=virtual_time,
+                    query_id=query_id,
+                )
             if "capture_id" not in step:
                 continue
             if not isinstance(result.payload, dict):

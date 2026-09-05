@@ -3,17 +3,39 @@
   "$id": "prediction/v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "capture_id", "status", "error_semantic", "warnings", "errors", "results", "provenance_graph", "asserted_facts", "evidence", "retrieval_mode", "ranking_authority"],
+  "required": ["schema_version", "capture_id", "status", "error_semantic", "warnings", "errors", "results", "provenance_graph", "asserted_facts", "evidence", "retrieval_mode", "ranking_authority", "route_sequence", "as_of"],
   "properties": {
     "schema_version": {"const": "prediction/v1"},
     "capture_id": {"type": "string"},
     "status": {"enum": ["success", "warning", "error", "fail_closed", "review_required"]},
     "error_semantic": {"type": ["string", "null"]},
     "warnings": {"type": "array"}, "errors": {"type": "array"},
-    "results": {"type": ["array", "null"]},
+    "results": {"type": ["array", "null"], "items": {"$ref": "#/$defs/result"}},
     "provenance_graph": {"type": ["object", "null"]},
     "asserted_facts": {"type": "array"}, "evidence": {"type": "array"},
     "retrieval_mode": {"type": ["string", "null"]},
-    "ranking_authority": {"type": ["string", "null"]}
+    "ranking_authority": {"type": ["string", "null"]},
+    "route_sequence": {"type": "array", "items": {"type": "string"}},
+    "as_of": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity_id", "version_ref", "path", "content_hash", "git_commit", "status", "is_stale", "relation_type", "section", "is_available"],
+      "properties": {
+        "ref": {"type": "string"},
+        "entity_id": {"type": ["string", "null"]},
+        "version_ref": {"type": ["string", "null"]},
+        "path": {"type": ["string", "null"]},
+        "content_hash": {"type": ["string", "null"]},
+        "git_commit": {"type": ["string", "null"]},
+        "status": {"type": ["string", "null"]},
+        "is_stale": {"type": "boolean"},
+        "relation_type": {"type": ["string", "null"]},
+        "section": {"type": ["string", "null"]},
+        "is_available": {"type": "boolean"}
+      }
+    }
   }
 }

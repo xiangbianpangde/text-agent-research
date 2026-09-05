@@ -1,6 +1,7 @@
 """查询结果 Envelope 与错误语义（P0-Contract §2.2 / §3）。"""
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from typing import Any, Optional
@@ -46,7 +47,7 @@ class QueryResult:
     ) -> None:
         self.query_id = uuid.uuid4().hex[:12]
         self.query_type = query_type
-        self.as_of = as_of or time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        self.as_of = as_of or os.environ.get("RESEARCHCTL_VIRTUAL_TIME") or time.strftime("%Y-%m-%dT%H:%M:%S%z")
         self.status = status            # success | warning | error | fail_closed
         self.authority = authority      # canonical | derived | unresolved
         self.source_watermark = source_watermark or {}

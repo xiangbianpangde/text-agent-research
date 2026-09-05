@@ -1,7 +1,9 @@
-"""Closed typed benchmark operations mapped to participant CLI arguments."""
+"""Closed Oracle query registry mapped to participant CLI arguments."""
 from __future__ import annotations
 
 from typing import Any, List, Mapping
+
+from bench.oracle.manifest import OracleManifest
 
 
 class CommandCodecError(ValueError):
@@ -15,35 +17,64 @@ def _required(params: Mapping[str, Any], key: str) -> str:
     return value
 
 
-def encode_operation(operation: str, params: Mapping[str, Any]) -> List[str]:
-    """No arbitrary shell is accepted; operations form a closed semantic table."""
+def resolve_query(
+    manifest: OracleManifest,
+    operation: str,
+    params: Mapping[str, Any],
+) -> Mapping[str, Any] | None:
+    query_id = params.get("query_id")
+    if query_id is None:
+        return None
+    if not isinstance(query_id, str) or not query_id:
+        raise CommandCodecError("query_id must be a non-empty string")
+    query = manifest.query(query_id)
+    if query["operation"] != operation:
+        raise CommandCodecError(
+            f"query operation mismatch: {query_id} declares {query['operation']}, action requested {operation}"
+        )
+    return query
+
+
+def encode_operation(
+    operation: str,
+    params: Mapping[str, Any],
+    manifest: OracleManifest,
+) -> List[str]:
+    """Encode only participant-visible fields from the same manifest query used by Gold."""
+    query = resolve_query(manifest, operation, params)
+    source = query if query is not None else params
     if operation == "index":
+        if params:
+            raise CommandCodecError("index params must be empty")
         return ["index"]
     if operation in ("query_entity", "query_facts", "query_lineage", "query_state", "query_exact_routing"):
-        value = params.get("entity_id") or params.get("entity_ref") or params.get("ref")
-        return ["query", "--entity", _required({"value": value}, "value")]
+        return ["query", "--entity", _required(source, "participant_locator")]
     if operation == "query_external_basis":
-        value = params.get("entity_id") or params.get("definition_ref") or params.get("ref")
-        return ["query", "--entity", _required({"value": value}, "value")]
+        return ["query", "--entity", _required(source, "participant_locator")]
     if operation in ("trace_evidence", "trace_graph"):
-        value = params.get("entity") or params.get("ref")
-        return ["trace", _required({"value": value}, "value")]
+        return ["trace", _required(source, "participant_locator")]
     if operation == "query_sources":
-        value = params.get("owner") or params.get("entity") or params.get("ref")
-        return ["sources", _required({"value": value}, "value")]
-    if operation == "query_history":
-        return ["history"]
+        return ["sources", _required(source, "participant_locator")]
+    if operation in ("query_history", "query_as_of_state"):
+        arguments = ["history"]
+        if source.get("as_of"):
+            arguments.extend(["--as-of", str(source["as_of"])])
+        return arguments
     if operation == "reconcile_integrity":
         return ["reconcile"]
     if operation == "query_text_semantic":
-        return ["query", "--text", _required(params, "text"), "--semantic"]
+        return ["query", "--text", _required(source, "text"), "--semantic"]
     if operation == "query_text_lexical":
-        return ["query", "--text", _required(params, "text")]
-    if operation == "query_project_state":
-        return ["query", "--doc-type", "report_current"]
+        return ["query", "--text", _required(source, "text")]
+    if operation == "query_project_current":
+        return ["query", "--entity", _required(source, "participant_locator")]
+    if operation == "query_project_index":
+        return ["query", "--text", _required(source, "text")]
     if operation in ("impact", "stale_status"):
-        value = params.get("entity") or params.get("ref")
-        return ["impact", _required({"value": value}, "value")]
+        arguments = ["impact", _required(source, "participant_locator")]
+        if source.get("change_type"):
+            arguments.extend(["--change-type", str(source["change_type"])])
+        return arguments
     if operation == "tx_reconcile":
         return ["tx-reconcile"]
     if operation == "freeze_report":

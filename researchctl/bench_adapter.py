@@ -61,6 +61,14 @@ def _validate_request(value: Any) -> Optional[str]:
             return "invoke.timeout_ms must be an integer in [1, 600000]"
         if not isinstance(value.get("capture_id", ""), str):
             return "invoke.capture_id must be a string"
+        if value.get("virtual_time") is not None and (
+            not isinstance(value["virtual_time"], str) or not value["virtual_time"]
+        ):
+            return "invoke.virtual_time must be a non-empty string"
+        if value.get("query_id") is not None and (
+            not isinstance(value["query_id"], str) or not value["query_id"]
+        ):
+            return "invoke.query_id must be a non-empty string"
         control = value.get("test_control")
         if control is not None:
             if not isinstance(control, dict) or set(control) != {"pause_at", "barrier_path"}:
@@ -70,6 +78,30 @@ def _validate_request(value: Any) -> Optional[str]:
     return None
 
 
+def _normalize_results(native: Any, top_status: str) -> list[dict[str, Any]]:
+    if not isinstance(native, list):
+        return []
+    normalized = []
+    for row in native:
+        if not isinstance(row, dict):
+            normalized.append(row)
+            continue
+        status = row.get("status") if isinstance(row.get("status"), str) else None
+        normalized.append({
+            "entity_id": row.get("entity_id"),
+            "version_ref": row.get("version_ref"),
+            "path": row.get("path"),
+            "content_hash": row.get("content_hash"),
+            "git_commit": row.get("git_commit"),
+            "status": status,
+            "is_stale": row.get("is_stale") is True,
+            "relation_type": row.get("relation_type"),
+            "section": row.get("section"),
+            "is_available": row.get("is_available") is not False,
+        })
+    return normalized
+
+
 def _normalize_prediction(native: Any, capture_id: str) -> Dict[str, Any]:
     payload = native if isinstance(native, dict) else {}
     status = payload.get("status", "error")
@@ -77,9 +109,10 @@ def _normalize_prediction(native: Any, capture_id: str) -> Dict[str, Any]:
         status = "success"
     if status not in {"success", "warning", "error", "fail_closed", "review_required"}:
         status = "error"
-    results = payload.get("results", [])
-    if results is not None and not isinstance(results, list):
-        results = []
+    results = _normalize_results(payload.get("results", []), status)
+    ranking_authority = payload.get("ranking_authority")
+    if not isinstance(ranking_authority, str) and payload.get("authority") in {"canonical", "derived"}:
+        ranking_authority = "authoritative"
     return {
         "schema_version": "prediction/v1",
         "capture_id": capture_id,
@@ -92,7 +125,9 @@ def _normalize_prediction(native: Any, capture_id: str) -> Dict[str, Any]:
         "asserted_facts": payload.get("asserted_facts") if isinstance(payload.get("asserted_facts"), list) else [],
         "evidence": payload.get("evidence") if isinstance(payload.get("evidence"), list) else [],
         "retrieval_mode": payload.get("query_type") if isinstance(payload.get("query_type"), str) else None,
-        "ranking_authority": payload.get("ranking_authority") if isinstance(payload.get("ranking_authority"), str) else None,
+        "ranking_authority": ranking_authority if isinstance(ranking_authority, str) else None,
+        "route_sequence": [payload["query_type"]] if isinstance(payload.get("query_type"), str) else [],
+        "as_of": payload.get("as_of") if isinstance(payload.get("as_of"), str) else None,
     }
 
 
@@ -145,6 +180,9 @@ def _invoke(request: Dict[str, Any], workspace: str) -> Dict[str, Any]:
 
     stdout = io.StringIO()
     stderr = io.StringIO()
+    old_virtual_time = os.environ.get("RESEARCHCTL_VIRTUAL_TIME")
+    if request.get("virtual_time"):
+        os.environ["RESEARCHCTL_VIRTUAL_TIME"] = request["virtual_time"]
     try:
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             exit_code = researchctl_main(["--root", workspace, *request["arguments"]])
@@ -152,6 +190,11 @@ def _invoke(request: Dict[str, Any], workspace: str) -> Dict[str, Any]:
         exit_code = int(exc.code) if isinstance(exc.code, int) else 1
     except BaseException as exc:  # Participant exceptions become observable SUT failures.
         return _error(request, "SUT_EXCEPTION", f"{type(exc).__name__}: {exc}")
+    finally:
+        if old_virtual_time is None:
+            os.environ.pop("RESEARCHCTL_VIRTUAL_TIME", None)
+        else:
+            os.environ["RESEARCHCTL_VIRTUAL_TIME"] = old_virtual_time
 
     out = stdout.getvalue()
     native = None

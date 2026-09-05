@@ -63,6 +63,8 @@ for line in sys.stdin:
             "evidence": [],
             "retrieval_mode": None,
             "ranking_authority": None,
+            "route_sequence": [],
+            "as_of": None,
         }
         emit(
             request,

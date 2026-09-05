@@ -129,7 +129,11 @@ def main(argv=None) -> int:
             print(f"\n评测完整数据包已保存至: {args.save_json}")
 
     if metrics.evaluation_mode == "diagnostic_partial":
-        return 0 if metrics.total_scenarios > 0 and metrics.passed_scenarios == metrics.total_scenarios else 1
+        diagnostic = metrics.legacy_diagnostic or {
+            "passed_scenarios": metrics.passed_scenarios,
+            "total_scenarios": metrics.total_scenarios,
+        }
+        return 0 if diagnostic["total_scenarios"] > 0 and diagnostic["passed_scenarios"] == diagnostic["total_scenarios"] else 1
     return 0 if metrics.iqg_passed else 1
 
 

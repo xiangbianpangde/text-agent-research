@@ -130,6 +130,7 @@ class ProcessSUTAdapter:
         self._pending = None
         if not line:
             stderr = self._read_stderr()
+            self._terminate()
             raise SUTAdapterError(
                 f"adapter exited before responding to {pending.operation}"
                 + (f": {stderr.strip()}" if stderr.strip() else "")
@@ -176,6 +177,8 @@ class ProcessSUTAdapter:
         capture_id: str = "",
         timeout_ms: int = 30_000,
         test_control: Optional[Mapping[str, Any]] = None,
+        virtual_time: Optional[str] = None,
+        query_id: Optional[str] = None,
     ) -> PendingRequest:
         if self._workspace is None:
             raise SUTAdapterError("prepare must succeed before invoke")
@@ -186,6 +189,10 @@ class ProcessSUTAdapter:
         }
         if test_control is not None:
             fields["test_control"] = dict(test_control)
+        if virtual_time is not None:
+            fields["virtual_time"] = virtual_time
+        if query_id is not None:
+            fields["query_id"] = query_id
         return self._begin_request("invoke", **fields)
 
     def await_invoke(self, pending: PendingRequest, *, timeout_ms: int = 30_000) -> InvocationResult:
@@ -211,12 +218,16 @@ class ProcessSUTAdapter:
         capture_id: str = "",
         timeout_ms: int = 30_000,
         test_control: Optional[Mapping[str, Any]] = None,
+        virtual_time: Optional[str] = None,
+        query_id: Optional[str] = None,
     ) -> InvocationResult:
         pending = self.begin_invoke(
             arguments,
             capture_id=capture_id,
             timeout_ms=timeout_ms,
             test_control=test_control,
+            virtual_time=virtual_time,
+            query_id=query_id,
         )
         return self.await_invoke(pending, timeout_ms=timeout_ms)
 
@@ -297,16 +308,35 @@ class ProcessSUTAdapter:
     def _terminate(self) -> None:
         process = self._process
         if process is None:
+            self._pending = None
             return
         if process.poll() is None:
-            process.terminate()
+            if os.name == "posix":
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            else:
+                process.terminate()
             try:
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
-                process.kill()
+                if os.name == "posix":
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                else:
+                    process.kill()
                 process.wait(timeout=2)
+        if os.name == "posix":
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         self._close_pipes(process)
         self._process = None
+        self._pending = None
 
     @staticmethod
     def _close_pipes(process: subprocess.Popen[str]) -> None:

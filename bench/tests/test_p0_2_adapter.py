@@ -4,7 +4,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 from bench.adapters import ProcessSUTAdapter
 from bench.adapters.process import project_root
@@ -38,6 +40,19 @@ class ProtocolContractTests(unittest.TestCase):
                 expected_request_id="expected",
                 expected_operation="health",
             )
+
+
+class DeterministicFingerprintTests(unittest.TestCase):
+    def test_directory_creation_order_does_not_change_fingerprint(self) -> None:
+        from researchctl.queries import current_fingerprint
+
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            for root, order in ((Path(first), ("z", "a")), (Path(second), ("a", "z"))):
+                for name in order:
+                    directory = root / name
+                    directory.mkdir()
+                    (directory / "value.txt").write_text(name, encoding="utf-8")
+            self.assertEqual(current_fingerprint(first), current_fingerprint(second))
 
 
 class AdapterLifecycleTests(unittest.TestCase):
@@ -100,7 +115,8 @@ class AdapterLifecycleTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 1)
         self.assertEqual(report["sut"]["adapter"], "independent-stub")
         self.assertEqual(report["total_scenarios"], 1)
-        self.assertEqual(report["passed_scenarios"], 0)
+        self.assertIsNone(report["passed_scenarios"])
+        self.assertEqual(report["legacy_diagnostic"]["passed_scenarios"], 0)
         self.assertEqual(report["tier"], "N/A")
         self.assertFalse(report["certification_eligible"])
 

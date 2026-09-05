@@ -105,6 +105,7 @@ def format_json_report(metrics: BenchmarkMetrics) -> str:
         "score_provenance": metrics.score_provenance,
         "integrity_metrics_provenance": metrics.integrity_metrics_provenance,
         "p0_3_status": metrics.p0_3_status,
+        "shadow_review_status": metrics.shadow_review_status,
         "sut": metrics.sut_metadata,
         "oracle": {
             "passed_scenarios": sum(1 for item in metrics.oracle_evaluations if item.get("passed")),
@@ -117,6 +118,7 @@ def format_json_report(metrics: BenchmarkMetrics) -> str:
             },
             "evaluations": metrics.oracle_evaluations,
         },
+        "legacy_diagnostic": metrics.legacy_diagnostic,
         "composite_score": metrics.composite_score,
         "passed_scenarios": metrics.passed_scenarios,
         "total_scenarios": metrics.total_scenarios,
@@ -149,7 +151,7 @@ def format_json_report(metrics: BenchmarkMetrics) -> str:
             "civ": metrics.civ,
         },
         "track_scores": metrics.track_scores,
-        "scenarios": [
+        "scenarios": None if metrics.evaluation_engine == "oracle_shadow" else [
             {
                 "id": result.scenario_id,
                 "track": result.track,

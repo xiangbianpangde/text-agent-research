@@ -29,10 +29,15 @@
     }
   },
   "$defs": {
+    "queryParams": {"type": "object", "additionalProperties": false, "required": ["query_id"], "properties": {"query_id": {"type": "string", "minLength": 1}}},
+    "emptyParams": {"type": "object", "maxProperties": 0},
+    "writeParams": {"type": "object", "additionalProperties": false, "required": ["idempotency_key", "actor", "authorization_ref"], "properties": {"idempotency_key": {"type": "string"}, "actor": {"type": "string"}, "authorization_ref": {"type": "string"}}},
+    "writeParamsWithQuery": {"type": "object", "additionalProperties": false, "required": ["query_id", "idempotency_key", "actor", "authorization_ref"], "properties": {"query_id": {"type": "string"}, "idempotency_key": {"type": "string"}, "actor": {"type": "string"}, "authorization_ref": {"type": "string"}}},
+    "invokeParams": {"oneOf": [{"$ref": "#/$defs/queryParams"}, {"$ref": "#/$defs/emptyParams"}]},
     "invoke": {
       "type": "object", "additionalProperties": false,
       "required": ["step", "action", "operation", "params"],
-      "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "invoke"}, "capture_id": {"type": "string"}, "operation": {"type": "string"}, "params": {"type": "object"}, "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 600000}}
+      "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "invoke"}, "capture_id": {"type": "string"}, "operation": {"type": "string"}, "params": {"$ref": "#/$defs/invokeParams"}, "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 600000}}
     },
     "mutate": {
       "type": "object", "additionalProperties": false,
@@ -46,9 +51,9 @@
     },
     "advanceTime": {"type": "object", "additionalProperties": false, "required": ["step", "action", "new_timestamp"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "advance_time"}, "new_timestamp": {"type": "string"}}},
     "lifecycle": {"type": "object", "additionalProperties": false, "required": ["step", "action"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"enum": ["context_reset", "restart_sut"]}}},
-    "newSession": {"type": "object", "additionalProperties": false, "required": ["step", "action", "session_id"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "new_session"}, "session_id": {"type": "string"}}},
-    "invokeWhileLocked": {"type": "object", "additionalProperties": false, "required": ["step", "action", "capture_id", "operation", "params", "lock_path"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "invoke_while_locked"}, "capture_id": {"type": "string"}, "operation": {"type": "string"}, "params": {"type": "object"}, "lock_path": {"type": "string"}, "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 600000}}},
-    "externalCrash": {"type": "object", "additionalProperties": false, "required": ["step", "action", "capture_id", "operation", "params", "pause_at"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "external_crash"}, "capture_id": {"type": "string"}, "operation": {"type": "string"}, "params": {"type": "object"}, "pause_at": {"type": "string"}, "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 600000}}},
+    "newSession": {"type": "object", "additionalProperties": false, "required": ["step", "action", "session_id"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "new_session"}, "session_id": {"type": "string"}, "capture_id": {"type": "string"}}},
+    "invokeWhileLocked": {"type": "object", "additionalProperties": false, "required": ["step", "action", "capture_id", "operation", "params", "lock_path"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "invoke_while_locked"}, "capture_id": {"type": "string"}, "operation": {"type": "string"}, "params": {"$ref": "#/$defs/writeParamsWithQuery"}, "lock_path": {"type": "string"}, "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 600000}}},
+    "externalCrash": {"type": "object", "additionalProperties": false, "required": ["step", "action", "capture_id", "operation", "params", "pause_at"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "external_crash"}, "capture_id": {"type": "string"}, "operation": {"type": "string"}, "params": {"$ref": "#/$defs/writeParams"}, "pause_at": {"type": "string"}, "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 600000}}},
     "snapshotState": {"type": "object", "additionalProperties": false, "required": ["step", "action", "capture_id"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "snapshot_state"}, "capture_id": {"type": "string"}, "require_no_tx_residue": {"type": "boolean"}}},
     "snapshotIndex": {"type": "object", "additionalProperties": false, "required": ["step", "action", "capture_id"], "properties": {"step": {"type": "integer", "minimum": 1}, "action": {"const": "snapshot_index"}, "capture_id": {"type": "string"}}}
   }

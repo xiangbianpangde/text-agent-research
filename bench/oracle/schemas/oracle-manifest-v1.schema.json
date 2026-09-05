@@ -3,11 +3,14 @@
   "$id": "oracle-manifest/v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "universe_id", "clock", "entities", "artifacts", "facts", "evidence_atoms", "relations", "snapshots", "external_sources"],
+  "required": ["schema_version", "universe_id", "clock", "fixture", "event_ids", "queries", "entities", "artifacts", "facts", "evidence_atoms", "relations", "snapshots", "external_sources"],
   "properties": {
     "schema_version": {"const": "oracle-manifest/v1"},
     "universe_id": {"type": "string", "minLength": 1},
     "clock": {"type": "string", "minLength": 1},
+    "fixture": {"$ref": "#/$defs/fixture"},
+    "event_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "queries": {"type": "array", "items": {"$ref": "#/$defs/query"}},
     "entities": {"type": "array", "items": {"$ref": "#/$defs/object"}},
     "artifacts": {"type": "array", "items": {"$ref": "#/$defs/object"}},
     "facts": {"type": "array", "items": {"$ref": "#/$defs/fact"}},
@@ -17,20 +20,35 @@
     "external_sources": {"type": "array", "items": {"$ref": "#/$defs/external"}}
   },
   "$defs": {
+    "fixture": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_archive", "source_hash", "archive", "format", "content_hash"],
+      "properties": {"source_archive": {"type": "string"}, "source_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "archive": {"type": "string"}, "format": {"const": "tar"}, "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+    },
+    "query": {
+      "type": "object", "additionalProperties": false,
+      "required": ["query_id", "operation", "target_ref", "text", "as_of", "participant_locator", "predicates", "relation_types", "route_sequence", "ranking_authority"],
+      "properties": {
+        "query_id": {"type": "string"}, "operation": {"type": "string"}, "target_ref": {"type": ["string", "null"]},
+        "text": {"type": ["string", "null"]}, "as_of": {"type": ["string", "null"]}, "participant_locator": {"type": ["string", "null"]},
+        "predicates": {"type": "array", "items": {"type": "string"}}, "relation_types": {"type": "array", "items": {"type": "string"}},
+        "route_sequence": {"type": "array", "items": {"type": "string"}}, "ranking_authority": {"type": ["string", "null"]}, "change_type": {"type": ["string", "null"]}
+      }
+    },
     "object": {
       "type": "object", "additionalProperties": false,
-      "required": ["ref", "kind", "entity_id", "version_ref", "path", "status", "content_hash", "git_commit"],
+      "required": ["ref", "kind", "entity_id", "version_ref", "path", "status", "content_hash", "lifecycle_start", "git_commit"],
       "properties": {
         "ref": {"type": "string"}, "kind": {"type": "string"}, "entity_id": {"type": "string"},
         "version_ref": {"type": ["string", "null"]}, "path": {"type": ["string", "null"]},
-        "status": {"type": "string"}, "content_hash": {"type": ["string", "null"]},
+        "status": {"type": "string"}, "content_hash": {"type": ["string", "null"]}, "lifecycle_start": {"type": "string"},
         "git_commit": {"type": ["string", "null"]}
       }
     },
     "fact": {
       "type": "object", "additionalProperties": false,
-      "required": ["fact_id", "subject", "predicate", "value"],
-      "properties": {"fact_id": {"type": "string"}, "subject": {"type": "string"}, "predicate": {"type": "string"}, "value": {}}
+      "required": ["fact_id", "subject", "predicate", "value", "occurred_at"],
+      "properties": {"fact_id": {"type": "string"}, "subject": {"type": "string"}, "predicate": {"type": "string"}, "value": {}, "occurred_at": {"type": "string"}}
     },
     "evidence": {
       "type": "object", "additionalProperties": false,

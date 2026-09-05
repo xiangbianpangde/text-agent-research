@@ -160,7 +160,8 @@ def build_index(root: str, db_path: str, git_commit: str = "HEAD") -> dict:
     # ---- 扫描文件树 ----
     # 收集所有文件，计算 scan_fingerprint
     scan_lines = []
-    for dirpath, _subdirs, filenames in os.walk(root):
+    for dirpath, subdirs, filenames in os.walk(root):
+        subdirs.sort()
         for fn in sorted(filenames):
             full = os.path.join(dirpath, fn)
             rel = os.path.relpath(full, root)
@@ -190,8 +191,9 @@ def build_index(root: str, db_path: str, git_commit: str = "HEAD") -> dict:
 
     # organized
     org_id_paths = {}
-    for dirpath, _subdirs, filenames in os.walk(os.path.join(root, "organized")):
-        for fn in filenames:
+    for dirpath, subdirs, filenames in os.walk(os.path.join(root, "organized")):
+        subdirs.sort()
+        for fn in sorted(filenames):
             if fn.endswith(".md"):
                 full = os.path.join(dirpath, fn)
                 rel = os.path.relpath(full, root)

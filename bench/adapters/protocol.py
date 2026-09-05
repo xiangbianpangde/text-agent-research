@@ -59,6 +59,12 @@ def validate_request(request: Any) -> Dict[str, Any]:
         capture_id = request.get("capture_id", "")
         if not isinstance(capture_id, str):
             raise AdapterProtocolError("invoke.capture_id must be a string")
+        virtual_time = request.get("virtual_time")
+        if virtual_time is not None:
+            _require_string(virtual_time, "invoke.virtual_time")
+        query_id = request.get("query_id")
+        if query_id is not None:
+            _require_string(query_id, "invoke.query_id")
         test_control = request.get("test_control")
         if test_control is not None:
             if not isinstance(test_control, dict):

@@ -5,6 +5,7 @@ import dataclasses
 from typing import Any, Dict, Iterable, List, Mapping, Set, Tuple
 
 from .manifest import OracleManifest, digest_json
+from .time import at_or_before
 
 
 @dataclasses.dataclass(frozen=True)
@@ -63,6 +64,24 @@ class OracleState:
                     changed = True
         return closure
 
+    def benchmark_dependents(self, root: str) -> Set[str]:
+        eligible_kinds = {"run", "organized_result", "organized_analysis", "report", "report_claim"}
+        return {
+            ref for ref in self.reverse_closure(root) - {root}
+            if ref in self.objects and self.objects[ref]["kind"] in eligible_kinds
+        }
+
+    def propagation_subgraph(self, root: str) -> Dict[str, List[Mapping[str, Any]]]:
+        """Return the downstream business graph used by impact/stale propagation."""
+        nodes = {root} | self.benchmark_dependents(root)
+        edges: List[Mapping[str, Any]] = []
+        for edge in self.relations:
+            if edge["source_ref"] in nodes and edge["target_ref"] in nodes:
+                edges.append(edge)
+        node_rows = [self.objects[ref] for ref in sorted(nodes) if ref in self.objects]
+        edge_rows = sorted(edges, key=lambda row: (row["source_ref"], row["relation"], row["target_ref"]))
+        return {"nodes": node_rows, "edges": edge_rows}
+
     def dependency_subgraph(self, root: str) -> Dict[str, List[Mapping[str, Any]]]:
         nodes = {root}
         edges: List[Mapping[str, Any]] = []
@@ -101,7 +120,7 @@ class OracleState:
             if kind == "raw_invalidation":
                 if self.object_for(target) is None:
                     raise ValueError(f"unknown invalidation target: {target}")
-                stale = self.reverse_closure(target) - {target}
+                stale = self.benchmark_dependents(target)
                 return dataclasses.replace(
                     self,
                     invalid_refs=self.invalid_refs | {target},
@@ -121,6 +140,7 @@ class OracleState:
                     "path": str(action["path"]),
                     "status": "valid",
                     "content_hash": action.get("content_hash"),
+                    "lifecycle_start": self.clock,
                     "git_commit": None,
                 }
                 properties = action.get("properties", {})
@@ -132,6 +152,7 @@ class OracleState:
                             "subject": new_ref,
                             "predicate": str(predicate),
                             "value": value,
+                            "occurred_at": self.clock,
                         })
                 return dataclasses.replace(self, objects=objects, facts=tuple(facts), changed_refs=self.changed_refs | {new_ref})
             if kind == "duplicate_version":
@@ -145,7 +166,11 @@ class OracleState:
                     raise ValueError(f"unknown tamper target: {target}")
                 return dataclasses.replace(self, hash_mismatch_refs=self.hash_mismatch_refs | {target})
             if kind == "create_file":
-                return dataclasses.replace(self, orphan_paths=self.orphan_paths | {target})
+                return dataclasses.replace(
+                    self,
+                    orphan_paths=self.orphan_paths | {target},
+                    index_state="stale",
+                )
             if kind == "delete_tree":
                 return dataclasses.replace(self, index_state="missing" if target == ".index" else self.index_state)
             if kind in ("touch_file", "corrupt_index"):
@@ -157,6 +182,44 @@ class OracleState:
         if action["action"] == "external_crash":
             return dataclasses.replace(self, transaction_stage=str(action["pause_at"]))
         return self
+
+    def visible_refs(self, as_of: str | None = None) -> Set[str]:
+        if as_of is None:
+            return set(self.objects)
+        return {
+            ref for ref, obj in self.objects.items()
+            if at_or_before(obj["lifecycle_start"], as_of)
+        }
+
+    def snapshot(self, *, as_of: str | None = None) -> Dict[str, Any]:
+        visible = self.visible_refs(as_of)
+        facts = [
+            dict(row) for row in self.facts
+            if (as_of is None or at_or_before(row["occurred_at"], as_of))
+            and row["subject"] in visible
+        ]
+        return {
+            "objects": {key: dict(value) for key, value in sorted(self.objects.items()) if key in visible},
+            "facts": facts,
+            "relations": [
+                dict(row) for row in self.relations
+                if row["source_ref"] in visible and row["target_ref"] in visible
+            ],
+            "external_sources": {key: dict(value) for key, value in sorted(self.external_sources.items())},
+            "clock": self.clock,
+            "as_of": as_of,
+            "invalid_refs": sorted(self.invalid_refs),
+            "stale_refs": sorted(self.stale_refs),
+            "changed_refs": sorted(self.changed_refs),
+            "missing_refs": sorted(self.missing_refs),
+            "hash_mismatch_refs": sorted(self.hash_mismatch_refs),
+            "orphan_paths": sorted(self.orphan_paths),
+            "ambiguous_versions": sorted(self.ambiguous_versions),
+            "semantic_tamper_refs": sorted(self.semantic_tamper_refs),
+            "index_state": self.index_state,
+            "context_epoch": self.context_epoch,
+            "transaction_stage": self.transaction_stage,
+        }
 
     def summary(self) -> Dict[str, Any]:
         value = {

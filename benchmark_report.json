@@ -4,9 +4,10 @@
   "benchmark_status": "internal_conformance_only",
   "evaluation_mode": "full",
   "evaluation_engine": "oracle_shadow",
-  "score_provenance": "legacy_diagnostic_only",
-  "integrity_metrics_provenance": "legacy_diagnostic_only",
+  "score_provenance": "not_available_oracle_shadow",
+  "integrity_metrics_provenance": "not_available_oracle_shadow",
   "p0_3_status": "incomplete_p0_3b",
+  "shadow_review_status": "PASS_P0_3B_ACCEPTED",
   "sut": {
     "protocol": "sut-adapter/v1",
     "transport": "stdio-ndjson",
@@ -22,8 +23,8 @@
     ]
   },
   "oracle": {
-    "passed_scenarios": 5,
-    "failed_scenarios": 28,
+    "passed_scenarios": 6,
+    "failed_scenarios": 27,
     "coverage": {
       "required": 33,
       "compiled": 33,
@@ -84,9 +85,15 @@
             "kind": "asserted_facts_exact",
             "passed": false,
             "capture_id": "origin"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": false,
+            "capture_id": "origin"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -97,7 +104,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:d2b490110c1fbf396c27acc874b424506b73317d71159f65f3155fc6aef29999",
+        "gold_digest": "sha256:792291f17387e34bebf815bf2d389492244dd377fa990cf8c8196a72a919397e",
         "execution_errors": []
       },
       {
@@ -119,9 +126,15 @@
             "kind": "asserted_facts_exact",
             "passed": false,
             "capture_id": "authority"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": false,
+            "capture_id": "authority"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -132,7 +145,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:407c322ebd599ba939108a209bc951cf71826cb7dd70890bfd74782d5743158c",
+        "gold_digest": "sha256:8b615869a138ca833410990c184845fd90e8cbee173c7644acae1ff78b9f70a3",
         "execution_errors": []
       },
       {
@@ -159,9 +172,15 @@
             "kind": "evidence_exact",
             "passed": false,
             "capture_id": "external-basis"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": false,
+            "capture_id": "external-basis"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -172,7 +191,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:b77a43cf156fd44c6f04f3b08795983fc0e7150de1e564258174730434543399",
+        "gold_digest": "sha256:4fa8203937d6a04019a7ea53271603bf424e9045cbb9af87d79d21c06de91350",
         "execution_errors": []
       },
       {
@@ -194,9 +213,15 @@
             "kind": "asserted_facts_exact",
             "passed": false,
             "capture_id": "evolution"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": false,
+            "capture_id": "evolution"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -207,7 +232,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:317c4ad9ef36071c8d5c3c9985b8d6c3cf4cdceb010633743382cf788171b2b2",
+        "gold_digest": "sha256:811fa0f82706077349129460ab4559b85a3d7f21976e31ea6117fab45f1c5544",
         "execution_errors": []
       },
       {
@@ -227,16 +252,22 @@
           },
           {
             "kind": "asserted_facts_exact",
-            "passed": false,
+            "passed": true,
             "capture_id": "lineage"
           },
           {
             "kind": "lineage_exact",
             "passed": false,
             "capture_id": "lineage"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": false,
+            "capture_id": "lineage"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -247,7 +278,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:478bd697ed95fdb251dda1c56e6c3bbe36e7f66471c50c437b9625a87d7ef7c2",
+        "gold_digest": "sha256:48ecb863b88f2bbed016d9cd83163582e6a375a841465ea9204bbf21bce6bb61",
         "execution_errors": []
       },
       {
@@ -267,6 +298,7 @@
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -277,7 +309,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": true,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:9dc5fae6a516fdc8f835987344e48da7d234b64b0cf3a48c547b91d2f0494464",
+        "gold_digest": "sha256:e12bb9b74593bb3e724c3c265b5372af925a99634539ab0ed79ac880be8e203e",
         "execution_errors": []
       },
       {
@@ -313,9 +345,20 @@
             "kind": "version_binding_exact",
             "passed": false,
             "capture_id": "run-binding"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "run-binding"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "run-binding"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -326,7 +369,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:b89c065dec955ec55b417fc310ebb6c1f7a0ccf0c2636abc45e004a542d303b6",
+        "gold_digest": "sha256:0adc0520c59ff46e2caf31ea154abe1151d68fa0fc85ed83091d301976c6de62",
         "execution_errors": []
       },
       {
@@ -362,9 +405,20 @@
             "kind": "version_binding_exact",
             "passed": false,
             "capture_id": "historical-binding"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "historical-binding"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "historical-binding"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -375,7 +429,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:159fa24a34a624ac63af589ca57ac74cd661caa58464217861cbb4f478dff228",
+        "gold_digest": "sha256:3048399f9900941f84c362f8fbb2179f09b7ed404eead3321ebff9815aa69c7b",
         "execution_errors": []
       },
       {
@@ -397,9 +451,15 @@
             "kind": "asserted_facts_exact",
             "passed": false,
             "capture_id": "runtime-deviation"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "runtime-deviation"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -410,7 +470,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:741dfcf51206b14dc75f19a423846835420d19a96ccc02bc1750dd3e4855d3ce",
+        "gold_digest": "sha256:cff177fe5345aad86d39cf8725278851dc911fdcf025c3843a144321e7a6407c",
         "execution_errors": []
       },
       {
@@ -436,14 +496,25 @@
             "fp": 0,
             "fn": 0,
             "tp_items": [
-              "organized:EXP-017"
+              "binding:CURRENT:organized"
             ],
             "fp_items": [],
             "fn_items": [],
             "exact": true
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "claim-source"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "claim-source"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -454,13 +525,13 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:d699ea5358f9faee64f3d5701b7e39c6a27a72c0d9940e6aa493b29a058eadc5",
+        "gold_digest": "sha256:4468396e8844483d7a37fcfffa4d59fc58c126235e217acad9469e4325441011",
         "execution_errors": []
       },
       {
         "scenario_id": "S11",
-        "passed": false,
-        "score": 0.0,
+        "passed": true,
+        "score": 1.0,
         "checks": [
           {
             "kind": "prediction_present",
@@ -469,29 +540,38 @@
           },
           {
             "kind": "expected_condition",
-            "passed": false,
+            "passed": true,
             "capture_id": "organized-runs"
           },
           {
             "kind": "result_set_exact",
-            "passed": false,
+            "passed": true,
             "capture_id": "organized-runs",
-            "tp": 0,
-            "fp": 1,
-            "fn": 3,
-            "tp_items": [],
-            "fp_items": [
-              "organized:EXP-017"
+            "tp": 3,
+            "fp": 0,
+            "fn": 0,
+            "tp_items": [
+              "binding:ORG:R051",
+              "binding:ORG:R052",
+              "binding:ORG:R053"
             ],
-            "fn_items": [
-              "run:R051",
-              "run:R052",
-              "run:R053"
-            ],
-            "exact": false
+            "fp_items": [],
+            "fn_items": [],
+            "exact": true
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "organized-runs"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "organized-runs"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -502,7 +582,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:92c5fa94b4e42a0fb1e73bcabda0e23e969742c4182e1b99e5a1326f641ab560",
+        "gold_digest": "sha256:b9ed309a36317ef53a40a376394cbd6e08b4ac0ada13ef4e83f869610c64f798",
         "execution_errors": []
       },
       {
@@ -517,7 +597,7 @@
           },
           {
             "kind": "expected_condition",
-            "passed": false,
+            "passed": true,
             "capture_id": "metric-evidence"
           },
           {
@@ -529,9 +609,20 @@
             "kind": "provenance_graph_exact",
             "passed": false,
             "capture_id": "metric-evidence"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "metric-evidence"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "metric-evidence"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -542,7 +633,7 @@
         "graph_exact_match": false,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:73148f756c052f22f64366ac9f654410f54f723ff6fd58d58fd60f54d605c9d3",
+        "gold_digest": "sha256:bfa66e1b92bb53dbeaeb7f537f092dc8ddd186c934a5ac4066b35db9f2d2efe8",
         "execution_errors": []
       },
       {
@@ -561,12 +652,46 @@
             "capture_id": "report-history"
           },
           {
+            "kind": "result_set_exact",
+            "passed": false,
+            "capture_id": "report-history",
+            "tp": 3,
+            "fp": 0,
+            "fn": 1,
+            "tp_items": [
+              "report:REPORT-001",
+              "report:REPORT-002",
+              "report:REPORT-003"
+            ],
+            "fp_items": [],
+            "fn_items": [
+              "report:CURRENT"
+            ],
+            "exact": false
+          },
+          {
             "kind": "asserted_facts_exact",
             "passed": false,
+            "capture_id": "report-history"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "report-history"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "report-history"
+          },
+          {
+            "kind": "as_of_exact",
+            "passed": true,
             "capture_id": "report-history"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -577,13 +702,13 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:83910eb9bd4a2cefed14d66e090d477973a9718fcce5b21983505dff0011b028",
+        "gold_digest": "sha256:6a0479dd305286b48df439423553f668d1d4e9de5c6f473b8759cca46f8c995f",
         "execution_errors": []
       },
       {
         "scenario_id": "S14",
-        "passed": false,
-        "score": 0.0,
+        "passed": true,
+        "score": 1.0,
         "checks": [
           {
             "kind": "prediction_present",
@@ -592,27 +717,41 @@
           },
           {
             "kind": "expected_condition",
-            "passed": false,
+            "passed": true,
             "capture_id": "historical-source"
           },
           {
             "kind": "result_set_exact",
-            "passed": false,
+            "passed": true,
             "capture_id": "historical-source",
             "tp": 1,
             "fp": 0,
-            "fn": 1,
+            "fn": 0,
             "tp_items": [
-              "organized:EXP-017"
+              "historical:REPORT-002:organized"
             ],
             "fp_items": [],
-            "fn_items": [
-              "report:REPORT-001"
-            ],
-            "exact": false
+            "fn_items": [],
+            "exact": true
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "historical-source"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "historical-source"
+          },
+          {
+            "kind": "historical_binding_exact",
+            "passed": true,
+            "capture_id": "historical-source"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -623,7 +762,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:bdbe4b8e87c323c792c8f6e5f00a8265a6474226338a81dcdd321b24bd2aff62",
+        "gold_digest": "sha256:9b007d5d810495fe2f185ba4df28534b30251f4390e01e5867a8c596b4e5adc0",
         "execution_errors": []
       },
       {
@@ -642,12 +781,67 @@
             "capture_id": "as-of-history"
           },
           {
+            "kind": "result_set_exact",
+            "passed": false,
+            "capture_id": "as-of-history",
+            "tp": 2,
+            "fp": 0,
+            "fn": 23,
+            "tp_items": [
+              "report:REPORT-001",
+              "report:REPORT-002"
+            ],
+            "fp_items": [],
+            "fn_items": [
+              "artifact:R052:execution-log",
+              "artifact:R052:metrics",
+              "binding:ORG:R051",
+              "binding:ORG:R052",
+              "binding:ORG:R053",
+              "claim:REPORT-002#accuracy",
+              "definition:H003@v1",
+              "discussion:MEMORY-001",
+              "external:paper-H003",
+              "historical:REPORT-002:organized",
+              "metric:M001",
+              "metric:M002",
+              "organized:EXP-017",
+              "organized:EXP-017-analysis",
+              "organized:EXP-020",
+              "raw:R051",
+              "raw:R052",
+              "raw:R053",
+              "run:EXP020-R001",
+              "run:R051",
+              "run:R052",
+              "run:R053",
+              "spec:EXP-017@v1"
+            ],
+            "exact": false
+          },
+          {
             "kind": "asserted_facts_exact",
             "passed": false,
+            "capture_id": "as-of-history"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "as-of-history"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "as-of-history"
+          },
+          {
+            "kind": "as_of_exact",
+            "passed": true,
             "capture_id": "as-of-history"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -658,7 +852,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:11bcd910669040c2efae9adb41b3c7ae1b22b41f703c80cf86a7665fed97e22a",
+        "gold_digest": "sha256:293b867b4373b9a89a33a9baf87df6a772dd8ad1b0fc4490297b2a688e3f521a",
         "execution_errors": []
       },
       {
@@ -677,12 +871,22 @@
             "capture_id": "impact-after-change"
           },
           {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "impact-after-change"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": false,
+            "capture_id": "impact-after-change"
+          },
+          {
             "kind": "impact_set_exact",
             "passed": false,
             "capture_id": "impact-after-change",
             "tp": 0,
             "fp": 0,
-            "fn": 7,
+            "fn": 5,
             "tp_items": [],
             "fp_items": [],
             "fn_items": [
@@ -690,17 +894,16 @@
               "claim:REPORT-002#accuracy",
               "organized:EXP-017",
               "report:CURRENT",
-              "report:REPORT-002",
-              "report:REPORT-003",
               "run:R052"
             ],
             "exact": false
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
-        "impact_fn": 7,
+        "impact_fn": 5,
         "stale_tp": 0,
         "stale_fp": 0,
         "stale_fn": 0,
@@ -708,7 +911,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:da9891ca31148a79878260c926ac30af086f5d55efa84f10db569f9fc9f5accb",
+        "gold_digest": "sha256:68464b114e5d02e592f1fd7189d8d159fc169426ff1f254af9be91fc61a06c9f",
         "execution_errors": []
       },
       {
@@ -732,12 +935,22 @@
             "capture_id": "stale-after-invalidation"
           },
           {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "stale-after-invalidation"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "stale-after-invalidation"
+          },
+          {
             "kind": "stale_set_exact",
             "passed": false,
             "capture_id": "stale-after-invalidation",
             "tp": 0,
             "fp": 0,
-            "fn": 7,
+            "fn": 5,
             "tp_items": [],
             "fp_items": [],
             "fn_items": [
@@ -745,25 +958,24 @@
               "claim:REPORT-002#accuracy",
               "organized:EXP-017",
               "report:CURRENT",
-              "report:REPORT-002",
-              "report:REPORT-003",
               "run:R052"
             ],
             "exact": false
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
         "stale_tp": 0,
         "stale_fp": 0,
-        "stale_fn": 7,
+        "stale_fn": 5,
         "version_correct": null,
         "graph_exact_match": false,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:3c35efeb4d442b5dff5c7bbb2ee4274dd766516d1f126373b8871a240e822aa1",
+        "gold_digest": "sha256:4d4f7de25e7a1715926bcad740dc369cbd167339bc9abde7b55e91b7702abea6",
         "execution_errors": []
       },
       {
@@ -782,12 +994,42 @@
             "capture_id": "unrelated-state"
           },
           {
+            "kind": "result_set_exact",
+            "passed": false,
+            "capture_id": "unrelated-state",
+            "tp": 0,
+            "fp": 0,
+            "fn": 1,
+            "tp_items": [],
+            "fp_items": [],
+            "fn_items": [
+              "organized:EXP-020"
+            ],
+            "exact": false
+          },
+          {
             "kind": "asserted_facts_exact",
-            "passed": true,
+            "passed": false,
+            "capture_id": "unrelated-state"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": false,
+            "capture_id": "unrelated-state"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": false,
+            "capture_id": "unrelated-state"
+          },
+          {
+            "kind": "state_exact",
+            "passed": false,
             "capture_id": "unrelated-state"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -798,7 +1040,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:4e482e093da287e52efec9557de041b4ca54a4aa28c317b6987aceed3fa2a20a",
+        "gold_digest": "sha256:a3e2487bfaa01bbb5053f81699dc91e493b50f8c6dad0067740faea78cda2655",
         "execution_errors": []
       },
       {
@@ -818,6 +1060,7 @@
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -828,7 +1071,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": true,
         "fail_closed_satisfied": true,
-        "gold_digest": "sha256:c33e8c59765dc8b3f225e20adc1ce3c80e121753e465a97006df37ad388f8dfc",
+        "gold_digest": "sha256:8257f5260f159471abe29495f70a86ea64cfa86f2f5c5376175523f6335b3d37",
         "execution_errors": []
       },
       {
@@ -845,9 +1088,15 @@
             "kind": "expected_condition",
             "passed": false,
             "capture_id": "tamper-detection"
+          },
+          {
+            "kind": "integrity_issues_exact",
+            "passed": false,
+            "capture_id": "tamper-detection"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -858,7 +1107,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": true,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:351525ac2867927893da46d9429b5148e76db6f31ec43406483156f971c98e86",
+        "gold_digest": "sha256:8727ad6c7aac16b3b23f84e5c4591ca3355e5edc00c7f0eaa833867181ac0c82",
         "execution_errors": []
       },
       {
@@ -883,6 +1132,7 @@
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -891,9 +1141,9 @@
         "stale_fn": 0,
         "version_correct": null,
         "graph_exact_match": null,
-        "fail_closed_expected": false,
+        "fail_closed_expected": true,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:409d04975e1c5a307188bccb21f2acff8ebf72aa94eeb3c92140b35f8a088c3b",
+        "gold_digest": "sha256:65e35e5d8ecd86b9c80938f479da447a0ea5fcfb0482b259e6a10bc0f55c5c8d",
         "execution_errors": []
       },
       {
@@ -913,6 +1163,7 @@
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -923,7 +1174,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": true,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:72d9bf7ad1058b2861d5f5e9d22f5317b805e7e30351f00b86ac18dd863903d3",
+        "gold_digest": "sha256:43dcf868d917c0d0ab01616934e11f6e1f94eface1083d1a24612ed3f0974b5b",
         "execution_errors": []
       },
       {
@@ -943,6 +1194,7 @@
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -953,7 +1205,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": true,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:3bba9cea345d4ea71b76594650b92d9476c4c514387e65fe2967e21a985ae510",
+        "gold_digest": "sha256:c21be8ceb5e8e735b078939124ae8cf3c8cac16208d58f6ee4264dbbe2ee983f",
         "execution_errors": []
       },
       {
@@ -973,6 +1225,7 @@
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -983,7 +1236,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": true,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:999c2713e656d56ced15fd87f47671f6077edc200350b6b26444b3c4deb58e24",
+        "gold_digest": "sha256:4574f25e6d68defeef459f131c18e17d4f094ebea745eafd96cbbeba6361c8e5",
         "execution_errors": []
       },
       {
@@ -1027,6 +1280,7 @@
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -1037,7 +1291,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:0a28e8d1a0e63196874f1fb86b0527ab1f585e166306c053439cbf0073cd96d4",
+        "gold_digest": "sha256:6d3d19be56ada38d38de78d4efeef1035d3e707105a5fe76d7776ab8f8cdc9d3",
         "execution_errors": []
       },
       {
@@ -1073,9 +1327,15 @@
             "kind": "routing_policy",
             "passed": true,
             "capture_id": "exact-routing"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "exact-routing"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -1086,7 +1346,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:71e61be6645ed5865a2d0ea8fdf910ef91c14ab48f23f4ff6fc351d059b9f436",
+        "gold_digest": "sha256:72a074db730c8c74f097624887c7ce0134aecf5f132baf217ed6bdabc109992f",
         "execution_errors": []
       },
       {
@@ -1130,6 +1390,7 @@
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -1140,7 +1401,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:f4714820010bb0ea2e476655b9a8cc3f0b87be3a6e7394d4cb9050c1a5b612ae",
+        "gold_digest": "sha256:244af6d674e90d74d63aae8c1c17bcecf2068d3473d99688560a0bf08a387b96",
         "execution_errors": []
       },
       {
@@ -1149,27 +1410,96 @@
         "score": 0.0,
         "checks": [
           {
+            "kind": "observation_present",
+            "passed": true,
+            "capture_id": "new-session"
+          },
+          {
+            "kind": "session_id",
+            "passed": true,
+            "capture_id": "new-session"
+          },
+          {
+            "kind": "process_restarted",
+            "passed": true,
+            "capture_id": "new-session"
+          },
+          {
             "kind": "prediction_present",
             "passed": true,
-            "capture_id": "project-state"
+            "capture_id": "project-current"
           },
           {
             "kind": "expected_condition",
             "passed": true,
-            "capture_id": "project-state"
+            "capture_id": "project-current"
+          },
+          {
+            "kind": "result_set_exact",
+            "passed": true,
+            "capture_id": "project-current",
+            "tp": 1,
+            "fp": 0,
+            "fn": 0,
+            "tp_items": [
+              "report:CURRENT"
+            ],
+            "fp_items": [],
+            "fn_items": [],
+            "exact": true
           },
           {
             "kind": "asserted_facts_exact",
             "passed": false,
-            "capture_id": "project-state"
+            "capture_id": "project-current"
           },
           {
             "kind": "routing_policy",
             "passed": true,
-            "capture_id": "project-state"
+            "capture_id": "project-current"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "project-current"
+          },
+          {
+            "kind": "prediction_present",
+            "passed": true,
+            "capture_id": "project-index"
+          },
+          {
+            "kind": "expected_condition",
+            "passed": true,
+            "capture_id": "project-index"
+          },
+          {
+            "kind": "result_set_exact",
+            "passed": false,
+            "capture_id": "project-index",
+            "tp": 0,
+            "fp": 0,
+            "fn": 1,
+            "tp_items": [],
+            "fp_items": [],
+            "fn_items": [
+              "index:NAV"
+            ],
+            "exact": false
+          },
+          {
+            "kind": "routing_policy",
+            "passed": false,
+            "capture_id": "project-index"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": false,
+            "capture_id": "project-index"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -1180,7 +1510,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:b505cc4e81fa4afeff84f7c4debae715fe73e07811e8b4b1336a28867fb6e38a",
+        "gold_digest": "sha256:3945a4e0993b66cd7e18f47d559885dbbc8e9c1627b19376a95a4bec95cbde4c",
         "execution_errors": []
       },
       {
@@ -1208,6 +1538,7 @@
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -1218,7 +1549,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:662679ca66eb96c6663c69a6d116b8654e196479f62d75dee384947580ac58ac",
+        "gold_digest": "sha256:47d12d92cc6871be798ec8c2c805a05bf4b166884851bfc9fbebd72e128ab9d4",
         "execution_errors": [
           "step 2 snapshot_index: StateObservationError: CLE schema mismatch in documents: missing ['meta_json', 'parent_id', 'section']",
           "step 5 snapshot_index: StateObservationError: CLE schema mismatch in documents: missing ['meta_json', 'parent_id', 'section']"
@@ -1241,6 +1572,7 @@
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -1251,13 +1583,13 @@
         "graph_exact_match": null,
         "fail_closed_expected": true,
         "fail_closed_satisfied": true,
-        "gold_digest": "sha256:e4852bfb9537ee7c5620892a3a17392a5b42f70572160c4aa290783809e7c08a",
+        "gold_digest": "sha256:230e85f6dfe0dd3562b11f62bacb6a256567a19075722b1fbadedcd3a096242b",
         "execution_errors": []
       },
       {
         "scenario_id": "S31",
-        "passed": true,
-        "score": 1.0,
+        "passed": false,
+        "score": 0.0,
         "checks": [
           {
             "kind": "observation_present",
@@ -1301,6 +1633,20 @@
             "capture_id": "reconcile-1"
           },
           {
+            "kind": "result_set_exact",
+            "passed": false,
+            "capture_id": "reconcile-1",
+            "tp": 0,
+            "fp": 1,
+            "fn": 0,
+            "tp_items": [],
+            "fp_items": [
+              "__unresolved_result_0"
+            ],
+            "fn_items": [],
+            "exact": false
+          },
+          {
             "kind": "observation_present",
             "passed": true,
             "capture_id": "canonical-recovered-1"
@@ -1327,6 +1673,18 @@
             "capture_id": "reconcile-2"
           },
           {
+            "kind": "result_set_exact",
+            "passed": true,
+            "capture_id": "reconcile-2",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tp_items": [],
+            "fp_items": [],
+            "fn_items": [],
+            "exact": true
+          },
+          {
             "kind": "observation_present",
             "passed": true,
             "capture_id": "canonical-recovered-2"
@@ -1344,6 +1702,7 @@
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -1354,7 +1713,7 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:29ffdefa633c089638518994116e89938e33de07f59fb267688364968bf60b44",
+        "gold_digest": "sha256:d2f1267c66e39df3d52b61b442d2174f6df2b0adedb1a72aac90bad033746cab",
         "execution_errors": []
       },
       {
@@ -1373,6 +1732,11 @@
             "capture_id": "index-drift"
           },
           {
+            "kind": "integrity_issues_exact",
+            "passed": false,
+            "capture_id": "index-drift"
+          },
+          {
             "kind": "prediction_present",
             "passed": true,
             "capture_id": "recovered-query"
@@ -1384,7 +1748,7 @@
           },
           {
             "kind": "result_set_exact",
-            "passed": true,
+            "passed": false,
             "capture_id": "recovered-query",
             "tp": 1,
             "fp": 0,
@@ -1395,20 +1759,36 @@
             "fp_items": [],
             "fn_items": [],
             "exact": true
+          },
+          {
+            "kind": "version_binding_exact",
+            "passed": true,
+            "capture_id": "recovered-query"
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "recovered-query"
+          },
+          {
+            "kind": "ranking_authority",
+            "passed": true,
+            "capture_id": "recovered-query"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
         "stale_tp": 0,
         "stale_fp": 0,
         "stale_fn": 0,
-        "version_correct": null,
+        "version_correct": true,
         "graph_exact_match": null,
         "fail_closed_expected": true,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:66de2acfdb5020f6e25c98ddede783625a46da241e6546af31356650a3353929",
+        "gold_digest": "sha256:beba89547c43817cabe387faaf437ca38761160f95508714dfe772098d68e544",
         "execution_errors": []
       },
       {
@@ -1427,12 +1807,32 @@
             "capture_id": "semantic-drift"
           },
           {
+            "kind": "result_set_exact",
+            "passed": false,
+            "capture_id": "semantic-drift",
+            "tp": 0,
+            "fp": 1,
+            "fn": 0,
+            "tp_items": [],
+            "fp_items": [
+              "__unresolved_result_0"
+            ],
+            "fn_items": [],
+            "exact": false
+          },
+          {
+            "kind": "routing_policy",
+            "passed": true,
+            "capture_id": "semantic-drift"
+          },
+          {
             "kind": "integrity_issues_exact",
             "passed": false,
             "capture_id": "semantic-drift"
           }
         ],
         "civ_count": 0,
+        "civ_violations": [],
         "impact_tp": 0,
         "impact_fp": 0,
         "impact_fn": 0,
@@ -1443,19 +1843,809 @@
         "graph_exact_match": null,
         "fail_closed_expected": false,
         "fail_closed_satisfied": false,
-        "gold_digest": "sha256:1db2219af1749cbcdafe60f9aa538e97b7d7a55a2a5770bdf19cb3a7f88c3404",
+        "gold_digest": "sha256:647e007f3be977b0af1d95730869509346fd601480f5b781ba277d783ff35993",
         "execution_errors": []
       }
     ]
   },
-  "composite_score": 100.0,
-  "passed_scenarios": 33,
+  "legacy_diagnostic": {
+    "composite_score": 100.0,
+    "passed_scenarios": 33,
+    "total_scenarios": 33,
+    "integrity_gate_passed": true,
+    "metrics": {
+      "pgem": 1.0,
+      "vlp": 1.0,
+      "sdp": 1.0,
+      "sdr": 1.0,
+      "sf1": 1.0,
+      "ip": 1.0,
+      "ir": 1.0,
+      "if1": 1.0,
+      "fcaa": 1.0,
+      "zhr": 0.0,
+      "civ": 0
+    },
+    "track_scores": {
+      "Track1_DefinitionProvenance": 100.0,
+      "Track2_RunSpecBinding": 100.0,
+      "Track3_ProvenanceTrace": 100.0,
+      "Track4_HistoricalTemporal": 100.0,
+      "Track5_StaleImpact": 100.0,
+      "Track6_IntegrityAdversarial": 100.0,
+      "Track7_RetrievalRouting": 100.0,
+      "Track8_LongHorizonContinuity": 100.0
+    },
+    "scenarios": [
+      {
+        "scenario_id": "S01",
+        "track": "Track1_DefinitionProvenance",
+        "name": "Definition Origin Attribution",
+        "passed": true,
+        "score": 1.0,
+        "detail": "成功追溯 H003@v1 提出者 human:alice 与事件 EV-000001",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": true,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S02",
+        "track": "Track1_DefinitionProvenance",
+        "name": "Definition Authority Source Tracing",
+        "passed": true,
+        "score": 1.0,
+        "detail": "成功解析权威引用与 DOI 锁定",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": true,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S03",
+        "track": "Track1_DefinitionProvenance",
+        "name": "External Literature Pinning",
+        "passed": true,
+        "score": 1.0,
+        "detail": "外部引用的内容哈希防漂移锁定校验通过",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": true,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S04",
+        "track": "Track1_DefinitionProvenance",
+        "name": "Definition Evolution & Rationale",
+        "passed": true,
+        "score": 1.0,
+        "detail": "修订事件记录 EV 编号与变更依据 D021",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": true,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S05",
+        "track": "Track1_DefinitionProvenance",
+        "name": "Definition Lineage Ordering",
+        "passed": true,
+        "score": 1.0,
+        "detail": "有序谱系 H003@v1 -> H003@v2 完整可追溯",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": true,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S06",
+        "track": "Track1_DefinitionProvenance",
+        "name": "Ambiguous Definition Rejection",
+        "passed": true,
+        "score": 1.0,
+        "detail": "成功拦截歧义版本并 Fail-Closed 拒答",
+        "error_semantic": "AMBIGUOUS_VERSION",
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": true,
+        "fail_closed_satisfied": true,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S07",
+        "track": "Track2_RunSpecBinding",
+        "name": "Run Spec Exact Binding",
+        "passed": true,
+        "score": 1.0,
+        "detail": "R052 精确绑定 EXP-017@v1",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": true,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S08",
+        "track": "Track2_RunSpecBinding",
+        "name": "Spec Evolution Invariant",
+        "passed": true,
+        "score": 1.0,
+        "detail": "规格演化不破坏历史 Run 的 v1 不变量",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": true,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S09",
+        "track": "Track2_RunSpecBinding",
+        "name": "Runtime Deviation Audit",
+        "passed": true,
+        "score": 1.0,
+        "detail": "执行参数完整登记可审计",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S10",
+        "track": "Track3_ProvenanceTrace",
+        "name": "Claim to Organized Mapping",
+        "passed": true,
+        "score": 1.0,
+        "detail": "CURRENT 正确穿透至 organized/EXP-017/result.md",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": true
+      },
+      {
+        "scenario_id": "S11",
+        "track": "Track3_ProvenanceTrace",
+        "name": "Organized to Raw Runs Drilling",
+        "passed": true,
+        "score": 1.0,
+        "detail": "整理文件成功穿透下钻至 R052 与 R053 原始 Runs",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": true
+      },
+      {
+        "scenario_id": "S12",
+        "track": "Track3_ProvenanceTrace",
+        "name": "End-to-End Metric Penetration",
+        "passed": true,
+        "score": 1.0,
+        "detail": "度量单点端到端穿透到原始 metrics.csv",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": true
+      },
+      {
+        "scenario_id": "S13",
+        "track": "Track4_HistoricalTemporal",
+        "name": "Cross-Report Temporal Comparison",
+        "passed": true,
+        "score": 1.0,
+        "detail": "准确区分 CURRENT fresh 与历史报告 stale 演化状态",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S14",
+        "track": "Track4_HistoricalTemporal",
+        "name": "Historical Snapshot Recovery",
+        "passed": true,
+        "score": 1.0,
+        "detail": "历史快照依赖从 Git 历史提交精准还原",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": true,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S15",
+        "track": "Track4_HistoricalTemporal",
+        "name": "As-Of Time Travel Consistency",
+        "passed": true,
+        "score": 1.0,
+        "detail": "报告时序单调递增，历史事件一致性完备",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S16",
+        "track": "Track5_StaleImpact",
+        "name": "Definition Revision Downstream Impact",
+        "passed": true,
+        "score": 1.0,
+        "detail": "下游影响拓扑全景精准召回 (IP=1.0, IR=1.0)",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 1,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S17",
+        "track": "Track5_StaleImpact",
+        "name": "Raw Invalidation Stale Propagation",
+        "passed": true,
+        "score": 1.0,
+        "detail": "失效数据沿因果拓扑精准传导 Stale 状态",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 1,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S18",
+        "track": "Track5_StaleImpact",
+        "name": "Negative Impact Preservation",
+        "passed": true,
+        "score": 1.0,
+        "detail": "无关实验负向隔离成功，未发生全量标 Stale 作弊",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 1,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S19",
+        "track": "Track6_IntegrityAdversarial",
+        "name": "Severed Link Detection",
+        "passed": true,
+        "score": 1.0,
+        "detail": "断链检测准确触发 SOURCE_MISSING 并 Fail-Closed",
+        "error_semantic": "SOURCE_MISSING",
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": true,
+        "fail_closed_satisfied": true,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S20",
+        "track": "Track6_IntegrityAdversarial",
+        "name": "Tampered Content Detection",
+        "passed": true,
+        "score": 1.0,
+        "detail": "准确检出内容哈希篡改 (HASH_MISMATCH)",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S21",
+        "track": "Track6_IntegrityAdversarial",
+        "name": "Orphan File Audit",
+        "passed": true,
+        "score": 1.0,
+        "detail": "巡检准确检出孤儿受控外文件 (ORPHAN)",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S22",
+        "track": "Track6_IntegrityAdversarial",
+        "name": "Nonexistent Prefix Injection Defense",
+        "passed": true,
+        "score": 1.0,
+        "detail": "前缀模糊匹配被坚决拒绝，返回 NOT_FOUND",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": true,
+        "fail_closed_satisfied": true,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S23",
+        "track": "Track6_IntegrityAdversarial",
+        "name": "Wildcard & SQL Injection Defense",
+        "passed": true,
+        "score": 1.0,
+        "detail": "通配符 % 严格作为字面量拦截，零 SQL 注入",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": true,
+        "fail_closed_satisfied": true,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S24",
+        "track": "Track6_IntegrityAdversarial",
+        "name": "Phantom Entity Hallucination Defense",
+        "passed": true,
+        "score": 1.0,
+        "detail": "虚构实体坚决拒答 (Zero Hallucination, CIV=0)",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": true,
+        "fail_closed_satisfied": true,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S25",
+        "track": "Track7_RetrievalRouting",
+        "name": "Vague Concept Recall",
+        "passed": true,
+        "score": 1.0,
+        "detail": "Layer 5 语义检索成功召回模糊相关概念",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S26",
+        "track": "Track7_RetrievalRouting",
+        "name": "Anti-RAG Crossing Violation",
+        "passed": true,
+        "score": 1.0,
+        "detail": "精确查询坚决走结构化路线，严禁向量碰巧猜测",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S27",
+        "track": "Track7_RetrievalRouting",
+        "name": "Advisory Ranking Semantic Boundary",
+        "passed": true,
+        "score": 1.0,
+        "detail": "语义检索严格约束为 advisory 建议性排名",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S28",
+        "track": "Track8_LongHorizonContinuity",
+        "name": "Context Wipeout Recovery",
+        "passed": true,
+        "score": 1.0,
+        "detail": "上下文彻底清空后，100% 成功重建科研全景",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S29",
+        "track": "Track8_LongHorizonContinuity",
+        "name": "Index Deletion Catastrophic Recovery",
+        "passed": true,
+        "score": 1.0,
+        "detail": "灾难重建达成规范逻辑转储全等 (CLE Match 100%)",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S30",
+        "track": "Track8_LongHorizonContinuity",
+        "name": "Concurrent Writer Collision",
+        "passed": true,
+        "score": 1.0,
+        "detail": "并发写冲突严格触发 TX_LOCKED 拦截",
+        "error_semantic": "TX_LOCKED",
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": true,
+        "fail_closed_satisfied": true,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S31",
+        "track": "Track8_LongHorizonContinuity",
+        "name": "Crash-Safety & Idempotent Recovery",
+        "passed": true,
+        "score": 1.0,
+        "detail": "崩溃中途安全保护，reconcile 幂等补齐且无半提交",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S32-A",
+        "track": "Track8_LongHorizonContinuity",
+        "name": "Derived Index Drift Recovery",
+        "passed": true,
+        "score": 1.0,
+        "detail": "派生索引自动重新对齐并消除 drift",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": false,
+        "fail_closed_satisfied": false,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      },
+      {
+        "scenario_id": "S32-B",
+        "track": "Track8_LongHorizonContinuity",
+        "name": "Canonical Semantic Drift Defense",
+        "passed": true,
+        "score": 1.0,
+        "detail": "坚决拦截未授权语义篡改，严禁仅凭 reindex 洗白",
+        "error_semantic": null,
+        "envelope_status": null,
+        "expected_behavior": null,
+        "civ_count": 0,
+        "is_hallucination": false,
+        "is_fail_closed_expected": true,
+        "fail_closed_satisfied": true,
+        "stale_tp": 0,
+        "stale_fp": 0,
+        "stale_fn": 0,
+        "impact_tp": 0,
+        "impact_fp": 0,
+        "impact_fn": 0,
+        "version_correct": null,
+        "graph_exact_match": null
+      }
+    ]
+  },
+  "composite_score": null,
+  "passed_scenarios": null,
   "total_scenarios": 33,
   "tier": "N/A",
   "tier_name": "诊断运行，不具备认证资格 (Diagnostic / Incomplete)",
   "certification_eligible": false,
-  "integrity_gate_passed": true,
-  "iqg_passed": false,
+  "integrity_gate_passed": null,
+  "iqg_passed": null,
   "coverage": {
     "rate": 1.0,
     "covered_tracks": [
@@ -1512,292 +2702,27 @@
     ]
   },
   "metrics": {
-    "pgem": 1.0,
-    "vlp": 1.0,
-    "sdp": 1.0,
-    "sdr": 1.0,
-    "sf1": 1.0,
-    "ip": 1.0,
-    "ir": 1.0,
-    "if1": 1.0,
-    "fcaa": 1.0,
-    "zhr": 0.0,
-    "civ": 0
+    "pgem": null,
+    "vlp": null,
+    "sdp": null,
+    "sdr": null,
+    "sf1": null,
+    "ip": null,
+    "ir": null,
+    "if1": null,
+    "fcaa": null,
+    "zhr": null,
+    "civ": null
   },
   "track_scores": {
-    "Track1_DefinitionProvenance": 100.0,
-    "Track2_RunSpecBinding": 100.0,
-    "Track3_ProvenanceTrace": 100.0,
-    "Track4_HistoricalTemporal": 100.0,
-    "Track5_StaleImpact": 100.0,
-    "Track6_IntegrityAdversarial": 100.0,
-    "Track7_RetrievalRouting": 100.0,
-    "Track8_LongHorizonContinuity": 100.0
+    "Track1_DefinitionProvenance": null,
+    "Track2_RunSpecBinding": null,
+    "Track3_ProvenanceTrace": null,
+    "Track4_HistoricalTemporal": null,
+    "Track5_StaleImpact": null,
+    "Track6_IntegrityAdversarial": null,
+    "Track7_RetrievalRouting": null,
+    "Track8_LongHorizonContinuity": null
   },
-  "scenarios": [
-    {
-      "id": "S01",
-      "track": "Track1_DefinitionProvenance",
-      "name": "Definition Origin Attribution",
-      "passed": true,
-      "score": 1.0,
-      "detail": "成功追溯 H003@v1 提出者 human:alice 与事件 EV-000001"
-    },
-    {
-      "id": "S02",
-      "track": "Track1_DefinitionProvenance",
-      "name": "Definition Authority Source Tracing",
-      "passed": true,
-      "score": 1.0,
-      "detail": "成功解析权威引用与 DOI 锁定"
-    },
-    {
-      "id": "S03",
-      "track": "Track1_DefinitionProvenance",
-      "name": "External Literature Pinning",
-      "passed": true,
-      "score": 1.0,
-      "detail": "外部引用的内容哈希防漂移锁定校验通过"
-    },
-    {
-      "id": "S04",
-      "track": "Track1_DefinitionProvenance",
-      "name": "Definition Evolution & Rationale",
-      "passed": true,
-      "score": 1.0,
-      "detail": "修订事件记录 EV 编号与变更依据 D021"
-    },
-    {
-      "id": "S05",
-      "track": "Track1_DefinitionProvenance",
-      "name": "Definition Lineage Ordering",
-      "passed": true,
-      "score": 1.0,
-      "detail": "有序谱系 H003@v1 -> H003@v2 完整可追溯"
-    },
-    {
-      "id": "S06",
-      "track": "Track1_DefinitionProvenance",
-      "name": "Ambiguous Definition Rejection",
-      "passed": true,
-      "score": 1.0,
-      "detail": "成功拦截歧义版本并 Fail-Closed 拒答"
-    },
-    {
-      "id": "S07",
-      "track": "Track2_RunSpecBinding",
-      "name": "Run Spec Exact Binding",
-      "passed": true,
-      "score": 1.0,
-      "detail": "R052 精确绑定 EXP-017@v1"
-    },
-    {
-      "id": "S08",
-      "track": "Track2_RunSpecBinding",
-      "name": "Spec Evolution Invariant",
-      "passed": true,
-      "score": 1.0,
-      "detail": "规格演化不破坏历史 Run 的 v1 不变量"
-    },
-    {
-      "id": "S09",
-      "track": "Track2_RunSpecBinding",
-      "name": "Runtime Deviation Audit",
-      "passed": true,
-      "score": 1.0,
-      "detail": "执行参数完整登记可审计"
-    },
-    {
-      "id": "S10",
-      "track": "Track3_ProvenanceTrace",
-      "name": "Claim to Organized Mapping",
-      "passed": true,
-      "score": 1.0,
-      "detail": "CURRENT 正确穿透至 organized/EXP-017/result.md"
-    },
-    {
-      "id": "S11",
-      "track": "Track3_ProvenanceTrace",
-      "name": "Organized to Raw Runs Drilling",
-      "passed": true,
-      "score": 1.0,
-      "detail": "整理文件成功穿透下钻至 R052 与 R053 原始 Runs"
-    },
-    {
-      "id": "S12",
-      "track": "Track3_ProvenanceTrace",
-      "name": "End-to-End Metric Penetration",
-      "passed": true,
-      "score": 1.0,
-      "detail": "度量单点端到端穿透到原始 metrics.csv"
-    },
-    {
-      "id": "S13",
-      "track": "Track4_HistoricalTemporal",
-      "name": "Cross-Report Temporal Comparison",
-      "passed": true,
-      "score": 1.0,
-      "detail": "准确区分 CURRENT fresh 与历史报告 stale 演化状态"
-    },
-    {
-      "id": "S14",
-      "track": "Track4_HistoricalTemporal",
-      "name": "Historical Snapshot Recovery",
-      "passed": true,
-      "score": 1.0,
-      "detail": "历史快照依赖从 Git 历史提交精准还原"
-    },
-    {
-      "id": "S15",
-      "track": "Track4_HistoricalTemporal",
-      "name": "As-Of Time Travel Consistency",
-      "passed": true,
-      "score": 1.0,
-      "detail": "报告时序单调递增，历史事件一致性完备"
-    },
-    {
-      "id": "S16",
-      "track": "Track5_StaleImpact",
-      "name": "Definition Revision Downstream Impact",
-      "passed": true,
-      "score": 1.0,
-      "detail": "下游影响拓扑全景精准召回 (IP=1.0, IR=1.0)"
-    },
-    {
-      "id": "S17",
-      "track": "Track5_StaleImpact",
-      "name": "Raw Invalidation Stale Propagation",
-      "passed": true,
-      "score": 1.0,
-      "detail": "失效数据沿因果拓扑精准传导 Stale 状态"
-    },
-    {
-      "id": "S18",
-      "track": "Track5_StaleImpact",
-      "name": "Negative Impact Preservation",
-      "passed": true,
-      "score": 1.0,
-      "detail": "无关实验负向隔离成功，未发生全量标 Stale 作弊"
-    },
-    {
-      "id": "S19",
-      "track": "Track6_IntegrityAdversarial",
-      "name": "Severed Link Detection",
-      "passed": true,
-      "score": 1.0,
-      "detail": "断链检测准确触发 SOURCE_MISSING 并 Fail-Closed"
-    },
-    {
-      "id": "S20",
-      "track": "Track6_IntegrityAdversarial",
-      "name": "Tampered Content Detection",
-      "passed": true,
-      "score": 1.0,
-      "detail": "准确检出内容哈希篡改 (HASH_MISMATCH)"
-    },
-    {
-      "id": "S21",
-      "track": "Track6_IntegrityAdversarial",
-      "name": "Orphan File Audit",
-      "passed": true,
-      "score": 1.0,
-      "detail": "巡检准确检出孤儿受控外文件 (ORPHAN)"
-    },
-    {
-      "id": "S22",
-      "track": "Track6_IntegrityAdversarial",
-      "name": "Nonexistent Prefix Injection Defense",
-      "passed": true,
-      "score": 1.0,
-      "detail": "前缀模糊匹配被坚决拒绝，返回 NOT_FOUND"
-    },
-    {
-      "id": "S23",
-      "track": "Track6_IntegrityAdversarial",
-      "name": "Wildcard & SQL Injection Defense",
-      "passed": true,
-      "score": 1.0,
-      "detail": "通配符 % 严格作为字面量拦截，零 SQL 注入"
-    },
-    {
-      "id": "S24",
-      "track": "Track6_IntegrityAdversarial",
-      "name": "Phantom Entity Hallucination Defense",
-      "passed": true,
-      "score": 1.0,
-      "detail": "虚构实体坚决拒答 (Zero Hallucination, CIV=0)"
-    },
-    {
-      "id": "S25",
-      "track": "Track7_RetrievalRouting",
-      "name": "Vague Concept Recall",
-      "passed": true,
-      "score": 1.0,
-      "detail": "Layer 5 语义检索成功召回模糊相关概念"
-    },
-    {
-      "id": "S26",
-      "track": "Track7_RetrievalRouting",
-      "name": "Anti-RAG Crossing Violation",
-      "passed": true,
-      "score": 1.0,
-      "detail": "精确查询坚决走结构化路线，严禁向量碰巧猜测"
-    },
-    {
-      "id": "S27",
-      "track": "Track7_RetrievalRouting",
-      "name": "Advisory Ranking Semantic Boundary",
-      "passed": true,
-      "score": 1.0,
-      "detail": "语义检索严格约束为 advisory 建议性排名"
-    },
-    {
-      "id": "S28",
-      "track": "Track8_LongHorizonContinuity",
-      "name": "Context Wipeout Recovery",
-      "passed": true,
-      "score": 1.0,
-      "detail": "上下文彻底清空后，100% 成功重建科研全景"
-    },
-    {
-      "id": "S29",
-      "track": "Track8_LongHorizonContinuity",
-      "name": "Index Deletion Catastrophic Recovery",
-      "passed": true,
-      "score": 1.0,
-      "detail": "灾难重建达成规范逻辑转储全等 (CLE Match 100%)"
-    },
-    {
-      "id": "S30",
-      "track": "Track8_LongHorizonContinuity",
-      "name": "Concurrent Writer Collision",
-      "passed": true,
-      "score": 1.0,
-      "detail": "并发写冲突严格触发 TX_LOCKED 拦截"
-    },
-    {
-      "id": "S31",
-      "track": "Track8_LongHorizonContinuity",
-      "name": "Crash-Safety & Idempotent Recovery",
-      "passed": true,
-      "score": 1.0,
-      "detail": "崩溃中途安全保护，reconcile 幂等补齐且无半提交"
-    },
-    {
-      "id": "S32-A",
-      "track": "Track8_LongHorizonContinuity",
-      "name": "Derived Index Drift Recovery",
-      "passed": true,
-      "score": 1.0,
-      "detail": "派生索引自动重新对齐并消除 drift"
-    },
-    {
-      "id": "S32-B",
-      "track": "Track8_LongHorizonContinuity",
-      "name": "Canonical Semantic Drift Defense",
-      "passed": true,
-      "score": 1.0,
-      "detail": "坚决拦截未授权语义篡改，严禁仅凭 reindex 洗白"
-    }
-  ]
+  "scenarios": null
 }

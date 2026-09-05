@@ -51,6 +51,7 @@ def main(argv=None) -> int:
     sp.set_defaults(func=cmd_trace)
 
     sp = sub.add_parser("history", help="历史报告 / 结论演化")
+    sp.add_argument("--as-of", dest="as_of", default=None, help="只返回该 ISO-8601 时刻及之前的历史状态")
     sp.add_argument("--semantic", action="store_true", help="P1-C: 忽略该开关（closed table）")
     sp.set_defaults(func=cmd_history)
 

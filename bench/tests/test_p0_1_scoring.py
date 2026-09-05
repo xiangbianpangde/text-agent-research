@@ -117,10 +117,11 @@ class CliSafetyTests(unittest.TestCase):
         report = self._run_json("--scenario", "S03")
 
         self.assertEqual(report["total_scenarios"], 1)
-        self.assertEqual(report["composite_score"], 100.0)
+        self.assertIsNone(report["composite_score"])
+        self.assertEqual(report["legacy_diagnostic"]["composite_score"], 100.0)
         self.assertEqual(report["evaluation_mode"], "diagnostic_partial")
         self.assertFalse(report["certification_eligible"])
-        self.assertFalse(report["iqg_passed"])
+        self.assertIsNone(report["iqg_passed"])
         self.assertEqual(report["tier"], "N/A")
         self.assertIsNone(report["metrics"]["pgem"])
 
@@ -129,7 +130,7 @@ class CliSafetyTests(unittest.TestCase):
 
         self.assertEqual(report["total_scenarios"], 6)
         self.assertEqual(
-            {scenario["track"] for scenario in report["scenarios"]},
+            {scenario["track"] for scenario in report["legacy_diagnostic"]["scenarios"]},
             {"Track1_DefinitionProvenance"},
         )
         self.assertEqual(report["evaluation_mode"], "diagnostic_partial")

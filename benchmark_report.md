@@ -1,58 +1,43 @@
-# ResearchCTL-Bench v0.5 P0.3B Shadow Report
+# ResearchCTL-Bench v0.5 P0.3B Accepted Shadow Report
 
-> **状态：P0.3B INCOMPLETE / Tier N/A。** 本报告不构成公开 Research Benchmark、排行榜成绩或科研/生产认证。
+> **Sol 审核：PASS_P0_3B_ACCEPTED。** P0.3B 修复已接受，可开始 P0.3C；本报告仍不是公开 Research Benchmark 认证。
 
-机器权威结果见 `benchmark_report.json`。当前全部 33 个 canonical 场景已进入独立 Oracle shadow，但默认路径仍同时运行 legacy `run_sXX()`；因此 formal score 尚未切换到 Oracle-only。
+## 当前结果
 
-## 结果摘要
-
-| 项目 | 结果 | 证据边界 |
+| 项目 | 结果 | 边界 |
 | --- | --- | --- |
-| Legacy conformance | 33 / 33 | 仅内部、自评分诊断 |
-| 独立 Oracle coverage | 33 / 33 | P0.3B shadow，完整覆盖 |
-| 严格 Oracle 结果 | 5 PASS / 28 FAIL | Gold + prediction/observation 独立比较 |
-| Certification eligibility | `false` | `P0_3_SHADOW_MODE` |
-| Tier | `N/A` | P0.3C 前不得授予 |
-| P0 总状态 | `INCOMPLETE` | P0.3C 与 P0.4 尚未完成 |
+| Oracle coverage | 33 / 33 | 全部 canonical actions 独立编译并执行 |
+| 严格 Oracle 结果 | 6 PASS / 27 FAIL | 当前 ResearchCTL prediction/observation |
+| CIV | 0 | 八类 classifier，checkpoint state aware |
+| Formal score / IQG | `null` / `null` | P0.3C 切换前不计算 |
+| Tier | `N/A` | P0 总体仍 incomplete |
+| Legacy diagnostic | 33 / 33，100.0 | 仅 diagnostic namespace |
 
-## 已通过的严格场景
+严格通过场景：S10、S11、S14、S19、S26、S30。S29 继续因当前 SQLite schema 不满足冻结 §6.7 列合同而失败；S31 的外部 SIGKILL、无半提交与恢复固定点机制通过，但 participant 返回的额外 opaque reconcile result 被 exact evaluator 正确拒绝。
 
-| 场景 | 独立证据 |
-| --- | --- |
-| S10 | CURRENT 的直接来源结果集与 manifest 关系一致 |
-| S19 | 删除 Organized 中间文件后查询严格 fail-closed |
-| S26 | 精确实体查询走结构化 current 路由，未越界使用 semantic |
-| S30 | Harness 持有真实 freeze lock 时，第二写入者返回 `TX_LOCKED` |
-| S31 | Harness 外部 `SIGKILL`；canonical state 无半提交；两次 reconcile 固定点一致 |
+## 已接受的 P0.3B 信任边界
 
-## 28 个严格失败的意义
+- manifest query registry 绑定 participant-visible query 与 Gold；action 不能隐藏 expected target。
+- 严格 RFC3339/UTC 时间、显式对象 lifecycle、完整 as-of 状态与 cutoff/virtual-clock 绑定。
+- 全部八类 CIV 基于 checkpoint 编译状态，支持动态版本和 temporal visibility。
+- 全局完整 ResultRow contract；missing/extra/opaque/contradictory metadata 与非字符串 ref 均失败。
+- fail-closed Gold 不含正向答案；附带 results/facts/evidence/graph 的拒答失败。
+- S14 historical binding、S17 下游传播、S18 unrelated fresh、S28 新 session + CURRENT/INDEX 均独立表达。
+- `source.tar` → deterministic builder → `fixture.tar` 的闭包可复现，AppleDouble/traversal/links fail-closed。
+- CLE 使用显式 read transaction 和冻结 schema/order/normalization。
+- timeout/exit 清理整个 POSIX process group。
+- shadow formal 字段为 null，legacy 只在 diagnostic namespace。
 
-失败不是 coverage 缺失，也不应被 legacy 33/33 掩盖。它们主要揭示：
+## 机器验证
 
-- `prediction/v1` 未返回定义事实、版本绑定、历史事实或运行偏差；
-- 未返回 S12 的精确 `0.723` 单元格、真实命令和完整证据图；
-- S16/S17 的结果集与独立依赖闭包不一致；
-- 多个负向场景只返回泛化 `error`/`NOT_FOUND`，不满足精确 condition；
-- semantic 查询未提供 Oracle 所需的结果身份和路由声明；
-- S29 被测 SQLite schema 缺少规范 §6.7 冻结的 CLE 列，评测器明确拒绝动态删列比较；
-- 完整性输出未精确匹配独立推导的 hash/orphan/drift 条件。
-
-## P0.3B 信任边界
-
-1. 33 个 `scenario-actions/v1` 文件只描述动作和查询。
-2. Action pack 中手写 `passed`、`score`、`expected_*`、`gold_*`、TP/FP/FN 或 CIV 的字段数为 0。
-3. 全部场景的 `compiled-gold/v1` 在 SUT 启动前确定性生成。
-4. Runner、Oracle、DSL 和 evaluator 对 `researchctl.*` import 数为 0。
-5. S29 使用固定 CLE 表/列/排序/规范化合同；schema 不兼容即失败。
-6. Legacy 分数明确标记为 `legacy_diagnostic_only`，不授予 Tier。
-
-## 验证
-
-- P0 Harness：29 / 29 PASS；包含四 Schema、33 Gold determinism、no-self-award、真实集合差、图 exact match、S29/S30/S31 状态测试。
+- Harness：50 / 50 PASS。
 - ResearchCTL 原回归：443 / 443 PASS。
-- 完整 shadow 运行：33 / 33 Oracle coverage，无 runner crash。
-- `certification_eligible=false`、`iqg_passed=false`、Tier `N/A`。
+- Fresh extracted self-contained audit bundle：50 / 50 PASS，root fixture stored/fresh fingerprint 一致。
+- Canonical source/fixture 双次重建摘要：`sha256:205483526cf17db0066b55c0f097a99043443a79ed0c5fa919805537b73eea01`。
+- Trust-boundary `researchctl.*` imports：0。
+- Action self-award fields：0。
+- 第六次 Sol 审核：`PASS — P0.3B repair accepted; P0.3C may begin`。
 
-## 下一阶段
+## 下一步
 
-P0.3C 将删除默认运行路径对 legacy `run_sXX()` 的依赖，并仅从 33 个 Oracle evaluation 聚合正式指标。只有 Oracle-only 路径、指标与报告验收通过后，才可声明 P0.3 完成；P0 仍需随后通过 P0.4 六类负控制。
+P0.3C 将默认运行路径切换为 Oracle-only：不再调用 legacy `run_sXX()`，正式指标仅从 33 个 Oracle evaluation 聚合；legacy 仅保留显式诊断开关。P0.3C 完成后 P0 仍为 incomplete，必须继续 P0.4 六类负控制。

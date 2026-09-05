@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import sqlite3
+import tarfile
 import tempfile
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
@@ -64,7 +65,17 @@ class BenchmarkSandbox:
     ):
         self.tmp_dir = tempfile.mkdtemp(prefix="bench_sb_")
         self.ws = os.path.join(self.tmp_dir, "ws")
-        shutil.copytree(base_fixture, self.ws)
+        if os.path.isfile(base_fixture) and tarfile.is_tarfile(base_fixture):
+            os.makedirs(self.ws)
+            with tarfile.open(base_fixture, "r") as archive:
+                root = os.path.realpath(self.ws)
+                for member in archive.getmembers():
+                    target = os.path.realpath(os.path.join(root, member.name))
+                    if os.path.commonpath([root, target]) != root or member.issym() or member.islnk():
+                        raise ValueError(f"unsafe fixture archive member: {member.name}")
+                archive.extractall(self.ws, filter="data")
+        else:
+            shutil.copytree(base_fixture, self.ws)
         self.db_path = os.path.join(self.ws, ".index", "research.sqlite")
         self.adapter = ProcessSUTAdapter(
             sut_command or default_researchctl_command(),
@@ -808,7 +819,7 @@ def run_oracle_scenario(
     pack_root: str = DEFAULT_ORACLE_PACK,
 ):
     """Compile sealed Gold before SUT startup, then execute and evaluate one anchor."""
-    from .dsl.executor import execute_actions, materialize_overlay
+    from .dsl.executor import execute_actions
     from .dsl.loader import load_scenario
     from .evaluators.scenario import evaluate_scenario
     from .oracle.compiler import compile_gold
@@ -819,13 +830,23 @@ def run_oracle_scenario(
     manifest = load_manifest(os.path.join(pack_root, "oracle-manifest.json"))
     actions = load_scenario(os.path.join(pack_root, "scenarios", f"{scenario_id}.json"))
     gold = compile_gold(manifest, actions)  # Trust boundary: before adapter process starts.
+    fixture_spec = manifest.document["fixture"]
+    source_archive = os.path.join(pack_root, fixture_spec["source_archive"])
+    with open(source_archive, "rb") as handle:
+        actual_source_hash = "sha256:" + hashlib.sha256(handle.read()).hexdigest()
+    if actual_source_hash != fixture_spec["source_hash"]:
+        raise ValueError("canonical fixture source archive hash mismatch")
+    fixture_archive = os.path.join(pack_root, fixture_spec["archive"])
+    with open(fixture_archive, "rb") as handle:
+        actual_fixture_hash = "sha256:" + hashlib.sha256(handle.read()).hexdigest()
+    if actual_fixture_hash != fixture_spec["content_hash"]:
+        raise ValueError("sealed fixture archive hash mismatch")
 
     sandbox = BenchmarkSandbox(
-        base_fixture,
+        fixture_archive,
         sut_command=sut_command,
         sut_cwd=sut_cwd,
     )
-    materialize_overlay(pack_root, sandbox.ws, manifest, actions)
     try:
         with sandbox:
             execution = execute_actions(actions, manifest, sandbox.adapter, sandbox.ws)

@@ -42,7 +42,7 @@ class ScenarioResult:
 @dataclasses.dataclass
 class BenchmarkMetrics:
     total_scenarios: int = 0
-    passed_scenarios: int = 0
+    passed_scenarios: Optional[int] = 0
     composite_score: MetricValue = None
 
     # Evaluation/coverage contract
@@ -53,10 +53,12 @@ class BenchmarkMetrics:
     score_provenance: str = "legacy_self_scored_diagnostic"
     integrity_metrics_provenance: str = "legacy_self_scored_diagnostic"
     p0_3_status: str = "not_started"
+    shadow_review_status: str = "unreviewed"
     oracle_required: int = 0
     oracle_compiled_scenario_ids: List[str] = dataclasses.field(default_factory=list)
     oracle_missing_scenario_ids: List[str] = dataclasses.field(default_factory=list)
     oracle_evaluations: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
+    legacy_diagnostic: Dict[str, Any] = dataclasses.field(default_factory=dict)
     certification_eligible: bool = False
     coverage_rate: float = 0.0
     covered_tracks: List[str] = dataclasses.field(default_factory=list)
@@ -78,9 +80,9 @@ class BenchmarkMetrics:
     if1: MetricValue = None
     fcaa: MetricValue = None
     zhr: MetricValue = None
-    civ: int = 0
-    integrity_gate_passed: bool = False
-    iqg_passed: bool = False  # Backward-compatible field; now also requires coverage.
+    civ: Optional[int] = 0
+    integrity_gate_passed: Optional[bool] = False
+    iqg_passed: Optional[bool] = False
 
     # Fixed required tracks; missing tracks stay None.
     track_scores: Dict[str, MetricValue] = dataclasses.field(default_factory=dict)
@@ -198,8 +200,9 @@ def evaluate_benchmark(
 
     if oracle_evaluations is not None:
         metrics.evaluation_engine = "oracle_shadow"
-        metrics.score_provenance = "legacy_diagnostic_only"
-        metrics.integrity_metrics_provenance = "legacy_diagnostic_only"
+        metrics.shadow_review_status = "PASS_P0_3B_ACCEPTED"
+        metrics.score_provenance = "not_available_oracle_shadow"
+        metrics.integrity_metrics_provenance = "not_available_oracle_shadow"
         metrics.oracle_required = len(required_scenario_ids)
         by_id = {evaluation.scenario_id: evaluation for evaluation in oracle_evaluations}
         metrics.oracle_compiled_scenario_ids = [sid for sid in required_scenario_ids if sid in by_id]
@@ -286,5 +289,29 @@ def evaluate_benchmark(
     else:
         metrics.tier = "CONFORMANCE-FAIL"
         metrics.tier_name = "内部一致性套件未通过 (Internal Conformance Failed)"
+
+    if oracle_evaluations is not None:
+        metrics.legacy_diagnostic = {
+            "composite_score": metrics.composite_score,
+            "passed_scenarios": metrics.passed_scenarios,
+            "total_scenarios": metrics.total_scenarios,
+            "integrity_gate_passed": metrics.integrity_gate_passed,
+            "metrics": {
+                "pgem": metrics.pgem, "vlp": metrics.vlp,
+                "sdp": metrics.sdp, "sdr": metrics.sdr, "sf1": metrics.sf1,
+                "ip": metrics.ip, "ir": metrics.ir, "if1": metrics.if1,
+                "fcaa": metrics.fcaa, "zhr": metrics.zhr, "civ": metrics.civ,
+            },
+            "track_scores": dict(metrics.track_scores),
+            "scenarios": [dataclasses.asdict(result) for result in results],
+        }
+        metrics.composite_score = None
+        metrics.passed_scenarios = None
+        metrics.pgem = metrics.vlp = metrics.sdp = metrics.sdr = metrics.sf1 = None
+        metrics.ip = metrics.ir = metrics.if1 = metrics.fcaa = metrics.zhr = None
+        metrics.civ = None
+        metrics.integrity_gate_passed = None
+        metrics.iqg_passed = None
+        metrics.track_scores = {track: None for track in required_tracks}
 
     return metrics

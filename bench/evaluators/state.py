@@ -68,13 +68,14 @@ def _normalize_sql(value: Any) -> Any:
     return unicodedata.normalize("NFC", str(value))
 
 
-def canonical_index_digest(db_path: str) -> Dict[str, Any]:
+def canonical_index_digest(db_path: str, *, _after_table=None) -> Dict[str, Any]:
     """Fixed-profile logical dump; no dynamic column omission or physical DB hash."""
     if not os.path.isfile(db_path):
         return {"index_present": False, "cle_digest": None}
     connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         connection.execute("PRAGMA query_only = ON")
+        connection.execute("BEGIN")
         lines = []
         for table, columns, sort_keys in CLE_PROFILE:
             existing = {
@@ -84,13 +85,25 @@ def canonical_index_digest(db_path: str) -> Dict[str, Any]:
             if missing:
                 raise StateObservationError(f"CLE schema mismatch in {table}: missing {sorted(missing)}")
             select = ",".join(f'"{column}"' for column in columns)
-            ordering = ",".join(f'"{column}" ASC' for column in sort_keys)
+            key_columns = ",".join(f'"{column}"' for column in sort_keys)
+            duplicate = connection.execute(
+                f'SELECT 1 FROM "{table}" GROUP BY {key_columns} HAVING COUNT(*) > 1 LIMIT 1'
+            ).fetchone()
+            if duplicate is not None:
+                raise StateObservationError(f"CLE sort key is not unique in {table}")
+            ordering = ",".join(f'"{column}" COLLATE BINARY ASC' for column in sort_keys)
             for row in connection.execute(f'SELECT {select} FROM "{table}" ORDER BY {ordering}'):
                 payload = {column: _normalize_sql(value) for column, value in zip(columns, row)}
                 lines.append(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+            if _after_table is not None:
+                _after_table(table)
         data = ("\n".join(lines) + ("\n" if lines else "")).encode("utf-8")
-        return {"index_present": True, "cle_digest": "sha256:" + hashlib.sha256(data).hexdigest()}
+        result = {"index_present": True, "cle_digest": "sha256:" + hashlib.sha256(data).hexdigest()}
+        connection.commit()
+        return result
     finally:
+        if connection.in_transaction:
+            connection.rollback()
         connection.close()
 
 
