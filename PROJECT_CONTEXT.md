@@ -2,53 +2,61 @@
 schema_version: 1
 project_id: researchctl
 authority: working_projection
-context_revision: 11
-checkpoint_id: CP-0011
-source_session_id: 01a06a96-0a23-7359-9ce9-3f9d1adacb7f
-covered_through_entry_id: 01a06a96-0a23-7359-9ce9-3f9d1adacb7f:2026-09-05T16:15
+context_revision: 12
+checkpoint_id: CP-0012
+source_session_id: 01a07599-1af8-7d45-8c21-a93984c08d31
+covered_through_entry_id: 01a07599-1af8-7d45-8c21-a93984c08d31:2026-09-06T12:48
 git_branch: main
-git_head: 2385e9146ba7f309a67f5b47a475e02651403b82
-base_context_sha256: 1cb48baaeae19fdd75dfe0b5dcc45068b5c4a8e7f741e3881147a515c4051374
-generated_at: 2026-09-05T14:05:59.077Z
+git_head: 8c20d809a2c455cbd628ab6a2f0ccb2e9dd15699
+base_context_sha256: a458c29ee5a54ce4f6365ab98c449d67b1e80df93a4fae361c141d5ca0c5cbef
+generated_at: 2026-09-06T12:48:53.187Z
 ---
 
 # ResearchCTL-Bench Working Context
 
 ## Current Objective
 
-P0 Harness Construction is complete and committed through P0.4. Stop at the P1 approval gate. Current ResearchCTL is not qualified by the formal Oracle benchmark.
+P1 Contract Frozen via independent Sol audit PASS (aad0919c-e9c2-4368-9959-845745e162bc). Beginning P1A Generator & Family implementation. P2 remains deferred.
 
 ## Authority And Git
 
-- Authority: `ResearchCTL-Bench-P0-Contract.md` and `超长程实验 Agent 检索系统 Benchmark 方案 (ResearchCTL-Bench).md`.
+- Authority: `ResearchCTL-Bench-P0-Contract.md`, `ResearchCTL-Bench-P1-Contract.md` (Frozen), and `超长程实验 Agent 检索系统 Benchmark 方案 (ResearchCTL-Bench).md`.
 - Reports: `benchmark_report.json`, `benchmark_report.md`, `benchmark_report.pdf`.
-- Commits: `9c3209f` P0.1/P0.2/P0.3A; `0d20baa` P0.3B candidate; `be62ec1` accepted P0.3B repairs; `c47e3b5` P0.3C; `2385e91` P0.4/P0 completion.
-- Main is five commits ahead of origin and has not been pushed.
+- Commits: `9c3209f` P0.1/P0.2/P0.3A; `0d20baa` P0.3B candidate; `be62ec1` accepted P0.3B repairs; `c47e3b5` P0.3C; `2385e91` P0.4/P0 completion; `8c20d80` P0 completion checkpoint.
+- Next commit: `docs: freeze ResearchCTL-Bench P1 contract after Sol audit PASS`.
+- Main is six commits ahead of origin and has not been pushed.
 - `.pi/sol-staging/` and root Pi session HTML are unrelated and excluded.
 
-## P0.3 Acceptance
+## P0 Completion Status
 
-- Sixth Sol audit `7402609a-bfa8-4db5-a0af-231ef2e21c62`: `PASS — P0.3B repair accepted; P0.3C may begin`.
-- Default path is pack-owned Oracle-only. Legacy requires `--legacy-diagnostic` and cannot alter formal fields.
-- Formal score, set differences, CIV, version, graph, refusal and IQG metrics derive only from Oracle evaluations.
+- Complete harness confirmed: 6 controls pass/rejected, bound attestation `sha256:80b13cfa04bdce5e32ca4df0d00ec7dd44060304196bc32a6f5f441311424617`.
+- Official ResearchCTL baseline run: 6 PASS / 27 FAIL, certification=false, Tier N/A.
 
-## P0.4 Completion
+## P1 Contract Freeze Acceptance
 
-- Six process controls use the same 33-scenario Oracle path: Always-Pass, Always-Abstain, Universal-Stale, Universal-Impact, Random, Gold-Reader.
-- Every control: certification=false, Tier N/A, passing conclusion=false. Formal passes: 1,2,0,0,0,1. Universal Stale/Impact CIV=6; Random CIV=4.
-- Random retry deterministic. Gold-Reader read blocked by macOS sandbox-exec. Official ResearchCTL double-run digest `sha256:a0a8d65261fbb267759eee3ee5b432051a88707768274f3840377ca851217cfd`.
-- Bound attestation valid: `sha256:80b13cfa04bdce5e32ca4df0d00ec7dd44060304196bc32a6f5f441311424617`; binds manifest, source/fixture, actions, controls, adapter, executor, evaluator and Oracle; tampering fails.
+- Twelfth Sol audit `aad0919c-e9c2-4368-9959-845745e162bc`: `PASS — freeze P1 contract; P1A implementation may begin`.
+- FZ-01–FZ-08 mechanical appendix §19 completely closed and verified:
+  - Quota: 8 families, 144 instances (48 public, 48 private, 48 local-hidden).
+  - Quota digest `sha256:6c26fb4ce20da8030fdef949292925115441c73471562b93275c4a83fe65dbb6`.
+  - Metric digest `sha256:2e998c351aa12f82595feb1c935b359bbd1e677a44a2c159c878455ef0fb69be`.
+  - B1 API digest `sha256:e8cf1488cc32be80a53d8c8e803d9182c59623abd488c564ce504655741f8e1e`.
+  - FileGraph profile digest `sha256:9df1b1509829995c465d5f50717cf31ace9448cd4a36f6b30a46abb71e27ffa6`.
+  - Known-answer digest `sha256:a8bc8261ea3eb542241a145bc2ebf2e363ebd5d526c5977088f24b742298503a`.
+  - Statistics profile digest `sha256:bd08e958ec639020396e8446c076bccd047989765ea7969bdae97a9ef9761eab`.
+  - K_boot `f25bf832810e022df4c1a9ff893497c3e4fc83f844efeb0bee3221f7c03a96cf`.
+  - 10,000 paired bootstrap reproduced exactly.
+  - Crash-atomic replacement primitive and unique path invariant with single relative-path formula $T(path, seq)$ and reserved namespace.
+  - prediction/v2 and scenario-actions/v2 deterministic deltas.
 
-## Current Machine State
+## Next Gate: P1A Implementation
 
-- v0.7.0; `oracle_only`; P0.3C complete; P0.4 complete; `p0_status=complete_harness`.
-- Official ResearchCTL: 6 PASS / 27 FAIL; composite 20.8; CIV 0; integrity gate false; certification=false; Tier N/A; reasons FORMAL_SCENARIOS_FAILED and INTEGRITY_GATE_FAILED.
-- Harness 56/56; ResearchCTL regressions 443/443; coverage 33/33; trust imports 0; self-award fields 0; report audit 0/0.
-- Source/fixture digest `sha256:205483526cf17db0066b55c0f097a99043443a79ed0c5fa919805537b73eea01`; root fingerprint `sha256:50aef045b805311de1e1111945f1397db6fa69bb1e93b3634a6380cb3c9fc2eb`.
-
-## Next Gate
-
-P1/P2 remain inactive: dynamic Universe, hidden split, real B1/B2/B3, multi-model statistics, remote OCI and leaderboard governance. Require explicit user approval and a separate P1 contract before implementation.
+- Implement P1A components under `bench/`:
+  1. `bench/dsl/cjson.py` (bench-cjson/v1 serializer).
+  2. `bench/generator/kdf.py` (HMAC counter stream, deterministic seeding).
+  3. `bench/generator/models.py` & `bench/generator/schema.py` (task-family/v1 schema & models).
+  4. 8 versioned task families (F01–F08).
+  5. 144 instances generation & public split deterministic reconstruction.
+  6. Pass G01–G08 exit conditions.
 
 ## Negative Constraints / Do Not Assume
 
@@ -61,9 +69,14 @@ P1/P2 remain inactive: dynamic Universe, hidden split, real B1/B2/B3, multi-mode
 - P0 is not complete until P0.4 six negative controls pass.
 - P0 Harness completion is not ResearchCTL certification.
 - Do not enter P1/P2 without explicit user approval after reviewing this P0 result.
+- Do not enter P2 without explicit user approval after P1 completion.
+- P1A candidate status is `candidate_p1a`; do not advertise full Research Benchmark status before P1C completes.
+- No participant-specific code in benchmark generator.
+- No float in canonical digests or preimages.
+- Temporary paths must strictly follow $T(path, seq)$ in same directory.
 
 ## Next Action
 
-1. Commit this final context checkpoint.
-2. Present P0 completion separately from ResearchCTL formal failure.
-3. Wait for explicit P1 scope approval; if approved, write a separate P1 contract first.
+1. Commit `ResearchCTL-Bench-P1-Contract.md` and memory updates.
+2. Implement `bench/dsl/cjson.py` following §19.1.1 spec with unit tests.
+3. Implement `bench/generator/` (KDF, models, task families F01–F08) and public instance generation.
