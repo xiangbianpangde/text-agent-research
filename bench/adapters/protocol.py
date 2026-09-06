@@ -62,6 +62,16 @@ def validate_request(request: Any) -> Dict[str, Any]:
         virtual_time = request.get("virtual_time")
         if virtual_time is not None:
             _require_string(virtual_time, "invoke.virtual_time")
+        # P1 transport delta (P1-Contract §9.1): optional per-invoke run seed,
+        # Hex32 lowercase; a missing field means the run is non-seeded.
+        run_seed = request.get("run_seed")
+        if run_seed is not None:
+            if (
+                not isinstance(run_seed, str)
+                or len(run_seed) != 64
+                or any(c not in "0123456789abcdef" for c in run_seed)
+            ):
+                raise AdapterProtocolError("invoke.run_seed must be a 64-char lowercase hex string")
         query_id = request.get("query_id")
         if query_id is not None:
             _require_string(query_id, "invoke.query_id")

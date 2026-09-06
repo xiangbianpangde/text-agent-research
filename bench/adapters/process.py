@@ -195,6 +195,7 @@ class ProcessSUTAdapter:
         test_control: Optional[Mapping[str, Any]] = None,
         virtual_time: Optional[str] = None,
         query_id: Optional[str] = None,
+        run_seed: Optional[str] = None,
     ) -> PendingRequest:
         if self._workspace is None:
             raise SUTAdapterError("prepare must succeed before invoke")
@@ -209,6 +210,8 @@ class ProcessSUTAdapter:
             fields["virtual_time"] = virtual_time
         if query_id is not None:
             fields["query_id"] = query_id
+        if run_seed is not None:
+            fields["run_seed"] = run_seed
         return self._begin_request("invoke", **fields)
 
     def await_invoke(self, pending: PendingRequest, *, timeout_ms: int = 30_000) -> InvocationResult:
@@ -236,6 +239,7 @@ class ProcessSUTAdapter:
         test_control: Optional[Mapping[str, Any]] = None,
         virtual_time: Optional[str] = None,
         query_id: Optional[str] = None,
+        run_seed: Optional[str] = None,
     ) -> InvocationResult:
         pending = self.begin_invoke(
             arguments,
@@ -244,6 +248,7 @@ class ProcessSUTAdapter:
             test_control=test_control,
             virtual_time=virtual_time,
             query_id=query_id,
+            run_seed=run_seed,
         )
         return self.await_invoke(pending, timeout_ms=timeout_ms)
 

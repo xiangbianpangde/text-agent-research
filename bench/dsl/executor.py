@@ -10,7 +10,7 @@ import shutil
 import signal
 import time
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Mapping, Optional
 
 from bench.adapters import ProcessSUTAdapter
 from bench.oracle.manifest import OracleManifest
@@ -111,8 +111,15 @@ def execute_actions(
     manifest: OracleManifest,
     adapter: ProcessSUTAdapter,
     workspace: str,
+    *,
+    run_seed: Optional[str] = None,
 ) -> ExecutionRecord:
-    """Execute without reading compiled Gold or deriving any expected answer."""
+    """Execute without reading compiled Gold or deriving any expected answer.
+
+    run_seed (P1 §9.1): optional per-instance repetition seed injected into
+    every invoke request. All participants in a campaign receive the same
+    seed for the same (instance, repetition) pair.
+    """
     record = ExecutionRecord(scenario_id=actions.scenario_id)
     snapshot_profile = _snapshot_profile(manifest)
     virtual_time = str(manifest.document["clock"])
@@ -166,6 +173,7 @@ def execute_actions(
                     timeout_ms=timeout_ms,
                     virtual_time=virtual_time,
                     query_id=query_id,
+                    run_seed=run_seed,
                     test_control={"pause_at": step["pause_at"], "barrier_path": barrier_rel},
                 )
                 reached = _wait_for_file(barrier, timeout_ms)
@@ -192,6 +200,7 @@ def execute_actions(
                         timeout_ms=timeout_ms,
                         virtual_time=virtual_time,
                         query_id=query_id,
+                        run_seed=run_seed,
                     )
             else:
                 result = adapter.invoke(
@@ -200,6 +209,7 @@ def execute_actions(
                     timeout_ms=timeout_ms,
                     virtual_time=virtual_time,
                     query_id=query_id,
+                    run_seed=run_seed,
                 )
             if "capture_id" not in step:
                 continue
