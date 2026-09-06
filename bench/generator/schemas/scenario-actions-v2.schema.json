@@ -1,0 +1,429 @@
+{
+  "$defs": {
+    "advanceTime": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "advance_time"
+        },
+        "new_timestamp": {
+          "type": "string"
+        },
+        "step": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step",
+        "action",
+        "new_timestamp"
+      ],
+      "type": "object"
+    },
+    "emptyParams": {
+      "maxProperties": 0,
+      "type": "object"
+    },
+    "externalCrash": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "external_crash"
+        },
+        "capture_id": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/writeParams"
+        },
+        "pause_at": {
+          "type": "string"
+        },
+        "step": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "timeout_ms": {
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step",
+        "action",
+        "capture_id",
+        "operation",
+        "params",
+        "pause_at"
+      ],
+      "type": "object"
+    },
+    "invoke": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "invoke"
+        },
+        "capture_id": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/invokeParams"
+        },
+        "step": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "timeout_ms": {
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step",
+        "action",
+        "operation",
+        "params"
+      ],
+      "type": "object"
+    },
+    "invokeParams": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/queryParams"
+        },
+        {
+          "$ref": "#/$defs/emptyParams"
+        },
+        {
+          "$ref": "#/$defs/writeParamsWithQuery"
+        }
+      ]
+    },
+    "invokeWhileLocked": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "invoke_while_locked"
+        },
+        "capture_id": {
+          "type": "string"
+        },
+        "lock_path": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/writeParamsWithQuery"
+        },
+        "step": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "timeout_ms": {
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step",
+        "action",
+        "capture_id",
+        "operation",
+        "params",
+        "lock_path"
+      ],
+      "type": "object"
+    },
+    "lifecycle": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "context_reset",
+            "restart_sut"
+          ]
+        },
+        "step": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step",
+        "action"
+      ],
+      "type": "object"
+    },
+    "mutate": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "mutate"
+        },
+        "content": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entity_id": {
+          "type": "string"
+        },
+        "new_ref": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "step": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "target": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "external_update",
+            "semantic_change",
+            "raw_invalidation",
+            "create_version",
+            "duplicate_version",
+            "delete_file",
+            "tamper_file",
+            "create_file",
+            "delete_tree",
+            "touch_file",
+            "corrupt_index",
+            "semantic_tamper",
+            "runtime_deviation"
+          ]
+        },
+        "version_ref": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "step",
+        "action",
+        "type",
+        "target"
+      ],
+      "type": "object"
+    },
+    "newSession": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "new_session"
+        },
+        "capture_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "step": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step",
+        "action",
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "queryParams": {
+      "additionalProperties": false,
+      "properties": {
+        "query_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "query_id"
+      ],
+      "type": "object"
+    },
+    "snapshotIndex": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "snapshot_index"
+        },
+        "capture_id": {
+          "type": "string"
+        },
+        "step": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step",
+        "action",
+        "capture_id"
+      ],
+      "type": "object"
+    },
+    "snapshotState": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "snapshot_state"
+        },
+        "capture_id": {
+          "type": "string"
+        },
+        "require_no_tx_residue": {
+          "type": "boolean"
+        },
+        "step": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step",
+        "action",
+        "capture_id"
+      ],
+      "type": "object"
+    },
+    "writeParams": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "type": "string"
+        },
+        "authorization_ref": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "idempotency_key",
+        "actor",
+        "authorization_ref"
+      ],
+      "type": "object"
+    },
+    "writeParamsWithQuery": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "type": "string"
+        },
+        "authorization_ref": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "query_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query_id",
+        "idempotency_key",
+        "actor",
+        "authorization_ref"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "scenario-actions/v2",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "initial_fixture": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "name": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "scenario_id": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "scenario-actions/v2"
+    },
+    "steps": {
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/invoke"
+          },
+          {
+            "$ref": "#/$defs/mutate"
+          },
+          {
+            "$ref": "#/$defs/advanceTime"
+          },
+          {
+            "$ref": "#/$defs/lifecycle"
+          },
+          {
+            "$ref": "#/$defs/newSession"
+          },
+          {
+            "$ref": "#/$defs/invokeWhileLocked"
+          },
+          {
+            "$ref": "#/$defs/externalCrash"
+          },
+          {
+            "$ref": "#/$defs/snapshotState"
+          },
+          {
+            "$ref": "#/$defs/snapshotIndex"
+          }
+        ]
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "track": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "scenario_id",
+    "track",
+    "name",
+    "initial_fixture",
+    "steps"
+  ],
+  "type": "object"
+}
