@@ -2,61 +2,46 @@
 schema_version: 1
 project_id: researchctl
 authority: working_projection
-context_revision: 12
-checkpoint_id: CP-0012
+context_revision: 13
+checkpoint_id: CP-0013
 source_session_id: 01a07599-1af8-7d45-8c21-a93984c08d31
-covered_through_entry_id: 01a07599-1af8-7d45-8c21-a93984c08d31:2026-09-06T12:48
+covered_through_entry_id: 01a07599-1af8-7d45-8c21-a93984c08d31:2026-09-06T13:35
 git_branch: main
-git_head: 8c20d809a2c455cbd628ab6a2f0ccb2e9dd15699
-base_context_sha256: a458c29ee5a54ce4f6365ab98c449d67b1e80df93a4fae361c141d5ca0c5cbef
-generated_at: 2026-09-06T12:48:53.187Z
+git_head: 6d7a10e148e7996b257d0ddf0c9933d090a2844d
+base_context_sha256: bd2d3a5952f569441e716fae80052fc61ec15de47b32dabc441db0cff3796b4c
+generated_at: 2026-09-06T13:32:26.147Z
 ---
 
 # ResearchCTL-Bench Working Context
 
 ## Current Objective
 
-P1 Contract Frozen via independent Sol audit PASS (aad0919c-e9c2-4368-9959-845745e162bc). Beginning P1A Generator & Family implementation. P2 remains deferred.
+P1A implementation complete: 100 bench tests pass; 48-instance public root at `bench/packs/p1_public_v1` with cross-environment byte-identical rebuild verified. Next: G01–G08 gate summary, then `candidate_p1a` declaration.
 
 ## Authority And Git
 
-- Authority: `ResearchCTL-Bench-P0-Contract.md`, `ResearchCTL-Bench-P1-Contract.md` (Frozen), and `超长程实验 Agent 检索系统 Benchmark 方案 (ResearchCTL-Bench).md`.
-- Reports: `benchmark_report.json`, `benchmark_report.md`, `benchmark_report.pdf`.
-- Commits: `9c3209f` P0.1/P0.2/P0.3A; `0d20baa` P0.3B candidate; `be62ec1` accepted P0.3B repairs; `c47e3b5` P0.3C; `2385e91` P0.4/P0 completion; `8c20d80` P0 completion checkpoint.
-- Next commit: `docs: freeze ResearchCTL-Bench P1 contract after Sol audit PASS`.
-- Main is six commits ahead of origin and has not been pushed.
-- `.pi/sol-staging/` and root Pi session HTML are unrelated and excluded.
+- Authority: P0 Contract, P1 Contract (Frozen via Sol PASS aad0919c-e9c2-4368-9959-845745e162bc), Benchmark 方案.
+- Commits: `8c20d80` P0 done; `c9d8a37` P1 freeze; `01f208a` P1A foundations; `6d7a10e` P1A generator+quota+public root. Main 8 ahead of origin, unpushed.
+- Unrelated: `.pi/sol-staging/`, `.mimosa/`, root session HTML.
 
-## P0 Completion Status
+## P1A Map (under bench/)
 
-- Complete harness confirmed: 6 controls pass/rejected, bound attestation `sha256:80b13cfa04bdce5e32ca4df0d00ec7dd44060304196bc32a6f5f441311424617`.
-- Official ResearchCTL baseline run: 6 PASS / 27 FAIL, certification=false, Tier N/A.
+- `dsl/cjson.py` bench-cjson/v1; reproduces all 7 frozen digests.
+- `generator/kdf.py`+`frame.py` HMAC streams (§19.9); public secret 0x00..0x1f; uniform+weighted_choice; run_seed.
+- `generator/tree.py` bench-tree/v1 (reserved `.tmp`, NFC, prefix, empty dirs).
+- `generator/models.py` task-family/v1 18-field closed set + FamilyIdentity.
+- `generator/families.py` F01–F08 v1.0.0, closed allowlists, subvariant schedules.
+- `generator/identity.py` config/profile/identity, Descriptor, Display ID, lockfile (144, strict order), ReleaseIdentity.
+- `generator/schemas/scenario-actions-v2.schema.json` 3-delta from v1; scenario_action_digest sha256:f53a9f6de1eef4d6a3db4426d19b45d915ef5d181dbe8ccee58d2007f6bb97ab.
+- `generator/universe.py` universe+fixture+query-registry; pure-int dates.
+- `generator/scenario.py` v2 validator (adds freeze_report write params).
+- `generator/instance.py` attempt loop (64), subvariant weighted pick, Gold pre-SUT, acyclicity, instance_digest, GENERATOR_REJECTION_EXHAUSTED.
+- `generator/release.py` write/verify public root; `__main__.py` CLI build-public/verify-public.
+- Public root: 48 instances, 1117 files, 5.9MB; verify passes from foreign cwd.
 
-## P1 Contract Freeze Acceptance
+## Tests (bench/tests, 100 total)
 
-- Twelfth Sol audit `aad0919c-e9c2-4368-9959-845745e162bc`: `PASS — freeze P1 contract; P1A implementation may begin`.
-- FZ-01–FZ-08 mechanical appendix §19 completely closed and verified:
-  - Quota: 8 families, 144 instances (48 public, 48 private, 48 local-hidden).
-  - Quota digest `sha256:6c26fb4ce20da8030fdef949292925115441c73471562b93275c4a83fe65dbb6`.
-  - Metric digest `sha256:2e998c351aa12f82595feb1c935b359bbd1e677a44a2c159c878455ef0fb69be`.
-  - B1 API digest `sha256:e8cf1488cc32be80a53d8c8e803d9182c59623abd488c564ce504655741f8e1e`.
-  - FileGraph profile digest `sha256:9df1b1509829995c465d5f50717cf31ace9448cd4a36f6b30a46abb71e27ffa6`.
-  - Known-answer digest `sha256:a8bc8261ea3eb542241a145bc2ebf2e363ebd5d526c5977088f24b742298503a`.
-  - Statistics profile digest `sha256:bd08e958ec639020396e8446c076bccd047989765ea7969bdae97a9ef9761eab`.
-  - K_boot `f25bf832810e022df4c1a9ff893497c3e4fc83f844efeb0bee3221f7c03a96cf`.
-  - 10,000 paired bootstrap reproduced exactly.
-  - Crash-atomic replacement primitive and unique path invariant with single relative-path formula $T(path, seq)$ and reserved namespace.
-  - prediction/v2 and scenario-actions/v2 deterministic deltas.
-
-## Next Gate: P1A Implementation
-
-- Implement P1A components under `bench/`:
-  1. `bench/dsl/cjson.py` (bench-cjson/v1 serializer).
-  2. `bench/generator/kdf.py` (HMAC counter stream, deterministic seeding).
-  3. `bench/generator/models.py` & `bench/generator/schema.py` (task-family/v1 schema & models).
-  4. 8 versioned task families (F01–F08).
-  5. 144 instances generation & public split deterministic reconstruction.
-  6. Pass G01–G08 exit conditions.
+- p1_cjson 6 (incl. 7 contract hashes); p1_kdf 5; p1_tree 6; p1_models 13 (families, lockfile, release); p1_instance 9 (quota 144=48/48/48, determinism, rejection, exhaustion, full release); p1_release 4 (committed-root rebuild G01/G02, tamper detect). P0 suites 56 still pass.
 
 ## Negative Constraints / Do Not Assume
 
@@ -74,9 +59,10 @@ P1 Contract Frozen via independent Sol audit PASS (aad0919c-e9c2-4368-9959-84574
 - No participant-specific code in benchmark generator.
 - No float in canonical digests or preimages.
 - Temporary paths must strictly follow $T(path, seq)$ in same directory.
+- Public root secret is a fixed constant; private/hidden secrets are evaluator-held and must never enter the public tree.
 
 ## Next Action
 
-1. Commit `ResearchCTL-Bench-P1-Contract.md` and memory updates.
-2. Implement `bench/dsl/cjson.py` following §19.1.1 spec with unit tests.
-3. Implement `bench/generator/` (KDF, models, task families F01–F08) and public instance generation.
+1. Produce P1A G-gate checklist run (G01–G08) as a verification report; commit.
+2. Declare `candidate_p1a` with allowed claim "Dynamic B1 benchmark candidate" only after all gates pass.
+3. Then plan P1B (held-out commitments, campaign lifecycle, artifact binding, real independent baseline, isolation gates) — requires its own acceptance tests S01–S07/B01–B06 before any held-out claims.
