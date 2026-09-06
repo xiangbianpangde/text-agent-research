@@ -1,0 +1,56 @@
+{
+  "all_pass": true,
+  "claim_scope": "Dynamic B1 benchmark candidate",
+  "gates": [
+    {
+      "description": "cross-environment byte-identical rebuild",
+      "evidence": "48/48 public instances rebuilt byte-identically from committed root; 0 failures",
+      "id": "G01",
+      "ok": true
+    },
+    {
+      "description": "split root independence; public cannot derive held-out",
+      "evidence": "public=const(0x00..0x1f); private/hidden independent 32-byte keys produce distinct digests",
+      "id": "G02",
+      "ok": true
+    },
+    {
+      "description": "every instance passes frozen Oracle/DSL schemas",
+      "evidence": "48/48 instances validated against oracle-manifest/v1, scenario-actions/v2, query-registry/v1, compiled-gold/v1",
+      "id": "G03",
+      "ok": true
+    },
+    {
+      "description": "rejection attempts and accepted bytes reproducible",
+      "evidence": "after 2 forced rejections both runs accept attempt 2 with identical instance digests",
+      "id": "G04",
+      "ok": true
+    },
+    {
+      "description": "64-attempt exhaustion fails release",
+      "evidence": "GeneratorRejectionExhausted raised after 64 attempts",
+      "id": "G05",
+      "ok": true
+    },
+    {
+      "description": "no Gold/self-score in generated DSL or family specs",
+      "evidence": "48/48 action streams and family docs contain zero evaluation/gold fields",
+      "id": "G06",
+      "ok": true
+    },
+    {
+      "description": "Gold compiled pre-SUT; adapter-free generator",
+      "evidence": "gold compiled inside generation pipeline before any SUT; generator imports are adapter-free",
+      "id": "G07",
+      "ok": true
+    },
+    {
+      "description": "exact quota 144 with per-family/per-split allocation",
+      "evidence": "144 instances = 48/48/48; F06=24, F07=12, F01..F05/F08=18 each",
+      "id": "G08",
+      "ok": true
+    }
+  ],
+  "phase": "P1A",
+  "status": "candidate_p1a"
+}

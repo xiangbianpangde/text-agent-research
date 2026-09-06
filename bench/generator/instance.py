@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from bench.dsl.cjson import bench_cjson_bytes, bench_cjson_digest
@@ -220,22 +221,46 @@ def compute_schema_path():
     return Path(__file__).parent / "schemas" / "scenario-actions-v2.schema.json"
 
 
+SOURCE_TREE_FILES = (
+    # Complete transitive closure of generation-affecting sources, mapped into
+    # a single virtual tree. Any edit to any listed file changes every instance
+    # digest (§6.2 binding); the G01 rebuild check catches any drift.
+    ("bench/dsl/cjson.py", "bench/dsl/cjson.py"),
+    ("bench/dsl/loader.py", "bench/dsl/loader.py"),
+    ("bench/generator/families.py", "bench/generator/families.py"),
+    ("bench/generator/frame.py", "bench/generator/frame.py"),
+    ("bench/generator/identity.py", "bench/generator/identity.py"),
+    ("bench/generator/instance.py", "bench/generator/instance.py"),
+    ("bench/generator/kdf.py", "bench/generator/kdf.py"),
+    ("bench/generator/models.py", "bench/generator/models.py"),
+    ("bench/generator/scenario.py", "bench/generator/scenario.py"),
+    ("bench/generator/tree.py", "bench/generator/tree.py"),
+    ("bench/generator/universe.py", "bench/generator/universe.py"),
+    ("bench/generator/schemas/scenario-actions-v2.schema.json", "bench/generator/schemas/scenario-actions-v2.schema.json"),
+    ("bench/oracle/compiler.py", "bench/oracle/compiler.py"),
+    ("bench/oracle/conditions.py", "bench/oracle/conditions.py"),
+    ("bench/oracle/manifest.py", "bench/oracle/manifest.py"),
+    ("bench/oracle/model.py", "bench/oracle/model.py"),
+    ("bench/oracle/time.py", "bench/oracle/time.py"),
+)
+
 _SOURCE_TREE_CACHE: Optional[str] = None
 
 
 def _source_tree_digest() -> str:
-    """bench-tree/v1 digest over the generator source modules (G01 binding)."""
+    """bench-tree/v1 digest over the frozen generation-affecting source list.
+
+    Fail-closed: every listed file must exist. The list is explicit code, so
+    adding a generation-affecting file requires editing this tuple (a conscious
+    act reviewed in diff), and verification-only files never churn digests.
+    """
     global _SOURCE_TREE_CACHE
     if _SOURCE_TREE_CACHE is None:
-        from pathlib import Path
-
-        pkg_dir = Path(__file__).parent
-        schema_dir = pkg_dir / "schemas"
+        root = Path(__file__).resolve().parents[2]
         files: Dict[str, Tuple[int, bytes]] = {}
-        for py in sorted(pkg_dir.glob("*.py")):
-            files[py.name] = (0o644, py.read_bytes())
-        for sj in sorted(schema_dir.glob("*.json")):
-            files[f"schemas/{sj.name}"] = (0o644, sj.read_bytes())
+        for repo_rel, tree_path in SOURCE_TREE_FILES:
+            data = (root / repo_rel).read_bytes()
+            files[tree_path] = (0o644, data)
         _SOURCE_TREE_CACHE = compute_bench_tree_digest_from_entries(files)
     return _SOURCE_TREE_CACHE
 
