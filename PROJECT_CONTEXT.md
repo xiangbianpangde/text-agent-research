@@ -2,41 +2,46 @@
 schema_version: 1
 project_id: researchctl
 authority: working_projection
-context_revision: 14
-checkpoint_id: CP-0014
+context_revision: 15
+checkpoint_id: CP-0015
 source_session_id: 01a07599-1af8-7d45-8c21-a93984c08d31
-covered_through_entry_id: 01a07599-1af8-7d45-8c21-a93984c08d31:2026-09-06T14:20
+covered_through_entry_id: 01a07599-1af8-7d45-8c21-a93984c08d31:2026-09-06T15:05
 git_branch: main
-git_head: df3d456cf70fcb8d2f39ea627c7943c91abf4737
-base_context_sha256: 7a9ad1c7deb64fb24cf8d830b0c54c5e59b7d95e86951b510937f634ff8ff03a
-generated_at: 2026-09-06T14:20:51.031Z
+git_head: 0c78ae119b2fcab1a5936613623225a55f2160ae
+base_context_sha256: eabf6d576d498f497883dcb2a3edd1511edf361f5148480c41e0a401ba2a9af9
+generated_at: 2026-09-06T15:28:14.470Z
 ---
 
 # ResearchCTL-Bench Working Context
 
 ## Current Objective
 
-P1A complete (G01–G08 all PASS, report at `bench/reports/p1a-gates.json`, status `candidate_p1a`, allowed claim "Dynamic B1 benchmark candidate"). P1B in progress: campaign lifecycle + T0–T3 runner + participant binding done (137 tests). Remaining P1B: hidden-validity canaries (§19.5.4), B1 runner + same-runner evaluation, independent filegraph baseline, S01–S07/B01–B06 gate suite.
+P1B ~70% done: canaries + evaluation engine landed (152 tests green). Remaining: independent-filegraph baseline (B05/B06), S01–S07/B01–B06 gate suite, B1 semantic alignment (instance solvability), then `candidate_p1b`.
 
 ## Authority And Git
 
-- Authority: P0 Contract, P1 Contract (Frozen, Sol PASS aad0919c-e9c2-4368-9959-845745e162bc), Benchmark 方案.
-- Commits: `c9d8a37` P1 freeze; `01f208a` P1A foundations; `6d7a10e` P1A generator+root; `39e8082` CP-0013; `32ec1bc` G-gates; `617175d` gate runner + frozen source-tree closure + regenerated root; `a9ba0e6` campaign state machine; `df3d456` campaign runner T0–T3 + tar binding.
-- Main 11 ahead of origin, unpushed. Unrelated: `.pi/sol-staging/`, `.mimosa/`, root session HTML.
+- P1 Contract Frozen (Sol PASS aad0919c). Commits: `617175d` gates+closure+root; `a9ba0e6` campaign state; `df3d456` campaign runner; `737aa7b` canaries; `926e704` evaluation engine; `0c78ae1` P0.4 attestation re-issue (new digest 25a07a30acb207ac430a79709de39a7b82954c7163bd8d5b22f10c6554abbf30) + run_seed transport. Main 14 ahead of origin.
 
-## Key Design Facts
+## Landed This Phase
 
-- Source-tree closure frozen in `bench/generator/instance.py SOURCE_TREE_FILES` (bench/dsl/cjson+loader, generator pipeline, oracle compiler/conditions/manifest/model/time, v2 schema). Editing any listed file churns all instance digests; gates.py/__main__.py/release.py excluded (verification/CLI only).
-- Public root `bench/packs/p1_public_v1` regenerated under frozen closure; verify-public byte-identical from foreign cwd.
-- `bench/campaign/state.py`: campaign-manifest/v1 (17 fields, 9-state nullability matrix), 9 transitions T0–T8, immutability, event hash chain + verify_event_chain, all §19.5.3 formulas (campaign_id/digest, root commitments, commitment, materialization evidence, evidence bundle, disclosure).
-- `bench/campaign/runner.py`: build_release (144 instances + release identity, b1_api_digest verified against contract frozen value e8cf1488...), build_root_tree (participant-visible fixtures ONLY — no gold/manifest/actions in roots), create_campaign T0–T3 with materialization + opening verification (fail-closed, cleans up on error).
-- `bench/campaign/artifacts.py`: participant-artifact/v1, tar safety (reject absolute/.., symlink/hardlink, device, AppleDouble, PAX), exact tar SHA-256, entrypoint containment, seed_mode enum.
-- Ephemeral test secrets only; repo never stores private/hidden secrets (S02).
+- Gate runner `bench/generator/gates.py` G01–G08 all PASS; report `bench/reports/p1a-gates.json`; status `candidate_p1a`.
+- SOURCE_TREE_FILES frozen (17 files incl. yamlemit.py; gates/__main__/release excluded). Listed-file edits churn instance digests by design.
+- Fixture format rewritten to mini-research-repo (`bench/generator/yamlemit.py`): definitions w/ previous chains + APPROVED, events, spec, runs w/ dir-manifest hash raw_ref, organized frontmatter sources, CURRENT.{md,sources.yaml}, .auth, synthetic 40-hex commit. Manifest declares ALL versions + previous facts; raw_run hash = dir-manifest; objects git_commit = synthetic commit.
+- Public root regenerated; cross-cwd byte-identical.
+- campaign/state.py + runner.py T0–T3 (opening verification fail-closed); artifacts.py tar binding.
+- canary.py: iso digest 14df1a90..., net digest 57517398...; 16 probes via sandbox-exec child (realpath paths! /var→/private/var), live-listener network probes (EPERM), no backend → evaluation_valid=false (S06). 16/16 blocked.
+- evaluation.py: prediction/v2 (ref nullable), run_seed_schedule (KDF), fresh workspace per rep, missingness recorded, sealed-Gold scoring. Live smoke vs reference SUT: score 0.0, failed=False (legitimate low score).
 
-## Tests (bench/tests, 137 total)
+## Known Open Items
 
-- P1A: cjson 6, kdf 5, tree 6, models 13, instance 9, release 4, gates 9 (thin over generator.gates), p0 suites 56.
-- P1B: campaign 13 (transitions, immutability, opening verification, event chain), runner 14 (tar safety, binding, T0–T3, no-gold-in-roots, S01 match committed root, fail-closed secrets, tamper detection).
+1. **B1 semantic alignment / solvability**: SUT scores 0.0 — its envelopes don't project Gold rows (route_sequence/status/commit semantics from universe). Benchmark must be solvable: define B1 workspace semantics, implement baseline (§11) first, then update ResearchCTL adapter as participant.
+2. B04 (artifact byte-change → invalid) needs campaign-level wiring.
+3. P0.4 attestation binds harness bytes — re-issue via `PYTHONPATH=. python3 -m bench.controls.runner` whenever executor/adapters/controls/evaluators change. Current digest 25a07a30....
+
+## Tests (bench/tests, 152)
+
+- P1A 43 (cjson6/kdf5/tree6/models13/instance9/release4); gates 9; P0 56+3.
+- P1B: campaign 13, runner 14, canary 6, evaluation 9 (v2, seed schedule, T02 pairing, workspace freshness, neutrality).
 
 ## Negative Constraints / Do Not Assume
 
@@ -56,10 +61,11 @@ P1A complete (G01–G08 all PASS, report at `bench/reports/p1a-gates.json`, stat
 - Temporary paths must strictly follow $T(path, seq)$ in same directory.
 - Public root secret is a fixed constant; private/hidden secrets are evaluator-held and must never enter the public tree.
 - Hidden roots contain only participant-visible fixtures; Oracle/Gold/seed packs stay evaluator-held.
+- P0.4 attestation binds harness bytes: re-issue via documented runner, never silent patching.
 
 ## Next Action
 
-1. Implement hidden-validity/v1 + 16 canaries (§19.5.4) with fail-closed evaluation gating (S05/S06).
-2. Implement B1 runner: same-runner evaluation of participants via sut-adapter/v1 with run_seed per invoke; b1-kernel/v1 capability declaration (§9).
-3. Implement independent-filegraph-v1 baseline (§11, §19.7) — full B1 surface, zero benchmark imports.
-4. Build S01–S07 / B01–B06 gate suite; declare `candidate_p1b` only after all pass.
+1. Implement `bench/baseline/` independent-filegraph-v1 (§11, §19.7): zero benchmark imports, full B1 surface, fail-closed; defines B1 workspace reading rules.
+2. Align Gold projections with B1 semantics so instances are solvable; update ResearchCTL bench_adapter as participant.
+3. B04 wiring: artifact digest re-check before/after execution in campaign runner.
+4. S01–S07/B01–B06 gate suite (`bench/tests/test_p1b_gates.py`); declare `candidate_p1b` when green.
