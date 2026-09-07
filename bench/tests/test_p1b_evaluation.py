@@ -26,6 +26,7 @@ from bench.generator.universe import (
     build_action_stream,
     build_fixture_files,
     build_universe_document,
+    emit_state_ledgers,
     finalize_manifest_filler_hashes,
 )
 from bench.oracle.compiler import compile_gold
@@ -45,6 +46,7 @@ def build_material(family_id: str = "F01", ordinal: int = 0, split: str = "publi
                                 universe_id=f"X-{family_id}-{ordinal}")
     files = build_fixture_files(universe=u, streams=streams)
     finalize_manifest_filler_hashes(u, files)
+    emit_state_ledgers(u, files)
     manifest = validate_manifest(u)
     actions = validate_scenario_v2(build_action_stream(
         family=family, universe=u, streams=streams, scenario_id=f"P1-{family_id}-{ordinal:03d}"))

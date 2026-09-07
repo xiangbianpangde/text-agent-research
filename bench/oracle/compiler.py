@@ -66,7 +66,7 @@ def _facts(
     as_of: str | None = None,
 ) -> List[Dict[str, Any]]:
     rows = state.facts_for(subject)
-    if predicates is not None:
+    if predicates:
         rows = [row for row in rows if row["predicate"] in predicates]
     if as_of is not None:
         rows = [row for row in rows if at_or_before(row["occurred_at"], as_of)]

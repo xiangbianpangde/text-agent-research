@@ -239,7 +239,8 @@ def load_scenario(path: str | Path) -> ScenarioActions:
 def validate_prediction(value: Any, *, capture_id: str | None = None) -> Mapping[str, Any]:
     _assert_no_evaluation_fields(value, "prediction")
     prediction = _strict_keys(value, PREDICTION_KEYS, PREDICTION_KEYS, "prediction")
-    if prediction["schema_version"] != "prediction/v1":
+    # P1 (§19.3.3): prediction/v2 ≙ v1 with nullable result.ref — both accepted.
+    if prediction["schema_version"] not in ("prediction/v1", "prediction/v2"):
         raise ScenarioContractError("unsupported prediction schema_version")
     _string(prediction["capture_id"], "prediction.capture_id", empty=True)
     if capture_id is not None and prediction["capture_id"] != capture_id:
@@ -255,8 +256,12 @@ def validate_prediction(value: Any, *, capture_id: str | None = None) -> Mapping
         raise ScenarioContractError("prediction.results must be an array or null")
     for index, row in enumerate(prediction["results"] or []):
         result = _strict_keys(row, RESULT_KEYS, REQUIRED_RESULT_KEYS, f"prediction.results[{index}]")
-        if "ref" in result and not isinstance(result["ref"], str):
-            raise ScenarioContractError(f"prediction.results[{index}].ref must be string")
+        # v2 delta: ref may be omitted or null; v1 requires string when present
+        if "ref" in result and result["ref"] is not None:
+            if not isinstance(result["ref"], str):
+                raise ScenarioContractError(f"prediction.results[{index}].ref must be string")
+        elif "ref" in result and result["ref"] is None and prediction["schema_version"] == "prediction/v1":
+            raise ScenarioContractError(f"prediction.results[{index}].ref must be string in v1")
         for field in ("entity_id", "version_ref", "path", "content_hash", "git_commit", "status", "relation_type", "section"):
             if result[field] is not None and not isinstance(result[field], str):
                 raise ScenarioContractError(f"prediction.results[{index}].{field} must be string or null")

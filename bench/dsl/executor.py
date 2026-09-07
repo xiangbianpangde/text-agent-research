@@ -214,9 +214,17 @@ def execute_actions(
             if "capture_id" not in step:
                 continue
             if not isinstance(result.payload, dict):
-                record.errors.append(f"{step['capture_id']}: participant returned no prediction/v1 payload")
+                record.errors.append(f"{step['capture_id']}: participant returned no prediction payload")
                 continue
-            record.predictions[step["capture_id"]] = validate_prediction(
+            # P1 transport accepts prediction/v2 (§19.3.3: nullable result.ref);
+            # v1 remains valid for P0 scenarios.
+            if result.payload.get("schema_version") == "prediction/v2":
+                from bench.campaign.evaluation import validate_prediction_v2
+
+                validator = validate_prediction_v2
+            else:
+                validator = validate_prediction
+            record.predictions[step["capture_id"]] = validator(
                 result.payload,
                 capture_id=step["capture_id"],
             )

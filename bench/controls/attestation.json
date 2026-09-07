@@ -1,14 +1,14 @@
 {
   "action_digest": "sha256:8d2a1f505f65b353b5690342a2ab6456b9a18547d896d7b5a329318a345c9203",
   "all_controls_rejected": true,
-  "attestation_digest": "sha256:25a07a30acb207ac430a79709de39a7b82954c7163bd8d5b22f10c6554abbf30",
+  "attestation_digest": "sha256:85884db9f1a0ae8792ea293315cf8a47f968ebb8aa51455eaabed91e216c7d0b",
   "controls": [
     {
       "adapter": "negative-control:always-pass",
       "certification_eligible": false,
       "civ": 0,
       "composite_score": 2.1,
-      "evaluation_digest": "sha256:764485d8c367ec288d4f72ec879168d5464cabaa3df6dcbeb098c59b20788352",
+      "evaluation_digest": "sha256:134b7f7729543ca43723842f123a16b5588d65584265ad411530c7095a3eba20",
       "gold_read_blocked": null,
       "ineligible_reasons": [
         "FORMAL_SCENARIOS_FAILED",
@@ -27,7 +27,7 @@
       "certification_eligible": false,
       "civ": 0,
       "composite_score": 4.2,
-      "evaluation_digest": "sha256:1f295eba05b451a36368e6934618008bf62d9df7a760682f8e5a862eea4b7e64",
+      "evaluation_digest": "sha256:ffd012635d4023a9641fe63e98770342f756dca4744957640820f53acd755341",
       "gold_read_blocked": null,
       "ineligible_reasons": [
         "FORMAL_SCENARIOS_FAILED",
@@ -46,7 +46,7 @@
       "certification_eligible": false,
       "civ": 6,
       "composite_score": 0.0,
-      "evaluation_digest": "sha256:86eef8e7deb2aab9eb0147fe41f761c71d94baa11fae12685e41295c5d17d66e",
+      "evaluation_digest": "sha256:b9b6c40d0f43f17ac0b19d3fcf13ee436d7127746305fb45631b8c8a0ada4ba0",
       "gold_read_blocked": null,
       "ineligible_reasons": [
         "FORMAL_SCENARIOS_FAILED",
@@ -65,7 +65,7 @@
       "certification_eligible": false,
       "civ": 6,
       "composite_score": 0.0,
-      "evaluation_digest": "sha256:275a31bbaf5380fd0f7509f12795a7cae32a17c1bb038ffdb680c4acd49438e9",
+      "evaluation_digest": "sha256:188055192fc13921462709c758d61ff94ad7d67e040d7bfac61e96c46fc8bf21",
       "gold_read_blocked": null,
       "ineligible_reasons": [
         "FORMAL_SCENARIOS_FAILED",
@@ -84,7 +84,7 @@
       "certification_eligible": false,
       "civ": 4,
       "composite_score": 0.0,
-      "evaluation_digest": "sha256:efb85583f23b54b2782f309dd1b526f89295d08716994c9e3aa616a1d212c2d9",
+      "evaluation_digest": "sha256:d32b01fa7cd30a5a5a52345110bcbdf175bd44d5d5336fcefa0009601df2c0b9",
       "gold_read_blocked": null,
       "ineligible_reasons": [
         "FORMAL_SCENARIOS_FAILED",
@@ -103,7 +103,7 @@
       "certification_eligible": false,
       "civ": 0,
       "composite_score": 2.1,
-      "evaluation_digest": "sha256:764485d8c367ec288d4f72ec879168d5464cabaa3df6dcbeb098c59b20788352",
+      "evaluation_digest": "sha256:134b7f7729543ca43723842f123a16b5588d65584265ad411530c7095a3eba20",
       "gold_read_blocked": true,
       "ineligible_reasons": [
         "FORMAL_SCENARIOS_FAILED",
@@ -120,19 +120,19 @@
   ],
   "fixture_hash": "sha256:205483526cf17db0066b55c0f097a99043443a79ed0c5fa919805537b73eea01",
   "gold_reader_blocked": true,
-  "harness_digest": "sha256:8afa1da27aa98500d72efda0829fae462050032394df05f80e0a6444200fdde3",
+  "harness_digest": "sha256:e0a170083cc74ffb6d4b1ed4f3bc523487c5a9f1237cb3706d032f7382926004",
   "manifest_digest": "sha256:01178c7b858d4d72afb19ac69e1a027f6655dc1f3e518277e3e400f478b19c7b",
   "official_deterministic": true,
-  "official_retry_digest": "sha256:a0a8d65261fbb267759eee3ee5b432051a88707768274f3840377ca851217cfd",
+  "official_retry_digest": "sha256:bbdc26deb947c79d1a67be1ac77d70fb4f596eb5a6be88445735cf9b90dfb56b",
   "official_run": {
     "adapter": "researchctl",
     "command_digest": "sha256:2df282a68c220356ad45c1ed695a84ca80477f357fb28f5bd550dac154e49728",
-    "evaluation_digest": "sha256:a0a8d65261fbb267759eee3ee5b432051a88707768274f3840377ca851217cfd"
+    "evaluation_digest": "sha256:bbdc26deb947c79d1a67be1ac77d70fb4f596eb5a6be88445735cf9b90dfb56b"
   },
   "p0_4_passed": true,
   "pack_id": "p0-seed-v1",
   "random_deterministic": true,
-  "random_retry_digest": "sha256:efb85583f23b54b2782f309dd1b526f89295d08716994c9e3aa616a1d212c2d9",
+  "random_retry_digest": "sha256:d32b01fa7cd30a5a5a52345110bcbdf175bd44d5d5336fcefa0009601df2c0b9",
   "schema_version": "negative-control-attestation/v1",
   "source_hash": "sha256:205483526cf17db0066b55c0f097a99043443a79ed0c5fa919805537b73eea01"
 }

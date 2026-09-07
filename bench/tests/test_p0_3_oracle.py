@@ -412,7 +412,18 @@ class SolAuditRegressionTests(unittest.TestCase):
                 "git_commit": obj["git_commit"], "status": None, "is_stale": False,
                 "relation_type": None, "section": None, "is_available": True,
             })
-        capture = prediction("lineage", route_sequence=["current"], results=results)
+        # P1 semantics (§19.6): empty predicate list projects ALL subject facts —
+        # a fact-complete prediction must carry them for asserted_facts_exact.
+        subject_facts = [
+            dict(fact) for fact in self.manifest.document["facts"]
+            if fact["subject"] in ("definition:H003@v1", "definition:H003@v2", "definition:H003@v3")
+        ]
+        capture = prediction(
+            "lineage",
+            route_sequence=["current"],
+            results=results,
+            asserted_facts=subject_facts,
+        )
         result = evaluate_scenario(gold, ExecutionRecord("S05", predictions={"lineage": capture}), self.manifest)
         self.assertTrue(result.passed, result.to_dict())
         self.assertEqual(result.civ_count, 0)

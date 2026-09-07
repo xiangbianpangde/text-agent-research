@@ -69,7 +69,9 @@ def encode_operation(
     if operation == "query_project_current":
         return ["query", "--entity", _required(source, "participant_locator")]
     if operation == "query_project_index":
-        return ["query", "--text", _required(source, "text")]
+        # Gold semantics project the target entity row (like project_current);
+        # the index route is declared via route_sequence, not via --text.
+        return ["query", "--entity", _required(source, "participant_locator")]
     if operation in ("impact", "stale_status"):
         arguments = ["impact", _required(source, "participant_locator")]
         if source.get("change_type"):

@@ -68,6 +68,9 @@ def build_universe_document(
 
     base_day = EPOCH_DAY_FOR_2026_08_01 + ordinal * 3  # instance-unique calendar window
     clock = _ts(base_day, 4)
+    # deterministic synthetic commit (40 hex) binding every workspace ref
+    commit_stream = streams["content"]
+    commit_hex = (f"{ordinal:06x}{commit_stream.uniform(0xFFFFFF):06x}" + "0" * 40)[:40]
 
     entities: List[Dict[str, Any]] = []
     artifacts: List[Dict[str, Any]] = []
@@ -82,40 +85,53 @@ def build_universe_document(
         return "sha256:" + hashlib.sha256(data).hexdigest()
 
     # --- definitions ------------------------------------------------------
+    # Multi-version entities: every version is a manifest object with a
+    # `previous` fact chain (query_lineage), and the fixture carries APPROVED.
     definition_ids: List[str] = []
     definition_version_refs: List[str] = []
     for i in range(n_entities):
         entity_id = f"E{_pad(i + 1)}"
-        version_count = 1 + objects_stream.uniform(2)
-        chosen_version = None
+        version_count = 1  # single-version at compile time; runtime mutations create v2+
+        definition_ids.append(entity_id)
         for v in range(1, version_count + 1):
             version_ref = f"{entity_id}@v{v}"
             path = f"definitions/{entity_id}/{version_ref}.yaml"
             entity_paths.append(path)
-            if chosen_version is None or v == version_count:
-                chosen_version = (entity_id, version_ref, path)
-        assert chosen_version is not None
-        eid, vref, vpath = chosen_version
-        definition_ids.append(eid)
-        definition_version_refs.append(vref)
-        entities.append({
-            "ref": f"definition:{vref}",
-            "kind": "definition",
-            "entity_id": eid,
-            "version_ref": vref,
-            "path": vpath,
-            "status": "valid",
-            "content_hash": None,  # filled after fixture bytes are built
-            "lifecycle_start": _ts(base_day, 0),
-            "git_commit": None,
-        })
-        facts.append({
-            "fact_id": f"fact:{vref}:introduced-by",
-            "subject": f"definition:{vref}",
-            "predicate": "introduced_by",
-            "value": "human:generator",
-            "occurred_at": _ts(base_day, 0),
-        })
+            definition_version_refs.append(version_ref)
+            entities.append({
+                "ref": f"definition:{version_ref}",
+                "kind": "definition",
+                "entity_id": entity_id,
+                "version_ref": version_ref,
+                "path": path,
+                "status": "valid",
+                "content_hash": None,  # bound to fixture bytes by the finalizer
+                "lifecycle_start": _ts(base_day, 0),
+                "git_commit": commit_hex,
+            })
+            facts.append({
+                "fact_id": f"fact:{version_ref}:introduced-by",
+                "subject": f"definition:{version_ref}",
+                "predicate": "introduced_by",
+                "value": "human:generator",
+                "occurred_at": _ts(base_day, 0),
+            })
+            if v > 1:
+                facts.append({
+                    "fact_id": f"fact:{version_ref}:previous",
+                    "subject": f"definition:{version_ref}",
+                    "predicate": "previous",
+                    "value": f"{entity_id}@v{v - 1}",
+                    "occurred_at": _ts(base_day, 0),
+                })
+            if v == 1:
+                facts.append({
+                    "fact_id": f"fact:{version_ref}:introduced-event",
+                    "subject": f"definition:{version_ref}",
+                    "predicate": "introduced_event",
+                    "value": "EV-000001",
+                    "occurred_at": _ts(base_day, 0),
+                })
 
     # --- external source --------------------------------------------------
     external_ref = "external:basis-doc"
@@ -131,7 +147,7 @@ def build_universe_document(
         "status": "valid",
         "content_hash": external_hash,
         "lifecycle_start": _ts(base_day, 0),
-        "git_commit": None,
+        "git_commit": commit_hex,
     })
     # authority edge from first definition to external source
     first_def_ref = f"definition:{definition_version_refs[0]}"
@@ -141,14 +157,14 @@ def build_universe_document(
         "relation": "authorized_by",
     })
     facts.append({
-        "fact_id": f"fact:{definition_version_refs[0]}:pinned-external-value",
+        "fact_id": f"fact:{external_ref}:pinned-external-value",
         "subject": external_ref,
         "predicate": "pinned_external_value",
         "value": "PINNED_BASIS_VALUE",
         "occurred_at": _ts(base_day, 0),
     })
     facts.append({
-        "fact_id": f"fact:{definition_version_refs[0]}:authority-source",
+        "fact_id": f"fact:{external_ref}:authority-source",
         "subject": external_ref,
         "predicate": "authority_source",
         "value": external_ref,
@@ -169,7 +185,7 @@ def build_universe_document(
         "status": "valid",
         "content_hash": None,
         "lifecycle_start": _ts(base_day, 1),
-        "git_commit": None,
+        "git_commit": commit_hex,
     })
 
     run_ids = [f"R{_pad(i + 1)}" for i in range(2)]
@@ -186,7 +202,7 @@ def build_universe_document(
             "status": "valid",
             "content_hash": None,
             "lifecycle_start": _ts(base_day, 2 + i),
-            "git_commit": None,
+            "git_commit": commit_hex,
         })
         relations.append({"source_ref": run_ref, "target_ref": spec_ref, "relation": "bound_to"})
 
@@ -201,7 +217,7 @@ def build_universe_document(
             "status": "valid",
             "content_hash": None,
             "lifecycle_start": _ts(base_day, 2 + i),
-            "git_commit": None,
+            "git_commit": commit_hex,
         })
         entities.append({
             "ref": f"raw:{run_id}",
@@ -212,7 +228,7 @@ def build_universe_document(
             "status": "valid",
             "content_hash": None,
             "lifecycle_start": _ts(base_day, 2 + i),
-            "git_commit": None,
+            "git_commit": commit_hex,
         })
         # metric evidence atom
         metric_value = f"0.{objects_stream.uniform(900) + 100}"
@@ -236,7 +252,7 @@ def build_universe_document(
             "status": "valid",
             "content_hash": None,
             "lifecycle_start": _ts(base_day, 2 + i),
-            "git_commit": None,
+            "git_commit": commit_hex,
         })
         relations.append({
             "source_ref": binding_ref,
@@ -257,7 +273,7 @@ def build_universe_document(
         "status": "valid",
         "content_hash": None,
         "lifecycle_start": _ts(base_day, 4),
-        "git_commit": None,
+        "git_commit": commit_hex,
     })
     relations.append({"source_ref": result_ref, "target_ref": first_def_ref, "relation": "based_on"})
     for run_id in run_ids:
@@ -279,7 +295,7 @@ def build_universe_document(
         "status": "valid",
         "content_hash": None,
         "lifecycle_start": clock,
-        "git_commit": None,
+        "git_commit": commit_hex,
     })
 
     # additional relations chain for F05-style impact depth
@@ -307,7 +323,7 @@ def build_universe_document(
             "status": "valid",
             "content_hash": None,
             "lifecycle_start": _ts(base_day, 2),
-            "git_commit": None,
+            "git_commit": commit_hex,
         })
 
     # --- queries from the family's operation allowlist ---------------------
@@ -315,9 +331,12 @@ def build_universe_document(
     queries: List[Dict[str, Any]] = []
     # non-query operations (index/freeze_report/tx_reconcile etc.) are invoked
     # directly by the action stream, not via the query registry
+    # query_external_basis is implemented on the B1 surface (baseline covers it)
+    # but not sampled into P1A-family instances: its Gold projection (pinned-only
+    # asserted_facts) is not derivable under the shared argv envelope rule.
     registry_ops = frozenset({
         "query_as_of_state", "query_entity", "query_exact_routing",
-        "query_external_basis", "query_facts", "query_history", "query_lineage",
+        "query_facts", "query_history", "query_lineage",
         "query_project_current", "query_project_index", "query_sources",
         "query_state", "query_text_lexical", "query_text_semantic",
         "impact", "stale_status", "trace_evidence", "trace_graph",
@@ -325,6 +344,7 @@ def build_universe_document(
     op_list = [op for op in family["operation_allowlist"] if op in registry_ops]
     if not op_list:
         op_list = ["query_entity", "query_sources"]
+    # query_project_index needs a target (Gold projects the entity row)
     n_queries = max(2, min(len(op_list), 2 + query_stream.uniform(3)))
     available = list(op_list)
     chosen_ops: List[str] = []
@@ -334,12 +354,24 @@ def build_universe_document(
         available.remove(pick)
     seen_ops: set = set()
     idx = 0
+    # operation-canonical route (B1 semantics; must match participant projections)
+    op_route = {
+        "query_entity": "current", "query_exact_routing": "current",
+        "query_project_current": "current", "query_facts": "current",
+        "query_state": "current", "query_external_basis": "current",
+        "query_lineage": "current", "query_sources": "sources",
+        "trace_evidence": "trace", "trace_graph": "trace",
+        "query_history": "history", "query_as_of_state": "history",
+        "query_text_lexical": "query", "query_text_semantic": "semantic",
+        "query_project_index": "current", "impact": "impact", "stale_status": "impact",
+    }
     for op in chosen_ops:
         if op in seen_ops:
             continue
         seen_ops.add(op)
         idx += 1
         qid = f"Q{_pad(idx)}"
+        route = [op_route.get(op, "current")]
         if op in ("query_text_lexical", "query_text_semantic"):
             queries.append({
                 "query_id": qid,
@@ -350,7 +382,7 @@ def build_universe_document(
                 "participant_locator": None,
                 "predicates": [],
                 "relation_types": [],
-                "route_sequence": ["current"],
+                "route_sequence": route,
                 "ranking_authority": None,
             })
         elif op == "query_as_of_state":
@@ -363,7 +395,7 @@ def build_universe_document(
                 "participant_locator": None,
                 "predicates": [],
                 "relation_types": [],
-                "route_sequence": ["current"],
+                "route_sequence": route,
                 "ranking_authority": None,
             })
         elif op in ("impact", "stale_status"):
@@ -376,12 +408,15 @@ def build_universe_document(
                 "participant_locator": definition_ids[0],
                 "predicates": [],
                 "relation_types": [],
-                "route_sequence": ["current"],
+                "route_sequence": route,
                 "ranking_authority": None,
                 "change_type": "definition_revised",
             })
         else:
             target = first_def_ref
+            # predicates must enumerate the subject's fact predicates so the
+            # sealed-Gold projection (predicate-filtered) is derivable by a
+            # fact-complete participant from the workspace ledger.
             queries.append({
                 "query_id": qid,
                 "operation": op,
@@ -389,12 +424,23 @@ def build_universe_document(
                 "text": None,
                 "as_of": None,
                 "participant_locator": definition_ids[0],
-                "predicates": ["introduced_by"] if op == "query_facts" else [],
+                "predicates": [],
                 "relation_types": [],
-                "route_sequence": ["current"],
+                "route_sequence": route,
                 "ranking_authority": None,
             })
     queries.sort(key=lambda q: q["query_id"])
+
+    # as-of visibility ledger: one fact per manifest object, predicate "as_of",
+    # making query_history visible_refs derivable from the workspace ledger.
+    for obj in (*entities, *artifacts):
+        facts.append({
+            "fact_id": f"fact:{obj['ref']}:as-of",
+            "subject": obj["ref"],
+            "predicate": "as_of",
+            "value": obj["lifecycle_start"],
+            "occurred_at": obj["lifecycle_start"],
+        })
 
     document: Dict[str, Any] = {
         "schema_version": "oracle-manifest/v1",
@@ -407,7 +453,7 @@ def build_universe_document(
             "format": "tar",
             "content_hash": None,  # filled by caller
         },
-        "event_ids": [f"EV-{_pad(i + 1)}" for i in range(1)],
+        "event_ids": ["EV-000001"],
         "queries": queries,
         "entities": entities,
         "artifacts": artifacts,
@@ -495,8 +541,12 @@ def build_action_stream(
         elif mut in ("create_version", "duplicate_version"):
             defs = [e for e in entities if e["kind"] == "definition"]
             base = defs[0]
-            base_version_num = int(base["version_ref"].rsplit("v", 1)[1])
-            next_version = f"{base['entity_id']}@v{base_version_num + 1}"
+            entity_versions = [
+                int(e["version_ref"].rsplit("v", 1)[1])
+                for e in defs if e["entity_id"] == base["entity_id"]
+            ]
+            next_num = max(entity_versions) + 1
+            next_version = f"{base['entity_id']}@v{next_num}"
             if mut == "create_version":
                 steps.append({
                     "step": step_no, "action": "mutate", "type": "create_version",
@@ -560,23 +610,48 @@ def finalize_manifest_filler_hashes(
 
     Mutates the manifest document in place. All digests derive from the exact
     fixture bytes, so the manifest and the physical tree always agree.
+    Raw-run entities use the P0 directory-manifest hash (sorted rel:hash lines).
     """
     import hashlib
+    import json
 
     def _sha_hex(data: bytes) -> str:
         return "sha256:" + hashlib.sha256(data).hexdigest()
+
+    def _dir_hash(prefix: str) -> str:
+        entries = {
+            rel.removeprefix(prefix + "/"): data
+            for rel, (mode, data) in files.items()
+            if rel.startswith(prefix + "/")
+        }
+        lines = [
+            f"{rel}:{hashlib.sha256(data).hexdigest()}"
+            for rel, data in sorted(entries.items(), key=lambda kv: kv[0].encode("utf-8"))
+        ]
+        return "sha256:" + hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+    begin_len = len(b"@@BENCH-FRONTMATTER-BEGIN\n")
+    fm_body_hash: Dict[str, str] = {}
+    for rel, (mode, data) in files.items():
+        if data.startswith(b"@@BENCH-FRONTMATTER-BEGIN\n"):
+            end = data.find(b"\n@@BENCH-FRONTMATTER-END\n")
+            head = data[begin_len:end]
+            front = json.loads(head.decode("utf-8"))
+            body = data[end + len("\n@@BENCH-FRONTMATTER-END\n"):]
+            fm_body_hash[rel] = "sha256:" + hashlib.sha256(body).hexdigest()
+            # frontmatter content_hash must bind body bytes (§19.7.2)
+            assert front["content_hash"] == fm_body_hash[rel], rel
 
     for row in (*universe["entities"], *universe["artifacts"]):
         path = row.get("path")
         if row["kind"] in ("metrics_csv", "execution_log"):
             row["content_hash"] = _sha_hex(files[path][1])
-        elif row["kind"] in ("definition", "experiment_spec", "run", "organized_result", "report"):
+        elif row["kind"] in ("definition", "experiment_spec", "run", "organized_result", "report", "external_source"):
             if path in files:
-                row["content_hash"] = _sha_hex(files[path][1])
+                # frontmatter'd files declare body hash; others whole-file hash
+                row["content_hash"] = fm_body_hash.get(path) or _sha_hex(files[path][1])
         elif row["kind"] == "raw_run":
-            index_data = files.get(f"{path}/INDEX.yaml")
-            if index_data is not None:
-                row["content_hash"] = _sha_hex(index_data[1])
+            row["content_hash"] = _dir_hash(path)
 
     fixture_blob = b"".join(files[p][1] for p in sorted(files))
     universe["fixture"]["source_hash"] = _sha_hex(fixture_blob)
@@ -593,49 +668,131 @@ def build_fixture_files(
     universe: Mapping[str, Any],
     streams: Mapping[str, PRNGStream],
 ) -> Dict[str, Tuple[int, bytes]]:
-    """Build the physical fixture file map {rel_path: (mode, bytes)}.
+    """Build the physical fixture as a self-sufficient mini-research-repo.
 
-    File bodies are canonical bench-cjson documents; every file path and body
-    is a deterministic function of the streams and universe structure.
+    The format mirrors the P0 canonical workspace (mini-YAML + markdown +
+    sources manifests) so every participant — including the reference SUT —
+    can index it. All hashes bind to the exact emitted bytes.
     """
+    import hashlib
+
+    from .yamlemit import dumps as ydumps, dumps_frontmatter
+    from bench.dsl.cjson import bench_cjson_bytes
+
     files: Dict[str, Tuple[int, bytes]] = {}
-    content_stream = streams["content"]
+    spec_id = next(e["entity_id"] for e in universe["entities"] if e["kind"] == "experiment_spec")
+    commit_hex = universe["entities"][0]["git_commit"]
 
-    def put(path: str, obj: Any) -> None:
-        from bench.dsl.cjson import bench_cjson_bytes
-        data = bench_cjson_bytes(obj) + b"\n"
-        files[path] = (0o644, data)
+    def _dir_manifest_hash(entries: Dict[str, bytes]) -> str:
+        lines = []
+        for rel in sorted(entries.keys(), key=lambda s: s.encode("utf-8")):
+            lines.append(f"{rel}:{hashlib.sha256(entries[rel]).hexdigest()}")
+        manifest_text = "\n".join(lines)
+        return "sha256:" + hashlib.sha256(manifest_text.encode("utf-8")).hexdigest()
 
+    def _bench_wrap(rel_path: str, front: Dict[str, Any], body: bytes) -> bytes:
+        """§19.7.2 BENCH frontmatter framing; content_hash binds body bytes."""
+        front = dict(front)
+        front["content_hash"] = "sha256:" + hashlib.sha256(body).hexdigest()
+        front["path"] = rel_path
+        return (
+            b"@@BENCH-FRONTMATTER-BEGIN\n"
+            + bench_cjson_bytes(front)
+            + b"\n@@BENCH-FRONTMATTER-END\n"
+            + body
+        )
+
+    # --- external source ---------------------------------------------------
+    external_value = universe["external_sources"][0]["pinned_value"] + "\n"
+    files["external/basis-doc.txt"] = (0o644, _bench_wrap("external/basis-doc.txt", {
+        "schema_version": "filegraph-frontmatter/v1",
+        "entity_id": universe["external_sources"][0]["ref"],
+        "version": "",
+        "current": True,
+        "status": "valid",
+        "git_commit": commit_hex,
+        "relations": {"depends_on": [], "derived_from": [], "evidence": [], "sources": []},
+    }, external_value.encode("utf-8")))
+
+    # --- definitions + APPROVED + events -----------------------------------
+    event_ref = "EV-000001"  # matches the manifest event_ids entry used by facts
+    files[f"events/{event_ref}.yaml"] = (0o644, ydumps({
+        "event_id": event_ref,
+        "event_type": "definition_introduced",
+        "occurred_at": universe["clock"],
+        "subject": next(
+            e["entity_id"] for e in universe["entities"] if e["kind"] == "definition"
+        ),
+    }).encode("utf-8"))
+
+    # declared-relation index for BENCH frontmatter (§19.7.2)
+    relations_out = []
     for row in universe["entities"]:
-        if row["kind"] in ("definition", "experiment_spec"):
-            put(row["path"], {
+        if row["kind"] == "definition":
+            entity_id = row["entity_id"]
+            version = row["version_ref"]
+            body = ydumps({
+                "schema_version": 1,
+                "entity_id": entity_id,
+                "version_ref": version,
+                "body_kind": "GeneratedDefinition",
+                "summary": f"Generated definition {entity_id} for instance workloads",
+            }).encode("utf-8")
+            # derived_from chain: previous version of same entity
+            derived = []
+            num = int(version.rsplit("v", 1)[1])
+            if num > 1:
+                derived.append(f"{entity_id}@v{num - 1}")
+            files[row["path"]] = (0o644, _bench_wrap(row["path"], {
+                "schema_version": "filegraph-frontmatter/v1",
+                "entity_id": entity_id,
+                "version": f"v{num}",
+                "current": num == max(
+                    int(e["version_ref"].rsplit("v", 1)[1])
+                    for e in universe["entities"]
+                    if e["kind"] == "definition" and e["entity_id"] == entity_id
+                ),
+                "status": "valid",
+                "git_commit": commit_hex,
+                "relations": {
+                    "depends_on": [],
+                    "derived_from": derived,
+                    "evidence": [],
+                    "sources": [],
+                },
+            }, body))
+        elif row["kind"] == "experiment_spec":
+            body = ydumps({
+                "schema_version": 1,
+                "spec_id": row["entity_id"],
+                "status": "active",
+                "objective": f"Synthetic experiment {row['entity_id']}",
+            }).encode("utf-8")
+            files[row["path"]] = (0o644, _bench_wrap(row["path"], {
+                "schema_version": "filegraph-frontmatter/v1",
                 "entity_id": row["entity_id"],
-                "version_ref": row["version_ref"],
-                "status": row["status"],
-                "created_at": row["lifecycle_start"],
-            })
-        elif row["kind"] == "run":
-            put(row["path"], {
-                "run_id": row["entity_id"],
-                "status": row["status"],
-                "started_at": row["lifecycle_start"],
-            })
-        elif row["kind"] == "raw_run":
-            # directory-like entry in P0; emit a marker file per raw run dir
-            put(f"{row['path']}/INDEX.yaml", {"raw_run": row["entity_id"]})
-        elif row["kind"] == "organized_result":
-            put(row["path"], {
-                "result": row["entity_id"],
-                "summary": "GENERATED_RESULT_BODY",
-            })
-        elif row["kind"] == "report":
-            put(row["path"], {
-                "report": row["entity_id"],
-                "generated_at": row["lifecycle_start"],
-            })
-        elif row["kind"] == "external_source":
-            put(row["path"], universe["external_sources"][0]["pinned_value"] + "\n")
+                "version": "v1",
+                "current": True,
+                "status": "valid",
+                "git_commit": commit_hex,
+                "relations": {"depends_on": [], "derived_from": [], "evidence": [], "sources": []},
+            }, body))
+        elif row["kind"] == "source_binding":
+            continue  # logical binding; no physical file
 
+    del relations_out
+
+    # APPROVED pointers per definition (current = latest version)
+    definitions = [e for e in universe["entities"] if e["kind"] == "definition"]
+    for entity_id in sorted({e["entity_id"] for e in definitions}):
+        versions = [e["version_ref"] for e in definitions if e["entity_id"] == entity_id]
+        latest = versions[-1]
+        files[f"definitions/{entity_id}/APPROVED.yaml"] = (0o644, ydumps({
+            "entity_id": entity_id,
+            "version_ref": latest,
+        }).encode("utf-8"))
+
+    # --- runs + raw ---------------------------------------------------------
     for row in universe["artifacts"]:
         if row["kind"] == "metrics_csv":
             acc = next(
@@ -648,7 +805,160 @@ def build_fixture_files(
             ).encode("utf-8")
             files[row["path"]] = (0o644, body)
         elif row["kind"] == "execution_log":
-            body = "run completed\n".encode("utf-8")
-            files[row["path"]] = (0o644, body)
+            files[row["path"]] = (0o644, b"run completed\n")
+
+    runs = [e for e in universe["entities"] if e["kind"] == "run"]
+    for run in runs:
+        run_id = run["entity_id"]
+        raw_dir = f"raw/{spec_id}/{run_id}"
+        raw_entries = {
+            rel.removeprefix(raw_dir + "/"): data
+            for rel, (mode, data) in files.items()
+            if rel.startswith(raw_dir + "/")
+        }
+        raw_hash = _dir_manifest_hash(raw_entries)
+        run_manifest_body = ydumps({
+            "schema_version": 1,
+            "run_id": run_id,
+            "experiment_ref": f"{spec_id}@v1",
+            "status": "completed",
+            "model": "model-a",
+            "context_length": "128K",
+            "raw_ref": {
+                "path": raw_dir + "/",
+                "source_type": "directory",
+                "reference_scope": "current",
+                "content_hash": raw_hash,
+                "git_commit": commit_hex,
+            },
+        }).encode("utf-8")
+        files[f"runs/{run_id}/manifest.yaml"] = (0o644, _bench_wrap(
+            f"runs/{run_id}/manifest.yaml", {
+                "schema_version": "filegraph-frontmatter/v1",
+                "entity_id": run_id,
+                "version": "",
+                "current": True,
+                "status": "valid",
+                "git_commit": commit_hex,
+                "relations": {"depends_on": [], "derived_from": [], "evidence": [], "sources": []},
+            }, run_manifest_body))
+
+    # --- organized result ----------------------------------------------------
+    result_path = next(e["path"] for e in universe["entities"] if e["kind"] == "organized_result")
+    raw_dirs = sorted({a["path"].rsplit("/", 1)[0] for a in universe["artifacts"] if a["kind"] == "metrics_csv"})
+    sources = [
+        {
+            "path": rd + "/",
+            "source_type": "directory",
+            "content_hash": _dir_manifest_hash({
+                rel.removeprefix(rd + "/"): data
+                for rel, (mode, data) in files.items()
+                if rel.startswith(rd + "/")
+            }),
+            "reference_scope": "historical",
+            "git_commit": commit_hex,
+        }
+        for rd in raw_dirs
+    ]
+    body_text = (
+        f"# {spec_id} result\n\n"
+        "Generated organized result body.\n"
+    )
+    front = {
+        "id": f"ORG-{spec_id}",
+        "experiment": spec_id,
+        "version": 1,
+        "sources": sources,
+    }
+    result_row = next(e for e in universe["entities"] if e["kind"] == "organized_result")
+    files[result_path] = (0o644, _bench_wrap(result_path, {
+        "schema_version": "filegraph-frontmatter/v1",
+        "entity_id": result_row["entity_id"],
+        "version": "",
+        "current": True,
+        "status": "valid",
+        "git_commit": commit_hex,
+        "relations": {
+            "depends_on": [],
+            "derived_from": [],
+            "evidence": [a["artifact_ref"] for a in universe["evidence_atoms"]],
+            "sources": [],
+        },
+    }, dumps_frontmatter(front, body_text).encode("utf-8")))
+
+    # --- reports --------------------------------------------------------------
+    result_hash = "sha256:" + hashlib.sha256(files[result_path][1]).hexdigest()
+    current_body = (
+        f"# CURRENT — {spec_id}\n\n"
+        f"Current understanding: {spec_id} completed.\n\n"
+        f"<!-- sources: {result_path} -->\n"
+    ).encode("utf-8")
+    report_row = next(e for e in universe["entities"] if e["kind"] == "report")
+    files["reports/CURRENT.md"] = (0o644, _bench_wrap("reports/CURRENT.md", {
+        "schema_version": "filegraph-frontmatter/v1",
+        "entity_id": report_row["entity_id"],
+        "version": "",
+        "current": True,
+        "status": "valid",
+        "git_commit": commit_hex,
+        "relations": {
+            "depends_on": [],
+            "derived_from": [],
+            "evidence": [],
+            "sources": [result_path],
+        },
+    }, current_body))
+    files["reports/CURRENT.sources.yaml"] = (0o644, ydumps({
+        "report": "CURRENT",
+        "reference_scope": "current",
+        "as_of": universe["clock"],
+        "sources": [{
+            "path": result_path,
+            "source_type": "file",
+            "reference_scope": "current",
+            "content_hash": result_hash,
+            "git_commit": commit_hex,
+            "section": None,
+        }],
+    }).encode("utf-8"))
+
+    # --- auth registry ----------------------------------------------------------
+    files[".auth/registry.yaml"] = (0o644, ydumps({
+        "schema_version": 1,
+        "authorizations": [{
+            "ref": "AUTH-0001",
+            "grantee": "text-agent",
+            "scope": "freeze-report",
+            "valid": True,
+        }],
+    }).encode("utf-8"))
 
     return files
+
+
+def emit_state_ledgers(universe: Mapping[str, Any], files: Dict[str, Tuple[int, bytes]]) -> None:
+    """Write the B1 state ledgers AFTER content-hash finalization.
+
+    Must be called after finalize_manifest_filler_hashes so graph-node rows
+    carry the exact bound content_hash values (participants compare bytes).
+    """
+    from bench.dsl.cjson import bench_cjson_bytes
+    graph_nodes = sorted(
+        (dict(row) for row in (*universe["entities"], *universe["artifacts"])),
+        key=lambda r: r["ref"],
+    )
+    files["facts/asserted-facts.cjson"] = (
+        0o644, bench_cjson_bytes(universe["facts"]))
+    files["facts/evidence-atoms.cjson"] = (
+        0o644, bench_cjson_bytes(universe["evidence_atoms"]))
+    files["facts/provenance-edges.cjson"] = (
+        0o644, bench_cjson_bytes(universe["relations"]))
+    files["facts/graph-nodes.cjson"] = (
+        0o644, bench_cjson_bytes(graph_nodes))
+
+    # fixture digests must cover the complete tree including the ledgers
+    import hashlib as _hashlib
+
+    fixture_blob = b"".join(files[p][1] for p in sorted(files))
+    universe["fixture"]["source_hash"] = "sha256:" + _hashlib.sha256(fixture_blob).hexdigest()
+    universe["fixture"]["content_hash"] = "sha256:" + _hashlib.sha256(fixture_blob).hexdigest()

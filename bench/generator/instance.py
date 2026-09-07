@@ -39,6 +39,7 @@ from bench.generator.universe import (
     build_fixture_files,
     build_query_registry,
     build_universe_document,
+    emit_state_ledgers,
     finalize_manifest_filler_hashes,
 )
 from bench.oracle.compiler import compile_gold
@@ -153,6 +154,7 @@ def _candidate(
     )
     fixture_files = build_fixture_files(universe=universe, streams=streams)
     finalize_manifest_filler_hashes(universe, fixture_files)
+    emit_state_ledgers(universe, fixture_files)
 
     manifest = validate_manifest(universe)
     actions = build_action_stream(
@@ -236,6 +238,7 @@ SOURCE_TREE_FILES = (
     ("bench/generator/scenario.py", "bench/generator/scenario.py"),
     ("bench/generator/tree.py", "bench/generator/tree.py"),
     ("bench/generator/universe.py", "bench/generator/universe.py"),
+    ("bench/generator/yamlemit.py", "bench/generator/yamlemit.py"),
     ("bench/generator/schemas/scenario-actions-v2.schema.json", "bench/generator/schemas/scenario-actions-v2.schema.json"),
     ("bench/oracle/compiler.py", "bench/oracle/compiler.py"),
     ("bench/oracle/conditions.py", "bench/oracle/conditions.py"),
