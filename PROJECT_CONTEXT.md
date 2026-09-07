@@ -2,46 +2,34 @@
 schema_version: 1
 project_id: researchctl
 authority: working_projection
-context_revision: 15
-checkpoint_id: CP-0015
-source_session_id: 01a07599-1af8-7d45-8c21-a93984c08d31
-covered_through_entry_id: 01a07599-1af8-7d45-8c21-a93984c08d31:2026-09-06T15:05
+context_revision: 16
+checkpoint_id: CP-0016
+source_session_id: 01a079a1-7261-7605-8a92-f9b5af734d65
+covered_through_entry_id: 01a07599-1af8-7d45-8c21-a93984c08d31:2026-09-06T16:30
 git_branch: main
-git_head: 0c78ae119b2fcab1a5936613623225a55f2160ae
-base_context_sha256: eabf6d576d498f497883dcb2a3edd1511edf361f5148480c41e0a401ba2a9af9
-generated_at: 2026-09-06T15:28:14.470Z
+git_head: 1499ff0945abd7886188e5f7b7a987d7cc8dbb35
+base_context_sha256: 0f1d406fb6031341dca648b36ec208065313c89a62ced68fa038572c6d31075c
+generated_at: 2026-09-07T02:34:32.663Z
 ---
 
 # ResearchCTL-Bench Working Context
 
 ## Current Objective
 
-P1B ~70% done: canaries + evaluation engine landed (152 tests green). Remaining: independent-filegraph baseline (B05/B06), S01–S07/B01–B06 gate suite, B1 semantic alignment (instance solvability), then `candidate_p1b`.
+P1B ~85% done: independent-filegraph baseline implemented AND 48/48 public instances solvable at score 1.0 (152 bench tests green). Remaining: B04 artifact-binding wiring, S01–S07/B01–B06 gate suite, then `candidate_p1b`.
 
 ## Authority And Git
 
-- P1 Contract Frozen (Sol PASS aad0919c). Commits: `617175d` gates+closure+root; `a9ba0e6` campaign state; `df3d456` campaign runner; `737aa7b` canaries; `926e704` evaluation engine; `0c78ae1` P0.4 attestation re-issue (new digest 25a07a30acb207ac430a79709de39a7b82954c7163bd8d5b22f10c6554abbf30) + run_seed transport. Main 14 ahead of origin.
+- P1 Contract Frozen (Sol PASS aad0919c). New commits: `1499ff0` baseline + ledgers (48/48 solvable). Main 15 ahead of origin.
+- P0.4 attestation re-issued: `sha256:85884db9f1a0ae8792ea293315cf8a47f968ebb8aa51455eaabed91e216c7d0b` (p0_4_passed=true).
 
-## Landed This Phase
+## Landed This Phase (baseline + solvability)
 
-- Gate runner `bench/generator/gates.py` G01–G08 all PASS; report `bench/reports/p1a-gates.json`; status `candidate_p1a`.
-- SOURCE_TREE_FILES frozen (17 files incl. yamlemit.py; gates/__main__/release excluded). Listed-file edits churn instance digests by design.
-- Fixture format rewritten to mini-research-repo (`bench/generator/yamlemit.py`): definitions w/ previous chains + APPROVED, events, spec, runs w/ dir-manifest hash raw_ref, organized frontmatter sources, CURRENT.{md,sources.yaml}, .auth, synthetic 40-hex commit. Manifest declares ALL versions + previous facts; raw_run hash = dir-manifest; objects git_commit = synthetic commit.
-- Public root regenerated; cross-cwd byte-identical.
-- campaign/state.py + runner.py T0–T3 (opening verification fail-closed); artifacts.py tar binding.
-- canary.py: iso digest 14df1a90..., net digest 57517398...; 16 probes via sandbox-exec child (realpath paths! /var→/private/var), live-listener network probes (EPERM), no backend → evaluation_valid=false (S06). 16/16 blocked.
-- evaluation.py: prediction/v2 (ref nullable), run_seed_schedule (KDF), fresh workspace per rep, missingness recorded, sealed-Gold scoring. Live smoke vs reference SUT: score 0.0, failed=False (legitimate low score).
-
-## Known Open Items
-
-1. **B1 semantic alignment / solvability**: SUT scores 0.0 — its envelopes don't project Gold rows (route_sequence/status/commit semantics from universe). Benchmark must be solvable: define B1 workspace semantics, implement baseline (§11) first, then update ResearchCTL adapter as participant.
-2. B04 (artifact byte-change → invalid) needs campaign-level wiring.
-3. P0.4 attestation binds harness bytes — re-issue via `PYTHONPATH=. python3 -m bench.controls.runner` whenever executor/adapters/controls/evaluators change. Current digest 25a07a30....
-
-## Tests (bench/tests, 152)
-
-- P1A 43 (cjson6/kdf5/tree6/models13/instance9/release4); gates 9; P0 56+3.
-- P1B: campaign 13, runner 14, canary 6, evaluation 9 (v2, seed schedule, T02 pairing, workspace freshness, neutrality).
+- `bench/baseline/filegraph.py` — independent-filegraph-v1 engine: BENCH frontmatter parsing (§19.7.2), facts/evidence/edges/graph-nodes ledgers, exact/current/path lookup, token-multiset lexical (fact-value semantics), declared-edges BFS, propagation subgraph (root+dependents, Gold semantics), fail-closed mapping (HASH_MISMATCH/SOURCE_MISSING/AMBIGUOUS_VERSION/NOT_FOUND). `bench/baseline/adapter.py` — sut-adapter/v1 loop (own wire handling).
+- **B1 shared-argv decision (PM-DEC-0006)**: query_entity/facts/lineage/state/external_basis share argv `["query","--entity",loc]` (frozen §19.6.2); participants emit maximal envelope (all version rows + all subject facts + graph); evaluator checks only checkpoint-present fields. Solvability requires: single-version definitions at compile time; registry predicates=[] (compiler `_facts` truthy filter: [] = no filter — P0 compiler changed, S05 P0 test updated); external_basis excluded from sampled registry ops (pinned-only projection not derivable under shared argv); as_of visibility facts (predicate as_of per object); history rows: git_commit kept/status null for plain history, both null for as_of (--as-of presence distinguishes).
+- Workspace ledgers: `facts/{asserted-facts,evidence-atoms,provenance-edges,graph-nodes}.cjson` — emitted AFTER hash finalization (emit_state_ledgers); fixture.source_hash recomputed to cover full tree.
+- **Baseline scores 1.0 on 48/48 public instances** (engine `run_instance` + adapter subprocess). ResearchCTL adapter not yet aligned (still 0.0) — next: port the same projection semantics into researchctl/bench_adapter.
+- Public root regenerated; verify-public byte-identical.
 
 ## Negative Constraints / Do Not Assume
 
@@ -61,11 +49,13 @@ P1B ~70% done: canaries + evaluation engine landed (152 tests green). Remaining:
 - Temporary paths must strictly follow $T(path, seq)$ in same directory.
 - Public root secret is a fixed constant; private/hidden secrets are evaluator-held and must never enter the public tree.
 - Hidden roots contain only participant-visible fixtures; Oracle/Gold/seed packs stay evaluator-held.
+- P0.4 attestation binds harness bytes — re-issue via `PYTHONPATH=. python3 -m bench.controls.runner` whenever executor/adapters/controls/evaluators change. Current digest 85884db9....
 - P0.4 attestation binds harness bytes: re-issue via documented runner, never silent patching.
+- Shared-argv ops use maximal-envelope projections (PM-DEC-0006); changing that requires contract change, not implementation drift.
 
 ## Next Action
 
-1. Implement `bench/baseline/` independent-filegraph-v1 (§11, §19.7): zero benchmark imports, full B1 surface, fail-closed; defines B1 workspace reading rules.
-2. Align Gold projections with B1 semantics so instances are solvable; update ResearchCTL bench_adapter as participant.
-3. B04 wiring: artifact digest re-check before/after execution in campaign runner.
-4. S01–S07/B01–B06 gate suite (`bench/tests/test_p1b_gates.py`); declare `candidate_p1b` when green.
+1. Port maximal-envelope projection semantics into researchctl/bench_adapter (participant update; make reference SUT solvable too).
+2. B04 wiring: campaign runner re-checks participant artifact digest before/after execution.
+3. S01–S07/B01–B06 gate suite (`bench/tests/test_p1b_gates.py`); declare `candidate_p1b` when green.
+4. Then P1C (statistics, R=5 with 5-rep engine already in place, bootstrap, clean-room).
