@@ -61,7 +61,10 @@ class BenchCJsonTests(unittest.TestCase):
             bench_cjson_bytes(colliding_dict)
 
     def test_all_contract_hashes(self) -> None:
-        contract_text = Path("ResearchCTL-Bench-P1-Contract.md").read_text(encoding="utf-8")
+        contract_path = Path("docs/contracts/ResearchCTL-Bench-P1-Contract.md")
+        if not contract_path.exists():
+            contract_path = Path("ResearchCTL-Bench-P1-Contract.md")
+        contract_text = contract_path.read_text(encoding="utf-8")
 
         # 1. Quota profile
         m_quota = re.search(r'```json\n({"families":.*?"total_instances":144})\n```', contract_text)

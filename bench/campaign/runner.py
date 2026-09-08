@@ -94,7 +94,9 @@ def _b1_api_digest() -> str:
 
         from bench.dsl.cjson import bench_cjson_digest
 
-        contract = Path(__file__).resolve().parents[2] / "ResearchCTL-Bench-P1-Contract.md"
+        contract = Path(__file__).resolve().parents[2] / "docs" / "contracts" / "ResearchCTL-Bench-P1-Contract.md"
+        if not contract.exists():
+            contract = Path(__file__).resolve().parents[2] / "ResearchCTL-Bench-P1-Contract.md"
         text = contract.read_text(encoding="utf-8")
         obj = None
         import re

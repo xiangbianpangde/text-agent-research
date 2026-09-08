@@ -38,7 +38,7 @@
 
 系统配合配套的因果评测基准 **ResearchCTL-Bench**，彻底解决了大语言模型 Agent 在超长程科研场景中由于上下文丢失、向量相似度漂移、假说演化脱节而导致的“幻觉”、“断代”与“证据链丢失”难题。
 
-![超长程实验 Agent 检索系统体系架构全景图](figures/architecture.png)
+![超长程实验 Agent 检索系统体系架构全景图](docs/figures/architecture.png)
 
 系统实现了三维解耦架构：
 1. **Agent 认知与交互层**：通过严密的技能决策树指导 Agent 的检索行为，依托原生 Typed Tool 返回强类型 JSON；
@@ -59,7 +59,7 @@
 
 ### 2.2 五大不可动摇的核心设计原则
 
-依据《超长程实验 Agent 检索系统设计方案.md》§25，系统确立了五条底线原则：
+依据《[超长程实验 Agent 检索系统设计方案.md](docs/specs/超长程实验%20Agent%20检索系统设计方案.md)》§25，系统确立了五条底线原则：
 
 1. **Report 是入口，不是唯一真源**：报告（`CURRENT.md`）是叙述入口，最终可审计底座永远是 Raw 原始数据。
 2. **Index 是导航，不是证明依据**：`INDEX.md` 仅用于跳查目录，可随删随建，绝不能作为证明事实的依据。
@@ -104,7 +104,7 @@ L0 Raw       (runs/R051/manifest.yaml, execution.log, metrics.csv: 原始执行�
 
 ## 4. 系统软件架构与核心子系统
 
-![超长程实验 Agent 检索系统软件与技术架构图](figures/technical-architecture.png)
+![超长程实验 Agent 检索系统软件与技术架构图](docs/figures/technical-architecture.png)
 
 系统核心组件采用**纯 Python 3 标准库（Python >= 3.8）**实现，**零第三方运行时依赖**（无需 PyYAML、无需外部向量库、无需网络调用），保障在任何受限环境下的 100% 可复现性与极致轻量：
 
@@ -297,25 +297,36 @@ text-agent-research/
 │   ├── evaluators/                  # 状态、图谱、因果、完整性评测器
 │   ├── generator/                   # 基准测试实例合成器
 │   ├── oracle/                      # 独立只读 Oracle 判卷机
+│   ├── reports/                     # 历史基准测试输出与 Gate 报告 (JSON/MD/PDF)
 │   └── tests/                       # 152 个基准单元测试
+│
+├── docs/                            # 完整文档与规范体系
+│   ├── specs/                       # 技术方案、系统设计方案、PRD与架构汇报
+│   │   ├── 超长程实验 Agent 技术方案.md
+│   │   ├── 超长程实验 Agent 检索系统设计方案.md
+│   │   ├── 超长程实验 Text Agent 检索与研究状态系统 PRD.md
+│   │   ├── 超长程实验检索系统架构汇报.md
+│   │   └── 超长程实验 Agent 检索系统 Benchmark 方案 (ResearchCTL-Bench).md
+│   ├── contracts/                   # 各阶段严格形式化契约
+│   │   ├── P0-Contract.md
+│   │   ├── P1-A-Contract.md
+│   │   ├── P1-B-Contract.md
+│   │   ├── P1-C-Contract.md
+│   │   ├── ResearchCTL-Bench-P0-Contract.md
+│   │   └── ResearchCTL-Bench-P1-Contract.md
+│   └── figures/                     # 系统架构图与技术汇报高清图例
+│       ├── architecture.png
+│       └── technical-architecture.png
 │
 ├── .pi/                             # Pi Coding Agent 集成包
 │   ├── extensions/research.ts       # 原生 Typed Tool 扩展实现
 │   └── skills/research-retrieval/   # 检索决策树任务技能配置
 │
-├── figures/                         # 系统架构图与技术汇报高清图例
-│   ├── architecture.png             # 全景架构图
-│   └── technical-architecture.png   # 软件技术分层图
-│
-├── P0-Contract.md                   # P0 阶段形式化规范合约
-├── P1-A-Contract.md                 # P1-A 阶段报告冻结与事务合约
-├── P1-B-Contract.md                 # P1-B 阶段定义演化与 Impact 合约
-├── P1-C-Contract.md                 # P1-C 阶段确定性语义检索合约
-├── ResearchCTL-Bench-P0-Contract.md # 基准测试 P0 合约
-├── ResearchCTL-Bench-P1-Contract.md # 基准测试 P1 合约
 ├── PROJECT_CONTEXT.md               # 动态演进项目上下文与 Checkpoint
 ├── pytest.ini                       # Pytest 运行配置文件
-└── README.md                        # 本说明文档
+├── run_benchmark.py                 # 基准测试运行脚本
+├── LICENSE                          # MIT 开源许可证
+└── README.md                        # 项目主说明文档
 ```
 
 ---
