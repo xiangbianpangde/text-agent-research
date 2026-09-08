@@ -118,7 +118,7 @@ def generate_index_md(root: str, db_path: Optional[str] = None, write_file: bool
                     sp_doc = load_file(full_sp, strict=True) or {}
                 except Exception:
                     sp_doc = {}
-            
+
             # P1-8: 严格依据 spec 或 definitions 真实环境确定，绝不硬编码 H003
             hypo_val = sp_doc.get("hypothesis")
             if not hypo_val:

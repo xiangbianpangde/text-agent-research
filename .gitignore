@@ -1,12 +1,34 @@
-# 顶层仓库忽略
-fixture/
-researchctl/__pycache__/
-**/__pycache__/
-*.pyc
-.DS_Store
+# Byte-compiled / optimized / cache files
+__pycache__/
+*.py[cod]
+*$py.class
 *.sqlite
+*.sqlite-journal
+*.db
 
-# 项目记忆内部数据
+# Caching & Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# macOS / OS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+*~
+*.swp
+*.swo
+
+# Project memory & local state
+fixture/
 .project-memory/
 .note-skills/
 .project-memory-legacy/
+.mimosa/
+
+# Local agent dumps and temporary files
+pi-session-*.html
+.pi/sol-staging/
+.pi/generated-images/
