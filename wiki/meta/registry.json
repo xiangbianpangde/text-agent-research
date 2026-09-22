@@ -1,0 +1,349 @@
+{
+  "schema": "researchctl-wiki/registry@1",
+  "generated_at": "2026-09-16T08:28:35+0800",
+  "issues": [
+    {
+      "id": "ISSUE-0001",
+      "title": "researchctl --limit 对结构化查询不生效",
+      "status": "fixed",
+      "severity": "low",
+      "area": "researchctl-cli",
+      "discovered_at": "2026-09-15",
+      "discovered_by": "dsh-researchctl 调用日志",
+      "tags": [],
+      "signals": [
+        "limit_ignored"
+      ],
+      "evidence": "calls-2026-09-15.jsonl argv=['query','--limit','2'] → 13 条",
+      "related": [],
+      "fix_ref": "researchctl/queries.py:cmd_query + researchctl/cli.py（--limit 默认 None）",
+      "summary": "researchctl --limit 对结构化查询不生效",
+      "updated_at": "2026-09-15",
+      "path": "wiki/issues/ISSUE-0001.md",
+      "body_chars": 466
+    },
+    {
+      "id": "ISSUE-0002",
+      "title": "dev_reload_package 只清入口模块，lib/core/* 仍是旧代码",
+      "status": "fixed",
+      "severity": "high",
+      "area": "dsh-plugin",
+      "discovered_at": "2026-09-15",
+      "discovered_by": "agent（本次接入）",
+      "tags": [],
+      "signals": [],
+      "evidence": "重载日志：匹配 dsh-researchctl/lib/index.js → 清缓存 1 模块（core 未刷新，limit_ignored 信号不生效）；匹配 dsh-researchctl → 清缓存 6 模块（生效）",
+      "related": [],
+      "fix_ref": "try/dsh-super-injector/lib/index.js（reload 自动扩展包目录子树）",
+      "summary": "重载匹配串必须是包目录子串，否则只清入口 1 个模块",
+      "updated_at": "2026-09-15",
+      "path": "wiki/issues/ISSUE-0002.md",
+      "body_chars": 434
+    },
+    {
+      "id": "ISSUE-0003",
+      "title": "pi 在 DSH 沙箱下启动即 EPERM（trust.json.lock）",
+      "status": "wontfix",
+      "severity": "medium",
+      "area": "env",
+      "discovered_at": "2026-09-15",
+      "discovered_by": "agent（本次接入）",
+      "tags": [],
+      "signals": [],
+      "evidence": "pi --help / pi -p 报 EPERM: mkdir '/Users/xbpd/.pi/agent/trust.json.lock'；需 danger-full-access 才能启动",
+      "related": [],
+      "fix_ref": null,
+      "summary": "pi 启动要写 ~/.pi/agent，沙箱需放行",
+      "updated_at": "2026-09-15",
+      "path": "wiki/issues/ISSUE-0003.md",
+      "body_chars": 435
+    },
+    {
+      "id": "ISSUE-0004",
+      "title": "全局技能副本与项目版漂移（~/.pi/agent/skills/task/research-retrieval）",
+      "status": "fixed",
+      "severity": "low",
+      "area": "pi-extension",
+      "discovered_at": "2026-09-15",
+      "discovered_by": "agent（本次接入）",
+      "tags": [],
+      "signals": [],
+      "evidence": "全局副本 2026-09-03（4903B）vs 项目版已含 Tools/Self-improvement loop/CHANGELOG 1.1.0；settings.json 用 '+skills/task/research-retrieval/SKILL.md' 强制启用",
+      "related": [],
+      "fix_ref": "~/.pi/agent/skills/task/{research-retrieval,researchctl-wiki} 符号链接 + ~/.agents/skills/ 同名链接",
+      "summary": "全局副本应改为指向项目的符号链接，避免第二份真源",
+      "updated_at": "2026-09-15",
+      "path": "wiki/issues/ISSUE-0004.md",
+      "body_chars": 324
+    },
+    {
+      "id": "ISSUE-0005",
+      "title": "溯源闭集动作上的 semantic 请求（规则误用信号样例）",
+      "status": "wontfix",
+      "severity": "low",
+      "area": "wiki",
+      "discovered_at": "2026-09-15",
+      "discovered_by": "agent（验证用例）",
+      "tags": [],
+      "signals": [
+        "semantic_on_closed_command"
+      ],
+      "evidence": "calls-2026-09-15.jsonl ts=18:33:47 action=sources argv=['sources','CURRENT'] semantic_requested=true → signals=['semantic_on_closed_command']",
+      "related": [],
+      "fix_ref": null,
+      "summary": "验证用例产生的信号，wontfix 留档以免 suggest 反复提示",
+      "updated_at": "2026-09-15",
+      "path": "wiki/issues/ISSUE-0005.md",
+      "body_chars": 319
+    },
+    {
+      "id": "ISSUE-0006",
+      "title": "wiki CLI 的 --json 只能在子命令之前使用，工具调用踩坑",
+      "status": "fixed",
+      "severity": "low",
+      "area": "wiki",
+      "discovered_at": "2026-09-15",
+      "discovered_by": "agent（宿主侧验证）",
+      "tags": [],
+      "signals": [
+        "wiki_error"
+      ],
+      "evidence": "wiki(action=issue_list,args=['--status','open','--json']) → exit=2 usage 报错；日志 signals=['wiki_error']",
+      "related": [],
+      "fix_ref": "tools/wiki.py（parents=[json_parent]）",
+      "summary": "argparse 全局选项位置陷阱；已修复并回归",
+      "updated_at": "2026-09-15",
+      "path": "wiki/issues/ISSUE-0006.md",
+      "body_chars": 418
+    },
+    {
+      "id": "ISSUE-0007",
+      "title": "bench/tests 有 4 个环境相关失败（基线即失败）",
+      "status": "open",
+      "severity": "medium",
+      "area": "bench",
+      "discovered_at": "2026-09-15",
+      "discovered_by": "agent（ISSUE-0001 回归时发现）",
+      "tags": [],
+      "signals": [
+        ""
+      ],
+      "evidence": "python3 -m pytest bench/tests -q → 4 failed, 148 passed；test_p0_3_oracle::test_timeout_kills_participant_process_group、test_p0_4_controls::test_unicode_gold_path_is_blocked_by_os_sandbox、test_p1b_canary::test_all_16_blocked、test_p1b_canary::test_transcript_digest_matches_contract_formula；把本次 limit 改动 git stash 后同样 4 failed → 与本改动无关",
+      "related": [],
+      "fix_ref": null,
+      "summary": "需要判定是沙箱/环境差异还是真实回归",
+      "path": "wiki/issues/ISSUE-0007.md",
+      "body_chars": 201
+    },
+    {
+      "id": "ISSUE-0008",
+      "title": "Open-WebUI 0.11.x：未在 model 表登记的模型对非管理员完全不可见（管理员可见 → 新账号模型列表为空）",
+      "status": "open",
+      "severity": "medium",
+      "area": "env",
+      "discovered_at": "2026-09-15",
+      "discovered_by": "agent",
+      "tags": [],
+      "signals": [
+        "empty_result"
+      ],
+      "evidence": "容器 /app/backend/open_webui/utils/models.py::get_filtered_models() 的 'elif user.role == admin: only admins can see unconfigured models' 分支；复现：POST /api/v1/auths/signup 后 GET /api/models 返回 {'data': []}；实测 model 表 0 行、access_grant 表 0 行；修复脚本 /opt/owui-publish/publish.py（登记 base_model_id=NULL 的同名覆盖行 + principal_id='*' 的公开 read 授权）；FIX-NOTES: /Users/xbpd/Projects/openwebui-student-platform/FIX-NOTES.md",
+      "related": [],
+      "fix_ref": null,
+      "summary": "Open-WebUI 0.11.x：未在 model 表登记的模型对非管理员完全不可见（管理员可见 → 新账号模型列表为空）",
+      "path": "wiki/issues/ISSUE-0008.md",
+      "body_chars": 230
+    },
+    {
+      "id": "ISSUE-0009",
+      "title": "computer_use click 坐标系是窗口局部坐标、且绑定会在未重新取状态时陈旧",
+      "status": "open",
+      "severity": "high",
+      "area": "pi-extension",
+      "discovered_at": "2026-09-16",
+      "discovered_by": "agent（实测 + 官方二进制 strings + Pi 扩展源码）",
+      "tags": [
+        "computer-use",
+        "coordinates",
+        "window-binding"
+      ],
+      "signals": [
+        "window_not_found"
+      ],
+      "evidence": "~/Projects/computer-use-boundary-test/evidence/EVIDENCE.md#E2；窗口真值由 osascript AX 枚举取得；审计 ~/.pi/agent/direct-computer-use/audit/direct-computer-use.jsonl",
+      "related": [],
+      "fix_ref": null,
+      "summary": "computer_use click 坐标系是窗口局部坐标、且绑定会在未重新取状态时陈旧",
+      "path": "wiki/issues/ISSUE-0009.md",
+      "body_chars": 1334
+    },
+    {
+      "id": "ISSUE-0010",
+      "title": "computer_use type_text 静默丢弃 ASCII 特殊字符与非 ASCII，且无报错",
+      "status": "open",
+      "severity": "critical",
+      "area": "pi-extension",
+      "discovered_at": "2026-09-16",
+      "discovered_by": "agent（实测 + strings SkyComputerUseService）",
+      "tags": [
+        "computer-use",
+        "type-text",
+        "char-loss"
+      ],
+      "signals": [
+        "char_loss",
+        "silent_data_loss"
+      ],
+      "evidence": "~/Projects/computer-use-boundary-test/evidence/EVIDENCE.md#E1；不可变证据 wiki/raw/RAW-20260916-001.md",
+      "related": [
+        "RAW-20260916-001"
+      ],
+      "fix_ref": null,
+      "summary": "computer_use type_text 静默丢弃 ASCII 特殊字符与非 ASCII，且无报错",
+      "path": "wiki/issues/ISSUE-0010.md",
+      "body_chars": 682
+    },
+    {
+      "id": "ISSUE-0011",
+      "title": "computer_use app 名解析仅接受英文名/bundle id，中文应用名报 identity_rejected",
+      "status": "open",
+      "severity": "low",
+      "area": "pi-extension",
+      "discovered_at": "2026-09-16",
+      "discovered_by": "agent（实测）",
+      "tags": [
+        "computer-use",
+        "app-resolution",
+        "i18n"
+      ],
+      "signals": [],
+      "evidence": "~/.pi/agent/direct-computer-use/audit/direct-computer-use.jsonl（2026-09-15T23:59:41.497Z, outcome=identity_rejected）",
+      "related": [],
+      "fix_ref": null,
+      "summary": "computer_use app 名解析仅接受英文名/bundle id，中文应用名报 identity_rejected",
+      "path": "wiki/issues/ISSUE-0011.md",
+      "body_chars": 524
+    }
+  ],
+  "patterns": [
+    {
+      "id": "PAT-20260915-001",
+      "title": "宿主模块缓存：改核心模块后热重载不生效",
+      "kind": "failure",
+      "status": "superseded",
+      "created": "2026-09-15",
+      "updated": "2026-09-15",
+      "occurrences": 3,
+      "tags": [
+        "热重载",
+        "模块缓存",
+        "dsh"
+      ],
+      "related": [
+        "ISSUE-0002"
+      ],
+      "sources": [],
+      "summary": "改 dsh-researchctl/lib/core/*.js 后 dev_reload_package，行为仍按旧代码执行（日志显示「清缓存 1 模块」）",
+      "path": "wiki/patterns/PAT-20260915-001.md",
+      "body_chars": 481
+    },
+    {
+      "id": "PAT-20260915-002",
+      "title": "沙箱边界：需要写工作区外目录的工具会被拒",
+      "kind": "failure",
+      "status": "active",
+      "created": "2026-09-15",
+      "updated": "2026-09-15",
+      "occurrences": 1,
+      "tags": [
+        "沙箱",
+        "权限",
+        "fail-closed"
+      ],
+      "related": [
+        "ISSUE-0003"
+      ],
+      "sources": [],
+      "summary": "pi --help / pi -p 直接 EPERM（~/.pi/agent/trust.json.lock）；写 ~/.dsh/profiles/*/cordis.patch.yml 被拒",
+      "path": "wiki/patterns/PAT-20260915-002.md",
+      "body_chars": 336
+    },
+    {
+      "id": "PAT-20260916-001",
+      "title": "computer_use 动作静默偏离预期：必须以独立通道验证副作用",
+      "kind": "failure",
+      "status": "active",
+      "created": "2026-09-16",
+      "updated": "2026-09-16",
+      "occurrences": 3,
+      "tags": [
+        "computer-use",
+        "verification",
+        "silent-failure"
+      ],
+      "related": [
+        "ISSUE-0009",
+        "ISSUE-0010",
+        "RAW-20260916-001"
+      ],
+      "sources": [
+        "SkyComputerUseService strings; @oai/cua-repl instructions/macos; codex-computer-use-mcp ARCHITECTURE.md"
+      ],
+      "summary": "工具返回 ok / identity_rejected 之外无错误，但副作用与预期不符（丢字符、点错位置、快照过期）",
+      "path": "wiki/patterns/PAT-20260916-001.md",
+      "body_chars": 966
+    }
+  ],
+  "raw": [
+    {
+      "id": "RAW-20260915-001",
+      "title": "call-log 证据 RAW-20260915-001",
+      "type": "raw-evidence",
+      "status": "immutable",
+      "created": "2026-09-15T19:08:12+0800",
+      "source_kind": "call-log",
+      "source_ref": "/Users/xbpd/.dsh/logs/dsh-researchctl#signal=semantic_on_closed_command",
+      "signal": "semantic_on_closed_command",
+      "content_sha256": "sha256:52731bc74e70d8c942a15896343a18791ed6b1c7b9cd688e7f7b58b1834882a0",
+      "tags": [
+        "规则误用",
+        "溯源"
+      ],
+      "summary": "规则误用证据：模型在溯源闭集动作上请求了 semantic",
+      "path": "wiki/raw/RAW-20260915-001.md",
+      "body_chars": 1514
+    },
+    {
+      "id": "RAW-20260916-001",
+      "title": "computer_use type_text 静默丢弃 ASCII 特殊字符与非 ASCII 字符",
+      "type": "raw-evidence",
+      "status": "immutable",
+      "created": "2026-09-16T08:27:42+0800",
+      "source_kind": "manual",
+      "source_ref": "/Users/xbpd/Projects/computer-use-boundary-test/evidence/EVIDENCE.md#E1",
+      "signal": "",
+      "content_sha256": "sha256:df2b0752984d2e6c0fa32a7e363391fd98fa2a8e5b8c42fa965e6b2814898cc9",
+      "tags": [
+        "computer-use",
+        "type-text",
+        "char-loss",
+        "keyboard-layout"
+      ],
+      "summary": "type_text 下发含特殊字符的字符串时，特殊字符被静默丢弃且无报错（outcome=ok）；set_value 可零丢失绕过",
+      "path": "wiki/raw/RAW-20260916-001.md",
+      "body_chars": 1431
+    }
+  ],
+  "skills": [
+    {
+      "name": "research-retrieval",
+      "path": ".pi/skills/research-retrieval/SKILL.md",
+      "description": "Guides deterministic research retrieval in ultra-long-horizon experimental text agent systems (researchctl). Enforces explicit structure over semantic guessing: starts with CURRENT.md, traces provenance down to raw data, audits historical evolution, inspects downstream impact, and restricts semantic search to fallback. Use when querying research status (当前结论是什么、依据来源、历史演化、实验溯源、定义变更影响、researchctl 相关操作). Do not use for generic web search, routine single-file code inspection, or normal codebase grep."
+    },
+    {
+      "name": "researchctl-wiki",
+      "path": ".pi/skills/researchctl-wiki/SKILL.md",
+      "description": "WikiSkill 三层知识复利与问题登记的**判断规则**：遇到工具异常、文档与实现不一致、同类问题复发、检索策略退化时，判断该登记成什么（问题 / 模式 / 不可变证据 / 技能影响），以及状态与严重度怎么定。Use when 要决定「这个问题要不要登记、登记成什么」，或要归纳反复出现的失败模式、决定是否改技能。Do not use for 普通代码编写、单次科研检索（用 research）、通用 Web 搜索；日常登记动作直接用 wiki 工具或 `python3 tools/wiki.py`。"
+    }
+  ]
+}
