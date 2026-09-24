@@ -1,7 +1,7 @@
 ---
 id: "ISSUE-0189"
 title: "M3 credential proxy 接受无 nonce 的回环请求，可绕过 Pi 调用记录与回合预算"
-status: "fixed"
+status: "open"
 severity: "critical"
 area: "bench"
 discovered_at: "2026-09-24"
@@ -10,8 +10,10 @@ tags: []
 signals:
   - "acceptance_criterion_now_executable_in_suite"
   - "acceptance_criterion_required_an_unstated_manual_step"
+  - "calibration_unit_mismatch"
   - "child_shell_reaches_routed_provider_via_loopback"
   - "closure_criterion_had_no_invocation_entrypoint"
+  - "concurrent_requests_bypass_forwarded_ceiling"
   - "injection_matches_any_credential_header_name"
   - "injection_triggers_on_any_credential_header_name"
   - "loopback_credential_proxy_unauthenticated_child_tool_can_call_provider_directly"
@@ -123,3 +125,15 @@ updated_at: "2026-09-24"
 ## 处置记录 2026-09-24T18:45:05+0800
 
 【执行者-2（本侧）修复】§13.3 曾把本项的修复记为外部依赖（复核方修），该归属**已撤回**：缺陷站点 catalog/test/child-credentials.ts 由 9fe8676/866b655 引入，均系本侧提交，仓库单作者；复核方历次措辞仅为批准前置条件（「修复代理访问控制并验证被测 shell 无法绕过后，再申请 cap=5」），无任何「我来修」表述。且若由复核方修，「修复经执行者-1 复核」即退化为自审。修复为两道门（commit 4678a26）：① handler 首部校验 nonce，在读 body 与查 provider 之前（scheme 无关，非凭据头不能通过）；② forwarded 计数硬上限，由授权回合数派生（100/回合；实测 112 个归档回合 tool-call 均值 23.5/p95 49/max 60），在父进程内执行，child 够不到计数器。门②是关键：nonce 必须写进子配置（否则 pi 无法启动）、profile 必须放开 loopback（否则 child 够不到代理），故**被测方按构造即持该代理的 credential-of-record**——门①区分旁观者/参与者，不区分被测/未测回合。实测（上游回环 stub，未联系 provider，未读/未打印 key）：原复现 3 例中 2 例 401 且未转发；硬例——沙箱内 child 读自身 auth.json 取出 41 字符 nonce 后循环 10 次，得 3×200 + 7×429，upstream 恰 3 次；双向变异测试确证测试非空转（关①→'got 200'；关②→'looped 8x against a ceiling of 3 and the upstream saw 8'）。同时更正：preflight 的 404 注释不成立（该探针路径匹配 /p/<provider>/<path>，实为 502），且 preflight 此前**两道门都没测**，现已在沙箱内实测两门。0189 测试取消 skip（修复后 skip 会丢失关键缺陷的回归保护），M3_REQUIRE_0189_FIX 停用。套件 233/233/0 skipped，typecheck 干净，preflight 15 项全过，本轮 0 provider 请求。
+
+## 处置记录 2026-09-24T18:51:16+0800
+
+独立复核在 `catalog/test/child-credentials.ts` 的当前代理实现（该文件无未提交改动）做本地 stub 并发实验：`setBudget(3)`，同一正确 nonce 同时 `Promise.all` 发 20 个请求；stub 延迟响应 150ms。实测 20/20 HTTP 200、upstream stub 收到 20 次、`requestsForwarded()=20`、`requestsOverBudget()=0`。未联系任何 provider、未读取或记录任何 key 值。根因：budget check 读 `forwarded`，但计数只在 upstream response callback 中增加；所有并发请求可在首个响应前通过检查。串行 10→3 回归不能证明 ceiling 硬上限。需要在进入异步 body/upstream 前原子预留/计数每个可转发请求，并加并发延迟 stub 回归，断言真实上游尝试数不超过 ceiling。
+
+## 处置记录 2026-09-24T18:51:32+0800
+
+复核方独立并发压力测已复现硬上限可被绕过（3 限额下 20 个并发请求全被转发），故当前不得标记 fixed；代码处置尚未通过安全复核。
+
+## 处置记录 2026-09-24T19:16:36+0800
+
+【复核复核（执行者-1，seq 7-8）→ 三项均已修，本轮 commit：a7dee10（并发原子预留）、585496e（回合上限入码+取消默认授权）、e3fad99（标定单位与不可复现数字）。同时撤回本项补记中的标定数字：原写「112 个归档回合 tool-call 均值 23.5/p95 49/max 60」，独立重算为 184 回合/mean 14.8/p95 44/max 60，112 与 23.5 均不可复现（见 ISSUE-0193）。0189 的真边界（门②）此前存在三处缺陷：① 检查-后-计数竞态（并发 20/上限 3 → upstream 20）；② 未设上限即无限转发（fail-open 默认）；③ 上限标定单位错。均已修并各配变异/并发/失败路径测试。**0189 仍为 open，等执行者-1 对 e3fad99 的复核**（我方不得自行关闭）。
