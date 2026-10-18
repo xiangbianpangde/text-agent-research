@@ -1,743 +1,744 @@
-"""Research-tool output layout adapter.
+"""Strict research-tool manifest v1 reader and rebuildable SQLite projection.
 
-The research-tool pipeline keeps canonical output below one directory per
-``topic_slug``.  This module projects those canonical files into the existing
-ResearchCTL SQLite schema; it does not make SQLite or ``index/INDEX.md`` a
-source of truth.
-
-Only the standard library is used.  The adapter intentionally has a small
-surface: scan/build, navigation generation, fingerprinting, and reconcile.
+The authority is a run-record plus its runtime-pinned stage envelopes, never the
+mutable topic summary or a previously built database. No legacy-format guessing.
 """
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
 import re
 import sqlite3
-import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+import stat
+import uuid
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-from ..hashing import file_hash
 from ..indexer import SCHEMA_SQL
 from ..schema import QueryResult
 
-
-_HASH_RE = re.compile(r"^(?:sha256:)?[0-9a-fA-F]{64}$")
-_SUCCESS_VERDICTS = {
-    "stop_success",
-    "success",
-    "succeeded",
-    "complete",
-    "completed",
-    "pass",
-    "passed",
-    "ok",
-    "valid",
-    "accepted",
-    "keep",
+STAGES = ("collect", "clean", "extract", "knowledge", "inspect", "targeted", "merge", "qgate", "report")
+VERDICTS = {"STOP_SUCCESS", "STOP_ERROR", "STOP_BUDGET", "STOP_CANCELLED"}
+DERIVED_DIRS = {".index", "index", ".git", ".researchctl"}
+DERIVED_FILES = {"retrieval-index-state.json"}
+HEX = re.compile(r"[0-9a-f]{64}\Z")
+RUN_ID = re.compile(r"[0-9a-f]{32}\Z")
+UTC = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|\+00:00)\Z")
+META_COMMENT = re.compile(r"^[ \t]*<!--[ \t]*([A-Za-z_]+)[ \t]*:[ \t]*(.*?)[ \t]*-->[ \t]*$")
+REBUILD = "使用 research-tool producer 从 canonical run-record 重建 retrieval-manifest；没有运行快照的遗留九段运行须重跑，不能用当前 summary 回填历史。"
+TABLE_COLUMNS = {
+    "documents": "id,doc_type,path,version,content_hash,git_commit,status",
+    "entities": "id,entity_type,path,current_version,status",
+    "runs": "run_id,experiment_ref,status,model,context_length,raw_ref_path,raw_ref_hash,raw_ref_commit",
+    "relations": "source,relation,target,source_path,target_path,source_version,target_version",
+    "source_refs": "owner,owner_path,ref_path,source_type,reference_scope,content_hash,git_commit,section",
+    "research_tool_metadata": "entity_id,data",
 }
-_DERIVED_DIRS = frozenset({".index", "index", ".git", ".researchctl"})
-_EXPECTED_ARTIFACTS = (
-    ("report", "final/report.md", "report"),
-    ("sources", "final/sources.json", "sources_manifest"),
-    ("graph", "final/tree/knowledge.json", "evidence_graph"),
-)
 
 
 class LayoutError(ValueError):
-    """The canonical research-tool layout cannot be projected safely."""
+    """A closed, machine-readable failure of the layout contract."""
+
+    def __init__(self, detail: str, code: str = "PROVENANCE_BROKEN"):
+        super().__init__(detail)
+        self.code = code
 
 
-def _posix(path: str) -> str:
-    return path.replace(os.sep, "/")
+def require(condition, detail, code="PROVENANCE_BROKEN"):
+    if not condition:
+        raise LayoutError(detail, code)
 
 
-def _safe_relative(path: Any) -> Optional[str]:
-    """Normalize a relative path without permitting traversal or absolutes."""
-    if not isinstance(path, str) or not path.strip():
-        return None
-    if os.path.isabs(path):
-        return None
-    normalized = os.path.normpath(path)
-    if normalized in ("", "."):
-        return None
-    if normalized == ".." or normalized.startswith(".." + os.sep):
-        return None
-    return _posix(normalized)
+def error_result(command, exc):
+    code = exc.code if isinstance(exc, LayoutError) else "SOURCE_UNAVAILABLE"
+    return QueryResult(
+        query_type=command, status="fail_closed", authority="unresolved", results=[],
+        source_watermark={"layout": "research-tool", "drift": True},
+        errors=[{"code": code, "detail": str(exc)}], error_semantic=code,
+    ).to_dict()
 
 
-def _within(root: str, full: str) -> bool:
-    root_real = os.path.realpath(root)
-    full_real = os.path.realpath(full)
-    return full_real == root_real or full_real.startswith(root_real + os.sep)
+def sha(data):
+    return hashlib.sha256(data).hexdigest()
 
 
-def _join_relative(root: str, relative: str) -> str:
-    full = os.path.join(root, *relative.split("/"))
-    if not _within(root, full):
-        raise LayoutError(f"路径越界: {relative}")
-    return full
+def json_text(value):
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def _hash_value(value: Any) -> Optional[str]:
-    if not isinstance(value, str) or not value:
-        return None
-    value = value.strip()
-    if not _HASH_RE.match(value):
-        return None
-    return value if value.lower().startswith("sha256:") else "sha256:" + value.lower()
-
-
-def _actual_hash(root: str, relative: Optional[str]) -> Optional[str]:
-    if not relative:
-        return None
-    return file_hash(_join_relative(root, relative))
-
-
-def _is_derived_relative(relative: str) -> bool:
-    return any(part in _DERIVED_DIRS for part in relative.split("/"))
-
-
-def research_tool_fingerprint(root: str) -> str:
-    """Fingerprint canonical research-tool files, excluding derived indexes."""
-    lines: List[str] = []
-    if not os.path.isdir(root):
-        return "sha256:" + hashlib.sha256(b"").hexdigest()
-    for dirpath, subdirs, filenames in os.walk(root):
-        subdirs[:] = sorted(d for d in subdirs if d not in _DERIVED_DIRS)
-        for filename in sorted(filenames):
-            full = os.path.join(dirpath, filename)
-            relative = _posix(os.path.relpath(full, root))
-            if _is_derived_relative(relative):
-                continue
-            digest = file_hash(full)
-            if digest:
-                lines.append(f"{relative}:{digest}")
-    return "sha256:" + hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
-
-
-def _read_json(path: str, label: str) -> Dict[str, Any]:
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            value = json.load(handle)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise LayoutError(f"{label} 无法解析: {exc}") from exc
-    if not isinstance(value, dict):
-        raise LayoutError(f"{label} 必须是 JSON object")
+def object_value(value, label):
+    require(type(value) is dict, f"{label} 必须是 object")
     return value
 
 
-def _truthy(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "complete", "completed", "success"}
-    return False
+def text(value, label, empty=False):
+    require(type(value) is str and (empty or bool(value.strip())), f"{label} 必须是字符串")
+    return value
 
 
-def _is_success(manifest: Dict[str, Any]) -> bool:
-    verdict = manifest.get("verdict")
-    if isinstance(verdict, dict):
-        verdict = verdict.get("status") or verdict.get("value")
-    return _truthy(manifest.get("pipeline_complete")) and str(verdict or "").strip().lower() in _SUCCESS_VERDICTS
+def digest(value, label, prefixed=False):
+    require(type(value) is str, f"{label} hash 类型无效")
+    raw = value[7:] if prefixed and value.startswith("sha256:") else value
+    require((not prefixed or value.startswith("sha256:")) and HEX.fullmatch(raw),
+            f"{label} 必须是 {'sha256:' if prefixed else ''}小写64hex")
+    return raw
 
 
-def _timestamp_value(manifest: Dict[str, Any], manifest_path: str, run_id: str) -> Tuple[str, str, float]:
-    for key in ("completed_at", "finished_at", "updated_at", "created_at", "started_at", "timestamp", "date"):
-        value = manifest.get(key)
-        if value is not None and str(value).strip():
-            return str(value), str(run_id), os.path.getmtime(manifest_path)
-    return "", str(run_id), os.path.getmtime(manifest_path)
-
-
-def _candidate_paths(root: str, topic_relative: str, run_relative: str, raw: str) -> Iterable[Tuple[str, str]]:
-    """Yield safe root-relative candidates for a manifest-relative path."""
-    safe = _safe_relative(raw)
-    if not safe:
-        return
-    bases = [run_relative, topic_relative, ""]
-    seen = set()
-    for base in bases:
-        candidate = _posix(os.path.normpath(os.path.join(base, safe))) if base else safe
-        if candidate in seen or _is_derived_relative(candidate):
-            continue
-        seen.add(candidate)
-        full = _join_relative(root, candidate)
-        yield candidate, full
-
-
-def _resolve_existing(root: str, topic_relative: str, run_relative: str, raw: Any) -> Optional[str]:
-    if not isinstance(raw, str):
-        return None
-    for candidate, full in _candidate_paths(root, topic_relative, run_relative, raw):
-        if os.path.isfile(full):
-            return candidate
-    # Keep a safe canonical candidate for missing-file diagnostics.
-    safe = _safe_relative(raw)
-    if not safe:
-        return None
-    return _posix(os.path.normpath(os.path.join(run_relative, safe)))
-
-
-def _artifact_path_value(value: Any) -> Tuple[Optional[str], Optional[str]]:
-    """Read an artifact path, retaining compatibility with old dict values."""
-    if isinstance(value, str):
-        return value, None
-    if not isinstance(value, dict):
-        return None, None
-    path = value.get("path") or value.get("artifact_path") or value.get("raw_path") or value.get("file")
-    digest = (
-        value.get("artifact_sha256")
-        or value.get("sha256")
-        or value.get("content_hash")
-        or value.get("hash")
-    )
-    return path, _hash_value(digest)
-
-
-def _artifact_aliases(name: Any, path: Any = None) -> set[str]:
-    """Return stable aliases for artifact_hashes keys."""
-    values = [name, path]
-    aliases: set[str] = set()
-    for value in values:
-        if not isinstance(value, str) or not value:
-            continue
-        normalized = value.replace("\\", "/").lower()
-        aliases.add(normalized)
-        aliases.add(normalized.replace("-", "_"))
-        aliases.add(os.path.basename(normalized))
-        aliases.add(os.path.splitext(os.path.basename(normalized))[0])
-    joined = " ".join(sorted(aliases))
-    if "knowledge" in joined or "graph" in joined:
-        aliases.update({"knowledge", "knowledge_json", "graph", "evidence_graph"})
-    if "source" in joined:
-        aliases.update({"sources", "sources_json", "sources_manifest"})
-    if "report" in joined:
-        aliases.update({"report", "report_md"})
-    return aliases
-
-
-def _lookup_artifact_hash(hashes: Any, name: Any, path: Any) -> Optional[str]:
-    if not isinstance(hashes, dict):
-        return None
-    aliases = _artifact_aliases(name, path)
-    for key, value in hashes.items():
-        if _artifact_aliases(key) & aliases:
-            if isinstance(value, dict):
-                value = value.get("artifact_sha256") or value.get("sha256") or value.get("hash")
-            digest = _hash_value(value)
-            if digest:
-                return digest
-    return None
-
-
-def _artifact_entries(manifest: Dict[str, Any]) -> List[Tuple[str, Optional[str], Optional[str]]]:
-    """Normalize ``artifacts`` paths and merge the independent hash map.
-
-    M1 defines ``artifacts`` as ``name -> relative path`` and
-    ``artifact_hashes`` as the pin map.  Dict-valued artifacts remain accepted
-    for compatibility, but a hash in ``artifact_hashes`` wins over any inline
-    value so a reindex cannot replace a canonical pin with a current hash.
-    """
-    raw = manifest.get("artifacts")
-    entries: List[Tuple[str, Optional[str], Optional[str]]] = []
-    if isinstance(raw, dict):
-        for name, value in raw.items():
-            path, inline_digest = _artifact_path_value(value)
-            if path:
-                digest = _lookup_artifact_hash(manifest.get("artifact_hashes"), name, path) or inline_digest
-                entries.append((str(name), path, digest))
-    elif isinstance(raw, list):
-        for value in raw:
-            if not isinstance(value, dict):
-                continue
-            name = value.get("name") or value.get("kind") or value.get("type") or "artifact"
-            path, inline_digest = _artifact_path_value(value)
-            if path:
-                digest = _lookup_artifact_hash(manifest.get("artifact_hashes"), name, path) or inline_digest
-                entries.append((str(name), path, digest))
-    return entries
-
-
-def _validate_manifest(manifest: Dict[str, Any], topic_slug: str, run_id: str, relative: str) -> None:
-    required = (
-        "topic", "topic_slug", "run_id", "verdict", "pipeline_complete",
-        "stages", "artifacts", "artifact_hashes", "sources",
-    )
-    missing = [key for key in required if key not in manifest]
-    if missing:
-        raise LayoutError(f"manifest {relative} 缺少字段: {', '.join(missing)}")
-    if str(manifest.get("topic_slug")) != topic_slug:
-        raise LayoutError(f"manifest {relative} 的 topic_slug 与目录不一致")
-    if str(manifest.get("run_id")) != run_id:
-        raise LayoutError(f"manifest {relative} 的 run_id 与目录不一致")
-    if not isinstance(manifest.get("stages"), (dict, list)):
-        raise LayoutError(f"manifest {relative} 的 stages 必须是 object/list")
-    if not isinstance(manifest.get("artifacts"), (dict, list)):
-        raise LayoutError(f"manifest {relative} 的 artifacts 必须是 object/list")
-    if not isinstance(manifest.get("artifact_hashes"), dict):
-        raise LayoutError(f"manifest {relative} 的 artifact_hashes 必须是 object")
-    if not isinstance(manifest.get("sources"), list):
-        raise LayoutError(f"manifest {relative} 的 sources 必须是 list")
-    artifact_entries = _artifact_entries(manifest)
-    if not artifact_entries:
-        raise LayoutError(f"manifest {relative} 的 artifacts 为空")
-    for key, canonical_path, _doc_type in _EXPECTED_ARTIFACTS:
-        matching = []
-        for name, artifact_path, artifact_digest in artifact_entries:
-            if _safe_relative(artifact_path) in {
-                canonical_path,
-                _posix(os.path.join(run_id, canonical_path)),
-            } or _artifact_aliases(name, artifact_path) & _artifact_aliases(key, canonical_path):
-                matching.append(artifact_digest)
-        if not any(matching):
-            raise LayoutError(f"manifest {relative} 缺少 {key} 的 artifact_hashes pin")
-    for index, source in enumerate(manifest["sources"]):
-        if not isinstance(source, dict):
-            raise LayoutError(f"manifest {relative} 的 sources[{index}] 必须是 object")
-        if not isinstance(source.get("raw_path"), str) or not source.get("raw_path"):
-            raise LayoutError(f"manifest {relative} 的 sources[{index}] 缺少 raw_path")
-        if not source.get("evidence_kind"):
-            raise LayoutError(f"manifest {relative} 的 sources[{index}] 缺少 evidence_kind")
-        if not _hash_value(source.get("artifact_sha256")):
-            raise LayoutError(f"manifest {relative} 的 sources[{index}] 缺少有效 artifact_sha256")
-        body_hash = source.get("body_sha256")
-        if body_hash is not None and not _hash_value(body_hash):
-            raise LayoutError(f"manifest {relative} 的 sources[{index}] body_sha256 无效")
-
-
-def _expected_canonical(
-    root: str,
-    topic_relative: str,
-    run_relative: str,
-    manifest: Dict[str, Any],
-) -> Dict[str, Tuple[str, Optional[str], str]]:
-    """Return artifact key -> (root-relative path, pinned hash, doc type)."""
-    by_name: Dict[str, Tuple[str, Optional[str], str]] = {}
-    artifact_entries = _artifact_entries(manifest)
-    for name, raw_path, digest in artifact_entries:
-        normalized_name = name.lower().replace("-", "_")
-        resolved = _resolve_existing(root, topic_relative, run_relative, raw_path)
-        if resolved:
-            by_name.setdefault(normalized_name, (resolved, digest, "artifact"))
-    for key, raw_path, doc_type in _EXPECTED_ARTIFACTS:
-        resolved = None
-        for candidate, full in _candidate_paths(root, topic_relative, run_relative, raw_path):
-            if os.path.isfile(full):
-                resolved = candidate
-                break
-        if not resolved:
-            resolved = _posix(os.path.join(run_relative, raw_path))
-        digest = None
-        for name, artifact_path, artifact_digest in artifact_entries:
-            if _safe_relative(artifact_path) in {raw_path, _posix(os.path.join(run_relative, raw_path)), _posix(os.path.join(topic_relative, raw_path))}:
-                digest = artifact_digest
-                break
-            if name.lower().replace("-", "_") in {key, doc_type}:
-                digest = artifact_digest
-        by_name[key] = (resolved, digest, doc_type)
-    return by_name
-
-
-def _scan_manifests(root: str) -> List[Dict[str, Any]]:
-    if not os.path.isdir(root):
-        raise LayoutError(f"research-tool 输出根目录不存在: {root}")
-    records: List[Dict[str, Any]] = []
-    for dirpath, subdirs, filenames in os.walk(root):
-        subdirs[:] = sorted(d for d in subdirs if d not in _DERIVED_DIRS)
-        if "retrieval-manifest.json" not in filenames:
-            continue
-        manifest_full = os.path.join(dirpath, "retrieval-manifest.json")
-        run_relative = _posix(os.path.relpath(dirpath, root))
-        if os.path.basename(os.path.dirname(dirpath)) != "runs":
-            raise LayoutError(f"manifest 不在 <topic>/runs/<run_id> 下: {run_relative}")
-        topic_relative = _posix(os.path.dirname(os.path.dirname(run_relative)))
-        topic_slug = os.path.basename(topic_relative)
-        run_id = os.path.basename(run_relative)
-        manifest_relative = _posix(os.path.relpath(manifest_full, root))
-        manifest = _read_json(manifest_full, manifest_relative)
-        _validate_manifest(manifest, topic_slug, run_id, manifest_relative)
-        canonical = _expected_canonical(root, topic_relative, run_relative, manifest)
-        source_files: List[Dict[str, Any]] = []
-        for source in manifest["sources"]:
-            raw_relative = _resolve_existing(root, topic_relative, run_relative, source.get("raw_path"))
-            if not raw_relative:
-                raise LayoutError(f"manifest {manifest_relative} 的 raw_path 无效: {source.get('raw_path')}")
-            source_files.append({
-                "path": raw_relative,
-                "artifact_sha256": _hash_value(source.get("artifact_sha256")),
-                "body_sha256": _hash_value(source.get("body_sha256")),
-                "evidence_kind": str(source.get("evidence_kind")),
-            })
-        topic_name = str(manifest.get("topic") or topic_slug)
-        topic_files = {
-            "run_summary": _posix(os.path.join(topic_relative, "run-summary.json")),
-            "runtime_state": _posix(os.path.join(topic_relative, "runtime-state.json")),
-        }
-        timestamp = _timestamp_value(manifest, manifest_full, run_id)
-        records.append({
-            "topic": topic_name,
-            "topic_slug": topic_slug,
-            "topic_relative": topic_relative,
-            "run_id": run_id,
-            "run_relative": run_relative,
-            "manifest_relative": manifest_relative,
-            "manifest": manifest,
-            "success": _is_success(manifest),
-            "timestamp": timestamp,
-            "canonical": canonical,
-            "sources": source_files,
-            "topic_files": topic_files,
-        })
-    records.sort(key=lambda item: (item["topic_slug"], item["timestamp"], item["run_id"]))
-    if not records:
-        raise LayoutError(f"未找到 research-tool retrieval-manifest.json: {root}")
-    # Exactly one current successful run per topic; current selection is
-    # deterministic even when manifests have identical timestamps.
-    by_topic: Dict[str, List[Dict[str, Any]]] = {}
-    for record in records:
-        by_topic.setdefault(record["topic_slug"], []).append(record)
-    for topic_records in by_topic.values():
-        successful = [record for record in topic_records if record["success"]]
-        latest = max(successful, key=lambda item: item["timestamp"]) if successful else None
-        for record in topic_records:
-            record["report_type"] = "report_current" if latest is record else "report_historical"
-            record["run_key"] = f"{record['topic_slug']}:{record['run_id']}"
-    return records
-
-
-def _document_id(kind: str, record: Dict[str, Any], suffix: str = "") -> str:
-    base = f"{record['topic_slug']}:{record['run_id']}"
-    return f"{kind}:{base}{(':' + suffix) if suffix else ''}"
-
-
-def _insert_document(conn: sqlite3.Connection, values: Tuple[Any, ...]) -> None:
-    conn.execute(
-        "INSERT OR REPLACE INTO documents(id,doc_type,path,version,content_hash,git_commit,status) VALUES(?,?,?,?,?,?,?)",
-        values,
-    )
-
-
-def _insert_entity(conn: sqlite3.Connection, values: Tuple[Any, ...]) -> None:
-    conn.execute(
-        "INSERT OR REPLACE INTO entities(id,entity_type,path,current_version,status) VALUES(?,?,?,?,?)",
-        values,
-    )
-
-
-def _add_source_ref(
-    conn: sqlite3.Connection,
-    owner: str,
-    owner_path: str,
-    ref_path: str,
-    content_hash: Optional[str],
-    section: str = "",
-) -> None:
-    conn.execute(
-        "INSERT INTO source_refs(owner,owner_path,ref_path,source_type,reference_scope,content_hash,git_commit,section) VALUES(?,?,?,?,?,?,?,?)",
-        (owner, owner_path, ref_path, "file", "current", content_hash or "", "", section),
-    )
-
-
-def _add_relation(
-    conn: sqlite3.Connection,
-    source: str,
-    relation: str,
-    target: str,
-    source_path: str = "",
-    target_path: str = "",
-) -> None:
-    conn.execute(
-        "INSERT INTO relations(source,relation,target,source_path,target_path,source_version,target_version) VALUES(?,?,?,?,?,?,?)",
-        (source, relation, target, source_path, target_path, "", ""),
-    )
-
-
-def _write_metadata(conn: sqlite3.Connection, values: Dict[str, Any]) -> None:
-    for key, value in values.items():
-        if isinstance(value, (dict, list)):
-            value = json.dumps(value, ensure_ascii=False, sort_keys=True)
-        conn.execute("INSERT OR REPLACE INTO index_metadata(key,value) VALUES(?,?)", (key, str(value)))
-
-
-def build_research_tool_index(root: str, db_path: str, git_commit: str = "HEAD") -> dict:
-    """Scan canonical research-tool output and build the shared SQLite schema."""
-    records = _scan_manifests(root)
-    parent = os.path.dirname(db_path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+def utc_time(value, label):
+    require(type(value) is str and UTC.fullmatch(value), f"{label} 必须是明确 UTC ISO 时间", "INVALID_ARGUMENT")
     try:
-        conn.executescript(SCHEMA_SQL)
-        for table in ("documents", "entities", "versions", "runs", "relations", "source_refs", "events"):
-            conn.execute(f"DELETE FROM {table}")
-        conn.execute("DELETE FROM index_metadata")
-        now = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-        watermark = {
-            "schema_version": "1",
-            "layout": "research-tool",
-            "index_built_at": now,
-            "last_event_id": "",
-            "index_complete": "0",
-            "drift": "0",
-            "scan_fingerprint": research_tool_fingerprint(root),
-        }
-        topic_seen: Dict[str, Dict[str, Any]] = {}
-        for record in records:
-            topic_id = f"topic:{record['topic_slug']}"
-            topic_path = record["topic_relative"]
-            if record["topic_slug"] not in topic_seen:
-                topic_seen[record["topic_slug"]] = record
-                _insert_document(conn, (topic_id, "topic", topic_path, None, None, git_commit, "valid"))
-                _insert_entity(conn, (topic_id, "topic", topic_path, None, "valid"))
-            manifest_path = record["manifest_relative"]
-            manifest_id = _document_id("run", record)
-            manifest_hash = _actual_hash(root, manifest_path)
-            verdict = record["manifest"].get("verdict")
-            if isinstance(verdict, dict):
-                verdict = verdict.get("status") or verdict.get("value")
-            run_status = "completed" if record["success"] else str(verdict or "failed")
-            _insert_document(conn, (manifest_id, "run_manifest", manifest_path, None, manifest_hash, git_commit, run_status))
-            _insert_entity(conn, (manifest_id, "run_manifest", manifest_path, None, run_status))
-            _add_relation(conn, topic_id, "contains_run", manifest_id, topic_path, manifest_path)
-            conn.execute(
-                "INSERT OR REPLACE INTO runs(run_id,experiment_ref,status,model,context_length,raw_ref_path,raw_ref_hash,raw_ref_commit) VALUES(?,?,?,?,?,?,?,?)",
-                (record["run_key"], record["topic_slug"], run_status, record["manifest"].get("model"),
-                 record["manifest"].get("context_length"), "", "", ""),
-            )
-            for key, path in record["topic_files"].items():
-                doc_type = "run_summary" if key == "run_summary" else "runtime_state"
-                if not os.path.isfile(_join_relative(root, path)):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise LayoutError(f"{label} 时间无效", "INVALID_ARGUMENT") from exc
+    require(parsed.utcoffset() == timedelta(0), f"{label} 必须为 UTC", "INVALID_ARGUMENT")
+    return parsed
+
+
+def relative(value):
+    text(value, "path")
+    require(not value.startswith("/") and "\\" not in value and "\x00" not in value
+            and all(part not in ("", ".", "..") for part in value.split("/")),
+            f"拒绝绝对路径或 traversal: {value}", "UNSAFE_PATH")
+    require(not any(part in DERIVED_DIRS for part in value.split("/")),
+            f"canonical 路径指向派生目录: {value}", "UNSAFE_PATH")
+    return value
+
+
+def hash_map(value, label, prefixed=False):
+    object_value(value, label)
+    return {relative(path): digest(pin, f"{label}.{path}", prefixed) for path, pin in value.items()}
+
+
+def _json(data, label):
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            require(key not in result, f"{label} JSON key 重复: {key}")
+            result[key] = value
+        return result
+    try:
+        return json.loads(data.decode("utf-8"), object_pairs_hook=pairs,
+                          parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+    except (UnicodeError, ValueError) as exc:
+        if isinstance(exc, LayoutError):
+            raise
+        raise LayoutError(f"{label} 不是有效 UTF-8 JSON") from exc
+
+
+@contextmanager
+def directory_fd(path, create=False):
+    """Open every directory component with O_NOFOLLOW, including root ancestors."""
+    path = Path(os.path.abspath(path))
+    fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in path.parts[1:]:
+            if create:
+                try:
+                    os.mkdir(part, dir_fd=fd)
+                except FileExistsError:
+                    pass
+            nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+        yield fd
+    except OSError as exc:
+        raise LayoutError(f"目录缺失、不安全或不可读取: {path}: {exc}", "UNSAFE_PATH") from exc
+    finally:
+        os.close(fd)
+
+
+def _inventory(root):
+    blobs, identities, directories = {}, {}, set()
+
+    def visit(fd, prefix):
+        with os.scandir(fd) as entries:
+            names = sorted(entry.name for entry in entries)
+        for name in names:
+            path = f"{prefix}/{name}" if prefix else name
+            info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            require(not stat.S_ISLNK(info.st_mode), f"拒绝 symlink: {path}", "UNSAFE_PATH")
+            if stat.S_ISDIR(info.st_mode):
+                if name in DERIVED_DIRS:
                     continue
-                doc_id = _document_id(key, record)
-                digest = _actual_hash(root, path)
-                _insert_document(conn, (doc_id, doc_type, path, None, digest, git_commit, "valid"))
-                _insert_entity(conn, (doc_id, doc_type, path, None, "valid"))
-
-            # Source artifacts are useful even for STOP_BUDGET/STOP_ERROR
-            # runs.  Provenance edges to report/graph are added below only
-            # when those successful-run entities exist.
-            source_rows: List[Tuple[str, str, Optional[str], str]] = []
-            for source in record["sources"]:
-                raw_path = source["path"]
-                raw_hash = source["artifact_sha256"] or _actual_hash(root, raw_path)
-                source_id = _document_id("source", record, hashlib.sha256(raw_path.encode("utf-8")).hexdigest()[:16])
-                source_status = "valid" if raw_hash else "missing"
-                _insert_document(conn, (source_id, "source_artifact", raw_path, record["run_id"], raw_hash, git_commit, source_status))
-                _insert_entity(conn, (source_id, "source_artifact", raw_path, record["run_id"], source["evidence_kind"]))
-                source_rows.append((source_id, raw_path, raw_hash, source["evidence_kind"]))
-
-            if not record["success"]:
-                continue
-            canonical = record["canonical"]
-            report_path, report_pin, _ = canonical["report"]
-            report_id = _document_id("report", record)
-            # Keep the manifest pin as the document hash.  Reindexing after a
-            # mutation must not bless the mutated bytes as a new canonical
-            # artifact.
-            report_hash = report_pin or _actual_hash(root, report_path)
-            _insert_document(conn, (report_id, record["report_type"], report_path, record["run_id"], report_hash, git_commit,
-                                    "fresh" if record["report_type"] == "report_current" else "frozen"))
-            _insert_entity(conn, (report_id, record["report_type"], report_path, record["run_id"],
-                                  "fresh" if record["report_type"] == "report_current" else "frozen"))
-            graph_path, graph_pin, _ = canonical["graph"]
-            graph_id = _document_id("graph", record)
-            graph_hash = graph_pin or _actual_hash(root, graph_path)
-            _insert_document(conn, (graph_id, "evidence_graph", graph_path, record["run_id"], graph_hash, git_commit,
-                                    "valid" if graph_hash else "missing"))
-            _insert_entity(conn, (graph_id, "evidence_graph", graph_path, record["run_id"], "valid" if graph_hash else "missing"))
-            sources_path, sources_pin, _ = canonical["sources"]
-            sources_id = _document_id("sources", record)
-            sources_hash = sources_pin or _actual_hash(root, sources_path)
-            _insert_document(conn, (sources_id, "sources_manifest", sources_path, record["run_id"], sources_hash, git_commit,
-                                    "valid" if sources_hash else "missing"))
-            _insert_entity(conn, (sources_id, "sources_manifest", sources_path, record["run_id"], "valid" if sources_hash else "missing"))
-            _add_relation(conn, report_id, "based_on", graph_id, report_path, graph_path)
-            # Preserve the manifest-declared provenance even when the graph
-            # has been deleted; reconcile can then report SOURCE_MISSING.
-            _add_source_ref(conn, report_id, report_path, graph_path, graph_hash, "evidence_graph")
-            for source_id, raw_path, raw_hash, evidence_kind in source_rows:
-                _add_relation(conn, report_id, "based_on", source_id, report_path, raw_path)
-                _add_relation(conn, graph_id, "based_on", source_id, graph_path, raw_path)
-                _add_source_ref(conn, report_id, report_path, raw_path, raw_hash, evidence_kind)
-                _add_source_ref(conn, graph_id, graph_path, raw_path, raw_hash, evidence_kind)
-        watermark["index_complete"] = "1"
-        _write_metadata(conn, watermark)
-        conn.commit()
-        return watermark
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+                directories.add(path)
+                child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                try:
+                    visit(child, path)
+                finally:
+                    os.close(child)
+            else:
+                if name in DERIVED_FILES:
+                    continue
+                require(stat.S_ISREG(info.st_mode), f"拒绝非普通文件: {path}", "UNSAFE_PATH")
+                file_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+                with os.fdopen(file_fd, "rb") as handle:
+                    before = os.fstat(handle.fileno())
+                    require(stat.S_ISREG(before.st_mode), f"拒绝非普通文件: {path}", "UNSAFE_PATH")
+                    data = handle.read()
+                    after = os.fstat(handle.fileno())
+                token = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+                require(token(info) == token(before) == token(after), f"扫描期间文件变化: {path}", "INDEX_STALE")
+                blobs[path] = data
+                identities[path] = token(after)
+    with directory_fd(root) as fd:
+        visit(fd, "")
+    return blobs, identities, directories
 
 
-def _read_metadata(conn: sqlite3.Connection) -> Dict[str, Any]:
-    return dict(conn.execute("SELECT key,value FROM index_metadata").fetchall())
+class Snapshot:
+    """One verified byte snapshot; recheck at query/publication boundaries."""
+
+    def __init__(self, root):
+        self.root = os.path.abspath(root)
+        try:
+            self.blobs, self.identities, self.directories = _inventory(self.root)
+        except OSError as exc:
+            raise LayoutError(f"扫描失败: {exc}", "SOURCE_UNAVAILABLE") from exc
+        self.fingerprint = "sha256:" + sha(json_text({
+            "files": {p: sha(b) for p, b in sorted(self.blobs.items())},
+            "directories": sorted(self.directories),
+        }).encode())
+
+    def bytes(self, path, pin=None):
+        relative(path)
+        require(path in self.blobs, f"缺失文件: {path}", "SOURCE_MISSING")
+        data = self.blobs[path]
+        require(pin is None or sha(data) == pin, f"hash 不匹配: {path}", "HASH_MISMATCH")
+        return data
+
+    def json(self, path, pin=None):
+        return _json(self.bytes(path, pin), path)
+
+    def unchanged(self):
+        current = Snapshot(self.root)
+        require(self.fingerprint == current.fingerprint and self.identities == current.identities,
+                "canonical 在扫描、查询或索引发布期间变化；请重试", "INDEX_STALE")
 
 
-def _watermark_from_conn(conn: sqlite3.Connection, root: str) -> Dict[str, Any]:
-    values = _read_metadata(conn)
-    return {
-        "layout": values.get("layout", "research-tool"),
-        "index_built_at": values.get("index_built_at"),
-        "last_event_id": values.get("last_event_id") or None,
-        "index_complete": values.get("index_complete") == "1",
-        "drift": values.get("drift") == "1",
-        "scan_fingerprint": values.get("scan_fingerprint"),
+def research_tool_fingerprint(root):
+    return Snapshot(root).fingerprint
+
+
+def source_body(data, label):
+    """Producer's Markdown body convention (leading comments or YAML metadata)."""
+    try:
+        markdown = data.decode("utf-8")
+    except UnicodeError as exc:
+        raise LayoutError(f"来源不是 UTF-8: {label}") from exc
+    metadata, position = {}, 0
+    if markdown.startswith("---"):
+        end = markdown.find("\n---", 3)
+        require(end >= 0, f"来源 front matter 不完整: {label}")
+        from ..mini_yaml import load
+        try:
+            metadata = object_value(load(markdown[3:end], strict=True) or {}, label)
+        except (ValueError, TypeError) as exc:
+            raise LayoutError(f"来源 front matter 无效: {label}") from exc
+        return metadata, markdown[end + 4:].lstrip("\r\n")
+    for line in markdown.splitlines(keepends=True):
+        match = META_COMMENT.fullmatch(line.rstrip("\r\n"))
+        if not match:
+            break
+        metadata[match[1]] = match[2]
+        position += len(line)
+    body = markdown[position:]
+    return metadata, body.lstrip("\r\n") if metadata else body
+
+
+def _source_identity(snapshot, path, pin, body_pin, source):
+    metadata, body = source_body(snapshot.bytes(path, pin), path)
+    require(sha(body.encode()) == body_pin, f"正文 hash 不匹配: {path}", "HASH_MISMATCH")
+    locator = metadata.get("source", metadata.get("locator", "")) or metadata.get("video_url", "")
+    require(locator == source["locator"] and sha(locator.encode())[:16] == source["source_id"],
+            f"来源身份与文件不一致: {path}")
+    return metadata, body
+
+
+def _string_list(value, label):
+    require(type(value) is list and all(type(v) is str and v for v in value)
+            and len(value) == len(set(value)), f"{label} 必须是无重复字符串数组")
+    return value
+
+
+def _record(snapshot, topic_path, slug, rid):
+    prefix = f"{topic_path}/" if topic_path else ""
+    run = f"runs/{rid}"
+    record_path, manifest_path = f"{run}/run-record.json", f"{run}/retrieval-manifest.json"
+    for path in (record_path, manifest_path):
+        require(prefix + path in snapshot.blobs, f"{prefix + path} 不可用。{REBUILD}", "SOURCE_UNAVAILABLE")
+    record = object_value(snapshot.json(prefix + record_path), record_path)
+    manifest = object_value(snapshot.json(prefix + manifest_path), manifest_path)
+    require(type(record.get("version")) is int and record["version"] == 1, "run-record.version 必须为1")
+    require(type(manifest.get("schema_version")) is int and manifest["schema_version"] == 1
+            and manifest.get("producer") == "research-tool", "仅支持 research-tool manifest v1")
+    for key in ("topic", "topic_slug", "run_id", "verdict", "pipeline_complete", "started_at", "finished_at", "input_fingerprint"):
+        require(key in record and manifest.get(key) == record[key], f"manifest/record {key} 不一致")
+    require(record["run_id"] == rid and record["topic_slug"] == slug, "运行/主题身份与目录不符")
+    text(record["topic"], "topic")
+    require(type(record["verdict"]) is str and record["verdict"] in VERDICTS, "verdict 非规范枚举")
+    require(type(record["pipeline_complete"]) is bool and type(manifest["pipeline_complete"]) is bool,
+            "pipeline_complete 必须是 boolean")
+    success = record["verdict"] == "STOP_SUCCESS" and record["pipeline_complete"] is True
+    require(record["verdict"] != "STOP_SUCCESS" or success, "STOP_SUCCESS 必须 pipeline_complete=true")
+    started = utc_time(record["started_at"], "started_at")
+    finished = utc_time(record["finished_at"], "finished_at")
+    require(started <= finished, "finished_at 早于 started_at")
+    fingerprint = digest(record["input_fingerprint"], "input_fingerprint")
+    require(record.get("output_contract") == "nine-stage" and record.get("stages") == list(STAGES), "非规范九阶段运行")
+    completed = _string_list(record.get("stages_completed"), "stages_completed")
+    skipped = _string_list(record.get("stages_skipped"), "stages_skipped")
+    require(set(completed) <= set(STAGES) and set(skipped) <= set(STAGES)
+            and not set(completed) & set(skipped), "stage 完成/跳过状态冲突")
+    require("failed_stage" in record and (record["failed_stage"] is None or record["failed_stage"] in STAGES), "failed_stage 无效")
+    statuses = {s: "completed" if s in completed else "skipped" if s in skipped else "not_completed" for s in STAGES}
+    require(manifest.get("stages") == statuses, "manifest stages 与 record 不一致")
+    if success:
+        require(set(completed + skipped) == set(STAGES) and "report" in completed and record["failed_stage"] is None,
+                "成功运行未完成九阶段")
+    runtime = object_value(record.get("runtime"), "record.runtime")
+    require(set(runtime) == {"version", "run_id", "input_fingerprint", "round", "completed_stages", "latest_digest"},
+            "runtime 不是完整 v1 快照")
+    require(type(runtime["version"]) is int and runtime["version"] == 1 and runtime["run_id"] == rid
+            and runtime["input_fingerprint"] == fingerprint, "runtime 身份不一致")
+    require(type(runtime["round"]) is int and runtime["round"] >= 0, "runtime.round 无效")
+    committed = object_value(runtime["completed_stages"], "runtime.completed_stages")
+    pins, envelopes, stage_names = {}, {}, set()
+
+    def pin(path, value):
+        relative(path)
+        require(path not in pins or pins[path] == value, f"多个 canonical pin 冲突: {path}")
+        snapshot.bytes(prefix + path, value)
+        pins[path] = value
+
+    for key, entry in committed.items():
+        require(type(key) is str and re.fullmatch(r"[a-z]+(?::[0-9]+)?", key), "runtime stage key 无效")
+        stage = key.split(":")[0]
+        require(stage in STAGES, f"未知阶段: {stage}")
+        stage_names.add(stage)
+        object_value(entry, key)
+        require(set(entry) == {"artifact_path", "artifact_digest"}, f"runtime stage record 无效: {key}")
+        expected_path = f"artifacts/{rid}/{key.replace(':', '-')}.json"
+        require(entry["artifact_path"] == expected_path, f"stage envelope 路径不符: {key}", "UNSAFE_PATH")
+        envelope_pin = digest(entry["artifact_digest"], key)
+        pin(expected_path, envelope_pin)
+        envelope = object_value(snapshot.json(prefix + expected_path), expected_path)
+        require(type(envelope.get("v")) is int and envelope["v"] == 1 and envelope.get("run_id") == rid
+                and envelope.get("stage") == stage and envelope.get("request_id") == key
+                and "error" in envelope and envelope["error"] is None, f"stage envelope 身份无效: {key}")
+        object_value(envelope.get("result"), f"{key}.result")
+        files = hash_map(envelope.get("files"), f"{key}.files")
+        for path, value in files.items():
+            require(path.startswith(run + "/") and path not in (record_path, manifest_path),
+                    f"stage output 不属于本 run: {path}", "UNSAFE_PATH")
+            pin(path, value)
+        envelopes[key] = envelope
+    require(stage_names == set(completed), "runtime 已提交阶段与 run-record 不一致")
+    latest = runtime["latest_digest"]
+    require((not committed and latest is None) or (committed and latest in [e["artifact_digest"] for e in committed.values()]),
+            "runtime.latest_digest 不属于已提交 envelope")
+    finals = hash_map(record.get("files"), "record.files")
+    for path, value in finals.items():
+        require(path.startswith(run + "/final/"), "record.files 不是本 run final 路径", "UNSAFE_PATH")
+        require(pins.get(path) == value, f"final 未被 runtime 提交: {path}")
+    require(manifest.get("record_path") == record_path, "record_path 不是本 run canonical 路径", "UNSAFE_PATH")
+    record_pin = digest(manifest.get("record_sha256"), "record_sha256", True)
+    pin(record_path, record_pin)
+    manifest_files = hash_map(manifest.get("files"), "manifest.files", True)
+    manifest_pins = dict(pins)
+    require(manifest_files == manifest_pins,
+            "manifest.files 与 run-record/runtime 提交集合不一致")
+    artifacts = object_value(manifest.get("artifacts"), "artifacts")
+    artifact_hashes = object_value(manifest.get("artifact_hashes"), "artifact_hashes")
+    expected = {
+        "report": f"{run}/final/report.md",
+        "sources": f"{run}/final/sources.json",
+        "main_table": f"{run}/final/tree/00-主表.md",
+        "knowledge": f"{run}/final/tree/knowledge.json",
     }
+    require(set(artifacts) <= set(expected) and set(artifacts) == set(artifact_hashes), "artifacts/hash key 不一致")
+    if success:
+        require(artifacts == expected, "成功运行必须包含三个规范 final artifacts")
+    for name, path in artifacts.items():
+        require(path == expected[name], f"artifact 路径无效: {name}", "UNSAFE_PATH")
+        require(finals.get(path) == digest(artifact_hashes[name], f"artifact_hashes.{name}", True), f"final pin 不一致: {path}")
+    sources = manifest.get("sources")
+    require(type(sources) is list, "sources 必须是数组")
+    raw_by_path = {}
+    for source in sources:
+        object_value(source, "source")
+        for field in ("source_id", "locator", "title", "source_engine", "fetched_at", "source_tier"):
+            text(source.get(field), f"source.{field}", empty=field in {"title", "source_engine", "fetched_at"})
+        require(source.get("evidence_kind") in {"body", "snippet", "discovery", "unknown"}, "evidence_kind 非规范枚举")
+        path = relative(source.get("raw_path"))
+        require(path.startswith(run + "/") and "/raw/" in path and path not in raw_by_path,
+                "raw_path 不属于本run或重复", "UNSAFE_PATH")
+        raw_pin = digest(source.get("artifact_sha256"), "artifact_sha256", True)
+        body_pin = digest(source.get("body_sha256"), "body_sha256", True)
+        metadata, _body = _source_identity(snapshot, prefix + path, raw_pin, body_pin, source)
+        if "evidence_kind" in metadata:
+            require(metadata["evidence_kind"] == source["evidence_kind"], f"来源 evidence_kind 冲突: {path}")
+        require(path not in pins or pins[path] == raw_pin, "raw artifact 与已提交 pin 不一致")
+        if success:
+            require(path in pins, f"成功运行的 raw 来源未提交: {path}")
+        raw_by_path[path] = source
+    citations = manifest.get("citation_sources")
+    require(type(citations) is list, "citation_sources 必须是数组")
+    record_data = {
+        "topic": record["topic"], "topic_slug": slug, "topic_path": topic_path,
+        "run_id": rid, "run_key": f"{slug}:{rid}", "record": record, "manifest": manifest,
+        "record_path": prefix + record_path, "record_sha256": "sha256:" + record_pin,
+        "manifest_path": prefix + manifest_path, "finished": finished, "success": success,
+        "prefix": prefix, "pins": pins, "raw": raw_by_path, "envelopes": envelopes,
+        "clean": {}, "facts": {}, "report_claims": [], "nodes": [],
+    }
+    if success:
+        _evidence(snapshot, record_data)
+    else:
+        require(not citations, "未成功运行不能发布 citation_sources")
+    return record_data
 
 
-def _layout_is_fresh(root: str, conn: sqlite3.Connection) -> Tuple[bool, Dict[str, Any]]:
-    watermark = _watermark_from_conn(conn, root)
-    current = research_tool_fingerprint(root)
-    drift = not watermark.get("scan_fingerprint") or current != watermark.get("scan_fingerprint")
-    watermark["drift"] = drift
-    return bool(watermark.get("index_complete")) and not drift, watermark
+def _evidence(snapshot, run):
+    manifest, prefix = run["manifest"], run["prefix"]
+    graph = object_value(snapshot.json(prefix + manifest["artifacts"]["knowledge"]), "knowledge")
+    final_sources = snapshot.json(prefix + manifest["artifacts"]["sources"])
+    require(type(final_sources) is list and type(graph.get("sources")) is list, "final/graph sources 必须为数组")
+    graph_sources = {}
+    for source in graph["sources"]:
+        object_value(source, "graph.source")
+        sid = text(source.get("source_id"), "source_id")
+        require(sid not in graph_sources, "graph source_id 重复")
+        text(source.get("locator"), "locator")
+        graph_path = text(source.get("path"), "source.path")
+        require(os.path.isabs(graph_path), "graph source.path 必须保留绝对旧字段")
+        body = text(source.get("text"), "source.text")
+        require(digest(source.get("content_sha256"), "source.content_sha256") == sha(body.encode()), "graph 正文 hash 不符", "HASH_MISMATCH")
+        graph_sources[sid] = source
+    final_map = {}
+    for source in final_sources:
+        object_value(source, "final.source")
+        sid = text(source.get("source_id"), "source_id")
+        require(sid not in final_map and graph_sources.get(sid) == source, "final.sources 与 graph source 不一致")
+        final_map[sid] = source
+    for source in manifest["citation_sources"]:
+        object_value(source, "citation_source")
+        require({"clean_path", "clean_artifact_sha256", "body_sha256", "source_id", "locator", "title", "raw_path"} <= set(source),
+                "citation_source 缺少规范字段")
+        sid = text(source.get("source_id"), "citation_source.source_id")
+        require(sid in final_map and sid not in run["clean"], "citation_sources 身份重复或不在 final.sources")
+        path = relative(source.get("clean_path"))
+        raw_path = relative(source.get("raw_path"))
+        raw = run["raw"].get(raw_path)
+        require(raw is not None and raw["source_id"] == sid and raw["locator"] == source.get("locator"), "clean→raw 来源链断裂")
+        require(raw["evidence_kind"] == "body", "snippet/discovery 不能成为正文支持证据")
+        require(path.startswith(f"runs/{run['run_id']}/") and "/clean/" in path, "clean_path 越界", "UNSAFE_PATH")
+        clean_pin = digest(source.get("clean_artifact_sha256"), "clean_artifact_sha256", True)
+        body_pin = digest(source.get("body_sha256"), "citation_source.body_sha256", True)
+        require(run["pins"].get(path) == clean_pin, "clean 来源未由 runtime 提交")
+        metadata, body = _source_identity(snapshot, prefix + path, clean_pin, body_pin, source)
+        require(metadata.get("evidence_kind", "body") == "body", "clean 不是 body")
+        require(body == final_map[sid]["text"] and body_pin == final_map[sid]["content_sha256"]
+                and source.get("locator") == final_map[sid]["locator"], "clean 正文与 graph/final 不符")
+        text(source.get("title"), "citation_source.title", empty=True)
+        run["clean"][sid] = {**source, "body": body}
+    require(set(run["clean"]) <= set(final_map), "citation_sources 含 final.sources 之外的来源")
+    facts = graph.get("facts")
+    require(type(facts) is list and facts, "graph facts 必须是非空数组")
+    for fact in facts:
+        object_value(fact, "fact")
+        cid = text(fact.get("claim_id"), "claim_id")
+        require(cid not in run["facts"], "claim_id 重复")
+        text(fact.get("text"), "fact.text")
+        spans = fact.get("citations")
+        require(type(spans) is list and spans, "fact 缺少 citations")
+        for span in spans:
+            _span(span, graph_sources)
+        run["facts"][cid] = fact
+    nodes = graph.get("nodes")
+    require(type(nodes) is list and nodes, "graph nodes 必须是非空数组")
+    node_ids = set()
+    for node in nodes:
+        object_value(node, "node")
+        nid = text(node.get("node_id"), "node_id")
+        require(nid not in node_ids, "node_id 重复")
+        node_ids.add(nid)
+        text(node.get("title"), "node.title")
+        require(set(_string_list(node.get("claim_ids"), "node.claim_ids")) <= set(run["facts"]), "node 引用未知 claim")
+    counts = object_value(graph.get("counts"), "graph.counts")
+    for key, values in (("nodes", nodes), ("facts", facts), ("sources", graph_sources)):
+        require(type(counts.get(key)) is int and counts[key] == len(values), f"graph.counts.{key} 不符")
+    report = run["envelopes"].get("report", {}).get("result", {})
+    paragraphs = report.get("claims")
+    require(type(paragraphs) is list and paragraphs and type(report.get("headings")) is list, "report envelope 缺少 claims/headings")
+    markdown = snapshot.bytes(prefix + manifest["artifacts"]["report"]).decode("utf-8")
+    require(report.get("markdown") == markdown, "报告正文与 report envelope 不一致")
+    for paragraph in paragraphs:
+        object_value(paragraph, "report.claims")
+        require(text(paragraph.get("text"), "paragraph.text") in markdown, "报告段落不在 final report")
+        ids = _string_list(paragraph.get("claim_ids"), "paragraph.claim_ids")
+        require(ids and set(ids) <= set(run["facts"]), "段落引用未知 claim")
+        spans = [c for cid in ids for c in run["facts"][cid]["citations"]]
+        require(paragraph.get("citations") == spans, "段落引用与 claim citations 不一致")
+        for span in spans:
+            require(span["source_id"] in run["clean"], "报告引用未绑定 clean/raw 来源")
+            _span(span, graph_sources)
+    for heading in report["headings"]:
+        object_value(heading, "heading")
+        require(text(heading.get("text"), "heading.text") in markdown, "heading 不在报告")
+        require(set(_string_list(heading.get("claim_ids"), "heading.claim_ids")) <= set(run["facts"]), "heading 引用未知 claim")
+    run["report_claims"], run["nodes"] = paragraphs, nodes
 
 
-def _layout_source_status(root: str, path: str, expected: str) -> Tuple[str, str, Optional[str]]:
-    full = _join_relative(root, path)
-    if not os.path.isfile(full):
-        return "SOURCE_MISSING", f"无法定位 source artifact: {path}", None
-    actual = file_hash(full)
-    if expected and actual != expected:
-        return "HASH_MISMATCH", f"{path} hash 不匹配: recorded={expected[:16]} actual={(actual or '')[:16]}", actual
-    return "ok", f"{path} 校验通过", actual
+def _span(span, sources):
+    object_value(span, "citation")
+    sid = text(span.get("source_id"), "citation.source_id")
+    source = sources.get(sid)
+    require(source is not None and span.get("locator") == source["locator"], "citation 来源身份不符")
+    require(digest(span.get("content_sha256"), "citation.content_sha256") == source["content_sha256"], "citation body hash 不符", "HASH_MISMATCH")
+    start, end = span.get("start_offset"), span.get("end_offset")
+    require(type(start) is int and type(end) is int and 0 <= start < end <= len(source["text"]), "citation span offset 无效")
+    require(text(span.get("text"), "citation.text") == source["text"][start:end], "citation clean span 与正文不符", "HASH_MISMATCH")
 
 
-def _layout_doc_issues(conn: sqlite3.Connection, root: str) -> List[dict]:
-    issues: List[dict] = []
-    for doc_id, doc_type, path, expected in conn.execute(
-        "SELECT id,doc_type,path,content_hash FROM documents"
-    ).fetchall():
-        if not path:
+def scan(root):
+    snapshot = Snapshot(root)
+    topics = []
+    if "runs" in snapshot.directories or "run-summary.json" in snapshot.blobs or "runtime-state.json" in snapshot.blobs:
+        topics.append(("", Path(snapshot.root).name))
+    else:
+        for path in sorted(snapshot.directories):
+            if "/" not in path and (f"{path}/runs" in snapshot.directories or f"{path}/run-summary.json" in snapshot.blobs
+                                    or f"{path}/runtime-state.json" in snapshot.blobs):
+                topics.append((path, path))
+    require(topics, f"未发现 canonical research-tool topic。{REBUILD}", "SOURCE_UNAVAILABLE")
+    runs = []
+    for topic_path, slug in topics:
+        require(re.fullmatch(r"[\w-]+", slug) and slug not in DERIVED_DIRS, "topic_slug 非规范目录名")
+        prefix = f"{topic_path}/" if topic_path else ""
+        base = prefix + "runs/"
+        ids = [path[len(base):] for path in snapshot.directories if path.startswith(base) and "/" not in path[len(base):]]
+        require(ids, f"主题 {slug} 缺少 canonical runs。{REBUILD}", "SOURCE_UNAVAILABLE")
+        topic_runs = []
+        for rid in sorted(ids):
+            require(RUN_ID.fullmatch(rid), f"run_id 必须为32小写hex: {rid}")
+            topic_runs.append(_record(snapshot, topic_path, slug, rid))
+        require(len({r["finished"] for r in topic_runs}) == len(topic_runs),
+                f"主题 {slug} 的 finished_at 有多个候选；拒绝按 UUID/mtime 选择", "AMBIGUOUS_VERSION")
+        topic_runs.sort(key=lambda r: r["finished"])
+        current = topic_runs[-1]
+        successful = [r for r in topic_runs if r["success"]]
+        latest_success = successful[-1] if successful else None
+        summary_path, state_path = prefix + "run-summary.json", prefix + "runtime-state.json"
+        if summary_path in snapshot.blobs or state_path in snapshot.blobs:
+            require(summary_path in snapshot.blobs and state_path in snapshot.blobs, "当前 summary/runtime 不完整", "SOURCE_UNAVAILABLE")
+            summary = object_value(snapshot.json(summary_path), summary_path)
+            state = object_value(snapshot.json(state_path), state_path)
+            require(summary.get("run_id") == current["run_id"] and state.get("run_id") == current["run_id"],
+                    f"当前运行未完成快照或与最新 record 不一致。{REBUILD}", "SOURCE_UNAVAILABLE")
+            for key in ("topic", "topic_slug", "verdict", "pipeline_complete", "stages", "stages_completed", "stages_skipped", "failed_stage", "files"):
+                require(key in summary and summary[key] == current["record"][key], f"current summary.{key} 与 record 不符")
+            require(state == current["record"]["runtime"], "current runtime 与当前 run-record 不符")
+        state_info = {k: current["record"][k] for k in ("run_id", "verdict", "pipeline_complete", "finished_at")}
+        for run in topic_runs:
+            run["current_run"] = state_info
+            run["is_current"] = run is current
+            run["is_latest_success"] = run is latest_success
+            run["report_type"] = "report_current" if run is current else "report_latest_success" if run is latest_success else "report_historical"
+        runs.extend(topic_runs)
+    snapshot.unchanged()
+    return snapshot, runs
+
+
+def entity_id(kind, run, suffix=None):
+    return f"{kind}:{run['run_key']}" + (f":{suffix}" if suffix is not None else "")
+
+
+def projection(snapshot, runs):
+    tables = {name: [] for name in TABLE_COLUMNS}
+    docs = {}
+
+    def document(eid, kind, path, run, extra=None, pin=None):
+        require(eid not in docs, f"派生实体身份重复: {eid}")
+        data = {"topic": run["topic"], "topic_slug": run["topic_slug"], "run_id": run["run_id"],
+                "verdict": run["record"]["verdict"], "pipeline_complete": run["record"]["pipeline_complete"],
+                "finished_at": run["record"]["finished_at"], "current_run": run["current_run"], **(extra or {})}
+        digest_value = pin or ("sha256:" + sha(snapshot.blobs[path]) if path in snapshot.blobs else None)
+        row = (eid, kind, path, run["run_id"], digest_value, None, run["record"]["verdict"])
+        docs[eid] = row
+        tables["documents"].append(row)
+        tables["entities"].append((eid, kind, path, run["run_id"], row[-1]))
+        tables["research_tool_metadata"].append((eid, json_text(data)))
+        return eid
+
+    def relation(source, kind, target):
+        tables["relations"].append((source, kind, target, docs[source][2], docs[target][2], docs[source][3], docs[target][3]))
+
+    for run in runs:
+        prefix, record = run["prefix"], run["record"]
+        run_eid = document(entity_id("run", run), "run_manifest", run["record_path"], run,
+                           {"input_fingerprint": record["input_fingerprint"], "record_sha256": run["record_sha256"], "is_current": run["is_current"]})
+        document(entity_id("manifest", run), "retrieval_manifest", run["manifest_path"], run)
+        tables["runs"].append((run["run_key"], run["topic_slug"], record["verdict"], None, None, None, None, None))
+        raw_ids = {}
+        for path, source in run["raw"].items():
+            eid = document(entity_id("raw", run, sha(path.encode())[:16]), "raw", prefix + path, run,
+                           {**source, "committed": path in run["pins"]}, pin=source["artifact_sha256"])
+            raw_ids[path] = eid
+            relation(eid, "recorded_in", run_eid)
+        if not run["success"]:
             continue
-        full = _join_relative(root, path)
-        if doc_type == "topic":
-            if not os.path.isdir(full):
-                issues.append({"issue": "SOURCE_MISSING", "owner": doc_id, "ref": path, "scope": doc_type,
-                               "detail": f"主题目录不存在: {path}"})
-            continue
-        if not os.path.isfile(full):
-            issues.append({"issue": "SOURCE_MISSING", "owner": doc_id, "ref": path, "scope": doc_type,
-                           "detail": f"索引登记的文件不存在: {path}"})
-            continue
-        if expected:
-            actual = file_hash(full)
-            if actual != expected:
-                issues.append({"issue": "HASH_MISMATCH", "owner": doc_id, "ref": path, "scope": doc_type,
-                               "detail": f"{path} hash 不匹配: recorded={expected[:16]} actual={(actual or '')[:16]}"})
-    return issues
+        artifact_ids = {}
+        for name, kind in (("report", run["report_type"]), ("sources", "sources_manifest"), ("knowledge", "evidence_graph")):
+            path = prefix + run["manifest"]["artifacts"][name]
+            extra = {"selection": "current" if run["is_current"] else "latest_success" if run["is_latest_success"] else "historical"}
+            artifact_ids[name] = document(entity_id("graph" if name == "knowledge" else name, run), kind, path, run, extra)
+        report_id = artifact_ids["report"]
+        relation(report_id, "recorded_in", run_eid)
+        used = {cid for paragraph in run["report_claims"] for cid in paragraph["claim_ids"]}
+        used_sources = {span["source_id"] for cid in used for span in run["facts"][cid]["citations"]}
+        clean_ids = {}
+        for sid in sorted(used_sources):
+            source = run["clean"][sid]
+            clean_ids[sid] = document(entity_id("source", run, sid), "citation_source", prefix + source["clean_path"], run,
+                                     {k: v for k, v in source.items() if k != "body"}, pin=source["clean_artifact_sha256"])
+            relation(clean_ids[sid], "derived_from", raw_ids[source["raw_path"]])
+            tables["source_refs"].append((report_id, docs[report_id][2], prefix + source["clean_path"], "file", "historical",
+                                          source["clean_artifact_sha256"], None, sid))
+        for cid in sorted(used):
+            fact = run["facts"][cid]
+            claim_id = document(entity_id("claim", run, cid), "claim", docs[artifact_ids["knowledge"]][2], run, fact)
+            relation(report_id, "claims", claim_id)
+            for number, span in enumerate(fact["citations"]):
+                sid = span["source_id"]
+                citation_id = document(entity_id("citation", run, f"{cid}:{number}"), "citation", docs[clean_ids[sid]][2], run,
+                                       {**span, "claim_id": cid, "raw_path": prefix + run["clean"][sid]["raw_path"]})
+                relation(claim_id, "supported_by", citation_id)
+                relation(citation_id, "quotes", clean_ids[sid])
+                relation(clean_ids[sid], "supports", claim_id)
+    return {table: sorted(rows, key=json_text) for table, rows in tables.items()}
 
 
-def _layout_ref_issues(conn: sqlite3.Connection, root: str) -> List[dict]:
-    issues: List[dict] = []
-    for owner, ref_path, expected, section in conn.execute(
-        "SELECT owner,ref_path,content_hash,section FROM source_refs"
-    ).fetchall():
-        status, detail, _ = _layout_source_status(root, ref_path, expected or "")
-        if status != "ok":
-            issues.append({"issue": status, "owner": owner, "ref": ref_path,
-                           "scope": section or "provenance", "detail": detail})
-    return issues
+def db_location(root, db_path):
+    root, db = Path(os.path.abspath(root)), Path(os.path.abspath(db_path))
+    require(db.is_relative_to(root / ".index") and db != root / ".index", "DB 只能位于 root/.index 内，不能覆盖 canonical", "UNSAFE_PATH")
+    require(db.name not in {"research-tool.lock"} and not db.name.startswith(".research-tool-"), "DB 名称与内部锁/临时文件冲突", "UNSAFE_PATH")
+    # Check all existing components, without resolving away symlinks.
+    for path in [db, *db.parents]:
+        if path.is_symlink():
+            raise LayoutError(f"拒绝 DB symlink: {path}", "UNSAFE_PATH")
+    if db.exists():
+        info = db.stat()
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1, "DB 必须是独立普通文件（拒绝 hardlink）", "UNSAFE_PATH")
+    return db
 
 
-def reconcile_research_tool(root: str, db_path: str, gitdir: Optional[str] = None) -> dict:
-    """Reconcile research-tool canonical files without legacy sidecar rules."""
-    if not os.path.isfile(db_path):
-        return QueryResult(
-            query_type="reconcile", status="fail_closed", authority="unresolved",
-            source_watermark={"layout": "research-tool", "drift": True}, results=[{"issues": [{
-                "issue": "INDEX_STALE", "owner": None, "ref": None, "scope": "index",
-                "detail": f"索引不存在: {db_path}",
-            }], "issue_count": 1, "hard_fail": True}],
-            errors=[{"code": "INDEX_STALE", "detail": "索引不存在或尚未构建"}], error_semantic="INDEX_STALE",
-        ).to_dict()
-    conn = sqlite3.connect(db_path)
+@contextmanager
+def index_lock(root):
+    with directory_fd(Path(root) / ".index", create=True) as fd:
+        lock_fd = os.open("research-tool.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+        try:
+            require(os.fstat(lock_fd).st_nlink == 1, "索引锁不能是 hardlink", "UNSAFE_PATH")
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise LayoutError("另一个 research-tool 索引写入正在进行", "INDEX_BUSY") from exc
+            yield
+        finally:
+            os.close(lock_fd)
+
+
+def _publish_db(snapshot, runs, db):
+    data = projection(snapshot, runs)
+    watermark = {"layout": "research-tool", "schema_version": "1", "index_built_at": datetime.now(timezone.utc).isoformat(),
+                 "last_event_id": "", "index_complete": "1", "drift": "0", "scan_fingerprint": snapshot.fingerprint}
+    with directory_fd(db.parent, create=True) as fd:
+        temporary = f".research-tool-{uuid.uuid4().hex}.sqlite"
+        temp_fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+        os.close(temp_fd)
+        conn = sqlite3.connect(str(db.parent / temporary))
+        try:
+            conn.executescript(SCHEMA_SQL + "\nCREATE TABLE research_tool_metadata(entity_id TEXT PRIMARY KEY, data TEXT NOT NULL);")
+            with conn:
+                for table, columns in TABLE_COLUMNS.items():
+                    placeholders = ",".join("?" for _ in columns.split(","))
+                    conn.executemany(f"INSERT INTO {table}({columns}) VALUES({placeholders})", data[table])
+                conn.executemany("INSERT INTO index_metadata(key,value) VALUES(?,?)", watermark.items())
+            require(conn.execute("PRAGMA integrity_check").fetchone() == ("ok",), "SQLite 构建校验失败", "INDEX_STALE")
+        finally:
+            conn.close()
+        sync_fd = os.open(temporary, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+        try:
+            os.fsync(sync_fd)
+        finally:
+            os.close(sync_fd)
+        snapshot.unchanged()
+        db_location(snapshot.root, db)
+        os.replace(temporary, db.name, src_dir_fd=fd, dst_dir_fd=fd)
+        os.fsync(fd)
+        snapshot.unchanged()
+    return {**watermark, "index_complete": True, "drift": False, "last_event_id": None}
+
+
+def build_research_tool_index(root, db_path, git_commit="HEAD"):
+    """Validate canonical snapshots, then atomically replace the derived DB.
+
+    Returns QueryResult on both success and failure. git_commit is intentionally
+    unused: output snapshots do not have an authenticated historical Git commit.
+    """
     try:
-        fresh, watermark = _layout_is_fresh(root, conn)
-        issues: List[dict] = []
-        if not fresh:
-            issues.append({"issue": "DRIFT_DETECTED", "owner": None, "ref": None, "scope": "index",
-                           "detail": "research-tool 索引 fingerprint 与 canonical 文件不一致（需 reindex）"})
-        issues.extend(_layout_doc_issues(conn, root))
-        issues.extend(_layout_ref_issues(conn, root))
-        hard_codes = {"INDEX_STALE", "DRIFT_DETECTED", "SOURCE_MISSING", "HASH_MISMATCH", "PROVENANCE_BROKEN", "LAYOUT_INVALID"}
-        hard_fail = any(issue["issue"] in hard_codes for issue in issues)
-        status = "fail_closed" if hard_fail else ("warning" if issues else "success")
-        errors = [{"code": issue["issue"], "detail": issue["detail"]} for issue in issues if issue["issue"] in hard_codes]
-        error_semantic = errors[0]["code"] if errors else None
-        result = [{"issues": issues, "issue_count": len(issues), "hard_fail": hard_fail}]
-        return QueryResult(
-            query_type="reconcile", status=status, authority="derived", source_watermark=watermark,
-            results=result, warnings=[] if not issues else [{"code": i["issue"], "detail": i["detail"]} for i in issues if i["issue"] not in hard_codes],
-            errors=errors, error_semantic=error_semantic,
-        ).to_dict()
+        db = db_location(root, db_path)
+        snapshot, runs = scan(root)
+        with index_lock(snapshot.root):
+            watermark = _publish_db(snapshot, runs, db)
+        return QueryResult(query_type="reindex", authority="derived", source_watermark=watermark,
+                           results=[{"path": str(db), "run_count": len(runs)}]).to_dict()
+    except (LayoutError, OSError, sqlite3.Error, UnicodeError) as exc:
+        return error_result("reindex", exc)
+
+
+@contextmanager
+def verified_index(root, db_path):
+    """Read-only DB access, full canonical validation and projection comparison."""
+    db = db_location(root, db_path)
+    require(db.is_file(), "索引不存在；请先运行 index（只读查询不会创建 SQLite）", "INDEX_STALE")
+    # Check the immutable byte fingerprint against the DB watermark before
+    # parsing any manifest. A changed canonical byte is INDEX_STALE, not a
+    # newly interpreted provenance error, until the caller explicitly reindexes.
+    snapshot = Snapshot(root)
+    with directory_fd(db.parent):
+        conn = sqlite3.connect(db.as_uri() + "?mode=ro", uri=True)
+    try:
+        conn.execute("PRAGMA query_only=ON")
+        conn.execute("BEGIN")
+        wm = dict(conn.execute("SELECT key,value FROM index_metadata"))
+        require(wm.get("layout") == "research-tool" and wm.get("schema_version") == "1" and wm.get("index_complete") == "1",
+                "索引不是完整的 research-tool v1 generation", "INDEX_STALE")
+        require(wm.get("scan_fingerprint") == snapshot.fingerprint, "索引落后于 canonical；请运行 index", "INDEX_STALE")
+        verified_snapshot, runs = scan(root)
+        require(verified_snapshot.fingerprint == snapshot.fingerprint, "canonical 在索引校验期间变化", "INDEX_STALE")
+        snapshot = verified_snapshot
+        expected = projection(snapshot, runs)
+        for table, columns in TABLE_COLUMNS.items():
+            actual = sorted(conn.execute(f"SELECT {columns} FROM {table}").fetchall(), key=json_text)
+            require(actual == expected[table], f"派生索引 {table} 与 canonical 不一致；请重建", "INDEX_STALE")
+        wm.update(index_complete=True, drift=False, last_event_id=None)
+        yield snapshot, runs, conn, wm
+        snapshot.unchanged()
     finally:
         conn.close()
 
 
-def generate_research_tool_index(root: str, db_path: Optional[str] = None, write_file: bool = True):
-    """Generate a deterministic topic/run navigation page after freshness checks."""
-    actual_db = db_path or os.path.join(root, ".index", "research.sqlite")
-    if not os.path.isfile(actual_db):
-        return {"status": "fail_closed", "error_semantic": "INDEX_STALE", "detail": "base index is stale or missing"}
-    conn = sqlite3.connect(actual_db)
-    try:
-        fresh, _ = _layout_is_fresh(root, conn)
-        if not fresh:
-            return {"status": "fail_closed", "error_semantic": "INDEX_STALE", "detail": "base index is stale or missing"}
-        topic_rows = conn.execute("SELECT id,path FROM documents WHERE doc_type='topic' ORDER BY id").fetchall()
-        run_rows = conn.execute(
-            "SELECT id,doc_type,path,status FROM documents WHERE doc_type='run_manifest' ORDER BY path"
-        ).fetchall()
-        report_rows = conn.execute(
-            "SELECT id,doc_type,path,status FROM documents WHERE doc_type IN ('report_current','report_historical') ORDER BY path"
-        ).fetchall()
-        graph_rows = conn.execute(
-            "SELECT id,path,status FROM documents WHERE doc_type='evidence_graph' ORDER BY path"
-        ).fetchall()
-        lines = [
-            "# INDEX — research-tool 导航（可重建，不是证据）",
-            "",
-            "> 本文件由 ResearchCTL 从 research-tool canonical 输出生成。",
-            "> SQLite 与 INDEX.md 均为派生物；真实性以 manifest 与 canonical artifact 为准。",
-            "",
-            "## Topics",
-            "",
-        ]
-        if topic_rows:
-            lines.extend(f"- `{topic_id}` → `{path}`" for topic_id, path in topic_rows)
-        else:
-            lines.append("- （暂无主题）")
-        lines.extend(["", "## Runs", ""])
-        if run_rows:
-            for run_id, _doc_type, path, status in run_rows:
-                lines.append(f"- `{run_id}` ({status}) → `{path}`")
-        else:
-            lines.append("- （暂无运行）")
-        lines.extend(["", "## Reports", ""])
-        if report_rows:
-            for report_id, doc_type, path, status in report_rows:
-                lines.append(f"- `{report_id}` ({doc_type}, {status}) → `{path}`")
-        else:
-            lines.append("- （暂无报告）")
-        lines.extend(["", "## Evidence graphs", ""])
-        if graph_rows:
-            for graph_id, path, status in graph_rows:
-                lines.append(f"- `{graph_id}` ({status}) → `{path}`")
-        else:
-            lines.append("- （暂无证据图）")
-        content = "\n".join(lines) + "\n"
-        if write_file:
-            index_path = os.path.join(root, "index", "INDEX.md")
-            os.makedirs(os.path.dirname(index_path), exist_ok=True)
-            with open(index_path, "w", encoding="utf-8") as handle:
-                handle.write(content)
-        return content
-    finally:
-        conn.close()
+def reconcile_research_tool(root, db_path, gitdir=None):
+    from .research_tool_query import execute
+    from types import SimpleNamespace
+    return execute(SimpleNamespace(root=root, db=db_path, command="reconcile"))
+
+
+def generate_research_tool_index(root, db_path=None, write_file=True):
+    from .research_tool_query import execute
+    from types import SimpleNamespace
+    return execute(SimpleNamespace(root=root, db=db_path or os.path.join(root, ".index", "research.sqlite"),
+                                   command="generate-index", write_file=write_file))

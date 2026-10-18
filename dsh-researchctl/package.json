@@ -1,0 +1,36 @@
+{
+  "name": "@dsh-external/dsh-researchctl",
+  "version": "0.1.0",
+  "description": "ResearchCTL 超长程科研检索与状态溯源插件（research 工具 + 调用日志与优化信号 research_log）",
+  "private": true,
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./core/analyze.js": "./lib/core/analyze.js",
+    "./core/actions.js": "./lib/core/actions.js",
+    "./core/executor.js": "./lib/core/executor.js",
+    "./core/logger.js": "./lib/core/logger.js",
+    "./core/runner.js": "./lib/core/runner.js"
+  },
+  "files": [
+    "lib",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "researchctl",
+    "retrieval",
+    "provenance"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/smoke.test.mjs test/plugin.e2e.test.mjs",
+    "log-report": "node lib/core/analyze.js --scope stats",
+    "log-signals": "node lib/core/analyze.js --scope signals",
+    "log-paths": "node lib/core/analyze.js --scope paths"
+  }
+}

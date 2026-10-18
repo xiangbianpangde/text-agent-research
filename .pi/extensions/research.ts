@@ -1,36 +1,66 @@
 /**
  * research — Pi extension for researchctl (超长程实验 Agent 检索内核).
  *
- * 依据《超长程实验 Agent 检索系统设计方案.md》§19 设计：
- * 提供统一 research 工具，支持：
- *   - query: 结构化查询、词面检索与语义检索（fallback）
- *   - trace: 溯源链下钻（从结论一路到 Raw）
- *   - sources: 验证当前/历史报告来源及 exact pinned commit/hash
- *   - history: 跨历史报告追溯结论演化
- *   - impact: 逆向依赖与下游影响链分析（定义演化/实体变更影响）
- *   - reconcile: 完整性巡检（断链/篡改/漂移/孤儿文件检测）
- *   - index: 派生 SQLite 索引构建 / 全量语义重建
+ * CLI argv / layout guard / Envelope status semantics are shared with the DSH
+ * plugin through dsh-researchctl/lib/core/*.js.  Keep this adapter thin: the
+ * host only supplies the tool schema and renders the structured result.
  */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import {
+	buildArgv,
+	layoutActionError,
+	normalizeLayout,
+} from "../../dsh-researchctl/lib/core/actions.js";
+import {
+	runResearchctl,
+	summarizeEnvelope,
+} from "../../dsh-researchctl/lib/core/runner.js";
 
-const execFileAsync = promisify(execFile);
+const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const PYTHON = process.env.RESEARCHCTL_PYTHON || "python3";
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null && !Array.isArray(value);
+
+function structuredBadArgs(
+	action: string,
+	layout: string | null,
+	root: string,
+	notes: string[],
+) {
+	const details = {
+		ok: false,
+		process_ok: false,
+		action: action || null,
+		layout,
+		root,
+		kind: "bad_args",
+		exit_code: null,
+		argv: [],
+		notes,
+	};
+	return {
+		content: [{ type: "text", text: JSON.stringify(details, null, 2) }],
+		details,
+	};
+}
 
 export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "research",
 		label: "Research State Retrieval",
 		description:
-			"超长程实验 Agent 检索系统（方案 §19）。用于确定性查询当前结论、依据来源、历史演化、逆向影响链与完整性检测。支持 actions: query, trace, sources, history, impact, reconcile, index, generate-index, ingest-raw。",
+			"超长程实验 Agent 检索系统（方案 §19）。用于确定性查询当前结论、依据来源、历史演化、完整性检测与派生索引维护。research-tool layout 仅允许 query/sources/trace/history/reconcile/index/generate-index；canonical 写入、事务和 bench 必须由 research-tool producer 执行。",
 		parameters: Type.Object({
 			layout: Type.Optional(
 				Type.Union([
 					Type.Literal("legacy"),
 					Type.Literal("research-tool"),
-				], { description: "canonical 输出布局；默认 legacy，research-tool 用于 research-output/<topic>/" })
+				], { description: "canonical 输出布局；默认 legacy。" })
 			),
 			action: Type.Union(
 				[
@@ -43,217 +73,105 @@ export default function (pi: ExtensionAPI) {
 					Type.Literal("index"),
 					Type.Literal("generate-index"),
 					Type.Literal("ingest-raw"),
+					Type.Literal("freeze-report"),
+					Type.Literal("revise-definition"),
+					Type.Literal("tx-status"),
+					Type.Literal("tx-reconcile"),
+					Type.Literal("tx-reset-guard"),
+					Type.Literal("bench"),
 				],
-				{ description: "检索或维护动作" }
+				{ description: "检索、维护、事务或评测动作；research-tool layout 会拒绝写入/事务/bench。" }
 			),
 			entity: Type.Optional(
-				Type.String({
-					description: "目标实体 ID / 引用 / 路径（用于 trace, sources, impact, 或 query --entity）",
-				})
+				Type.String({ description: "目标实体 ID / 引用 / 路径。" })
 			),
 			text: Type.Optional(
-				Type.String({
-					description: "关键词文本检索（用于 query --text）",
-				})
+				Type.String({ description: "关键词文本检索（用于 query --text）。" })
 			),
 			semantic: Type.Optional(
-				Type.Boolean({
-					description:
-						"是否启用 semantic 检索（仅作为 fallback，严禁用于替代精确 identity/version/provenance 判定）",
-				})
+				Type.Boolean({ description: "是否启用 semantic 检索；不得替代身份/版本/provenance 判定。" })
 			),
 			doc_type: Type.Optional(
-				Type.String({
-					description: "按文档类型过滤（organized / raw / run_manifest / report_current / report_historical）",
-				})
+				Type.String({ description: "按文档类型过滤。" })
 			),
 			status: Type.Optional(
-				Type.String({
-					description: "按状态过滤（valid / invalid / completed / fresh / frozen）",
-				})
+				Type.String({ description: "按状态过滤。" })
 			),
 			raw: Type.Optional(
-				Type.Boolean({
-					description: "仅列出所有 raw 实体（用于 query --raw）",
-				})
+				Type.Boolean({ description: "仅列出 raw 实体。" })
 			),
-			limit: Type.Optional(
-				Type.Integer({
-					description: "返回结果上限（默认 50）",
-				})
-			),
-			change_type: Type.Optional(
-				Type.String({
-					description: "用于 impact 预演的语义变更类型（如 contract_tightened / upstream_scope_changed）",
-				})
-			),
-			root: Type.Optional(
-				Type.String({
-					description: "研究项目根目录（默认当前工作目录）",
-				})
-			),
-			source: Type.Optional(
-				Type.String({
-					description: "原始数据目录或文件路径（用于 ingest-raw）",
-				})
-			),
-			experiment: Type.Optional(
-				Type.String({
-					description: "所属实验 ID（用于 ingest-raw，如 EXP-017）",
-				})
-			),
-			run_id: Type.Optional(
-				Type.String({
-					description: "可选 Run ID（用于 ingest-raw，缺省自动递增分配 Rxxx）",
-				})
-			),
-			experiment_ref: Type.Optional(
-				Type.String({
-					description: "可选实验规格版本（用于 ingest-raw，如 EXP-017@v1）",
-				})
-			),
-			model: Type.Optional(
-				Type.String({
-					description: "可选模型名称（用于 ingest-raw）",
-				})
-			),
-			context_length: Type.Optional(
-				Type.String({
-					description: "可选上下文长度（用于 ingest-raw，如 128K）",
-				})
-			),
-			seed: Type.Optional(
-				Type.Integer({
-					description: "可选随机种子（用于 ingest-raw）",
-				})
-			),
-			reason: Type.Optional(
-				Type.String({
-					description: "可选原因说明（用于 ingest-raw 标记 invalid 时）",
-				})
-			),
+			limit: Type.Optional(Type.Integer({ description: "返回结果上限。" })),
+			topic: Type.Optional(Type.String({ description: "research-tool topic_slug 过滤。" })),
+			as_of: Type.Optional(Type.String({ description: "history 的 UTC ISO 截止时刻。" })),
+			change_type: Type.Optional(Type.String({ description: "impact 预演的语义变更类型。" })),
+			commit: Type.Optional(Type.String({ description: "index 使用的 git commit 引用（legacy）。" })),
+			root: Type.Optional(Type.String({ description: "研究项目根目录（默认当前工作目录）。" })),
+			source: Type.Optional(Type.String({ description: "ingest-raw 原始数据目录或文件路径。" })),
+			experiment: Type.Optional(Type.String({ description: "ingest-raw 所属实验 ID。" })),
+			run_id: Type.Optional(Type.String({ description: "ingest-raw 可选 Run ID。" })),
+			experiment_ref: Type.Optional(Type.String({ description: "ingest-raw 实验规格版本。" })),
+			model: Type.Optional(Type.String({ description: "ingest-raw 模型名称。" })),
+			context_length: Type.Optional(Type.String({ description: "ingest-raw 上下文长度。" })),
+			seed: Type.Optional(Type.Integer({ description: "ingest-raw 随机种子。" })),
+			reason: Type.Optional(Type.String({ description: "写入动作的原因说明。" })),
+			idempotency_key: Type.Optional(Type.String({ description: "事务幂等键。" })),
+			actor: Type.Optional(Type.String({ description: "事务执行者标识。" })),
+			authorization_ref: Type.Optional(Type.String({ description: "事务授权引用。" })),
+			approval_ref: Type.Optional(Type.String({ description: "定义修订审批引用。" })),
+			reason_refs: Type.Optional(Type.String({ description: "事务原因引用列表。" })),
+			definition: Type.Optional(Type.String({ description: "revise-definition 目标定义 ID。" })),
+			expected_previous: Type.Optional(Type.String({ description: "定义修订期望前驱版本。" })),
+			definition_input: Type.Optional(Type.String({ description: "定义修订输入文件。" })),
+			crash_after: Type.Optional(Type.String({ description: "测试故障注入点。" })),
+			track: Type.Optional(Type.String({ description: "bench Track。" })),
+			scenario: Type.Optional(Type.String({ description: "bench 场景 ID。" })),
+			save_json: Type.Optional(Type.String({ description: "bench 结果保存路径。" })),
+			timeout_seconds: Type.Optional(Type.Number({ description: "本次调用超时秒数。" })),
 		}),
 		async execute(_id, params, _signal) {
-			const projectRoot = params.root || process.cwd();
-			const layout = params.layout || "legacy";
-			const cmdArgs: string[] = ["-m", "researchctl", "--layout", layout, "--root", projectRoot];
+			const input = params as Record<string, any>;
+			const action = typeof input.action === "string" ? input.action.trim() : "";
+			const projectRoot = typeof input.root === "string" && input.root.trim() !== ""
+				? input.root.trim()
+				: process.cwd();
+			const layout = normalizeLayout(input.layout);
+			const built = buildArgv(action, input);
+			const guard = layout === null
+				? `layout 必须是 legacy 或 research-tool（收到 ${String(input.layout)}）。`
+				: layoutActionError(action, layout);
+			if (guard) return structuredBadArgs(action, layout, projectRoot, [guard]);
+			if (built.errors.length > 0) return structuredBadArgs(action, layout, projectRoot, built.errors);
 
-			if (layout === "research-tool" && params.action === "ingest-raw") {
-				return {
-					content: [{ type: "text", text: "Error: ingest-raw is unavailable for research-tool layout; research-tool owns canonical run writes." }],
-					details: { ok: false, error: "ingest-raw unavailable for research-tool layout" },
-				};
-			}
-
-			switch (params.action) {
-				case "query": {
-					cmdArgs.push("query");
-					if (params.entity) cmdArgs.push("--entity", params.entity);
-					if (params.doc_type) cmdArgs.push("--doc-type", params.doc_type);
-					if (params.status) cmdArgs.push("--status", params.status);
-					if (params.raw) cmdArgs.push("--raw");
-					if (params.text) cmdArgs.push("--text", params.text);
-					if (params.semantic) cmdArgs.push("--semantic");
-					if (params.limit !== undefined) cmdArgs.push("--limit", String(params.limit));
-					break;
-				}
-				case "trace": {
-					cmdArgs.push("trace");
-					if (!params.entity) {
-						return {
-							content: [{ type: "text", text: "Error: trace action requires 'entity' parameter." }],
-							details: { ok: false, error: "entity parameter required" },
-						};
-					}
-					cmdArgs.push(params.entity);
-					break;
-				}
-				case "sources": {
-					cmdArgs.push("sources");
-					if (!params.entity) {
-						return {
-							content: [{ type: "text", text: "Error: sources action requires 'entity' parameter (owner ID)." }],
-							details: { ok: false, error: "entity parameter required" },
-						};
-					}
-					cmdArgs.push(params.entity);
-					break;
-				}
-				case "history": {
-					cmdArgs.push("history");
-					break;
-				}
-				case "impact": {
-					cmdArgs.push("impact");
-					if (!params.entity) {
-						return {
-							content: [{ type: "text", text: "Error: impact action requires 'entity' parameter." }],
-							details: { ok: false, error: "entity parameter required" },
-						};
-					}
-					cmdArgs.push(params.entity);
-					if (params.change_type) cmdArgs.push("--change-type", params.change_type);
-					break;
-				}
-				case "reconcile": {
-					cmdArgs.push("reconcile");
-					break;
-				}
-				case "index": {
-					cmdArgs.push("index");
-					if (params.semantic) cmdArgs.push("--semantic");
-					break;
-				}
-				case "generate-index": {
-					cmdArgs.push("generate-index");
-					break;
-				}
-				case "ingest-raw": {
-					cmdArgs.push("ingest-raw");
-					if (!params.experiment || !params.source) {
-						return {
-							content: [{ type: "text", text: "Error: ingest-raw requires both 'experiment' and 'source' parameters." }],
-							details: { ok: false, error: "experiment and source parameters required" },
-						};
-					}
-					cmdArgs.push("--experiment", params.experiment);
-					cmdArgs.push("--source", params.source);
-					if (params.run_id) cmdArgs.push("--run-id", params.run_id);
-					if (params.experiment_ref) cmdArgs.push("--experiment-ref", params.experiment_ref);
-					if (params.status) cmdArgs.push("--status", params.status);
-					if (params.model) cmdArgs.push("--model", params.model);
-					if (params.context_length) cmdArgs.push("--context-length", params.context_length);
-					if (params.seed !== undefined) cmdArgs.push("--seed", String(params.seed));
-					if (params.reason) cmdArgs.push("--reason", params.reason);
-					break;
-				}
-			}
-
+			const result = await runResearchctl({
+				pythonPath: PYTHON,
+				root: projectRoot,
+				moduleRoot: MODULE_ROOT,
+				argv: built.argv,
+				layout,
+				timeoutMs: Number.isFinite(input.timeout_seconds) && input.timeout_seconds > 0
+					? Math.floor(input.timeout_seconds * 1000)
+					: 180000,
+				signal: _signal,
+			});
+			const envelope = summarizeEnvelope(result.stdout);
+			const failClosed = envelope.parsed && ["error", "fail_closed"].includes(envelope.status);
+			// A parsed fail-closed envelope proves the CLI ran, even when the CLI
+			// deliberately exits non-zero. Keep that transport fact separate.
+			const processOk = result.ok || failClosed;
+			const ok = processOk && !failClosed;
+			let parsed: unknown;
 			try {
-				const { stdout, stderr } = await execFileAsync("python3", cmdArgs, {
-					cwd: projectRoot,
-					env: { ...process.env, PYTHONPATH: projectRoot },
-					maxBuffer: 10 * 1024 * 1024,
-				});
-
-				let parsed: unknown;
-				try {
-					parsed = JSON.parse(stdout);
-				} catch {
-					parsed = { raw: stdout, stderr };
-				}
-
-				return {
-					content: [{ type: "text", text: JSON.stringify(parsed, null, 2) }],
-					details: parsed,
-				};
-			} catch (err: unknown) {
-				const errorMsg = err instanceof Error ? err.message : String(err);
-				return {
-					content: [{ type: "text", text: `Execution failed: ${errorMsg}` }],
-					details: { ok: false, error: errorMsg },
-				};
+				parsed = JSON.parse(result.stdout);
+			} catch {
+				parsed = { raw: result.stdout, stderr: result.stderr };
 			}
+			const details = isRecord(parsed)
+				? { ...parsed, ok, process_ok: processOk, action, layout, argv: ["-m", "researchctl", "--layout", layout, "--root", projectRoot, ...built.argv] }
+				: { ok, process_ok: processOk, action, layout, argv: built.argv, envelope: parsed };
+			return {
+				content: [{ type: "text", text: JSON.stringify(details, null, 2) }],
+				details,
+			};
 		},
 	});
 }

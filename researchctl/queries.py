@@ -95,6 +95,9 @@ def _has_hard_error(status: str) -> bool:
 # ---------------- query ----------------
 
 def cmd_query(args) -> dict:
+    if getattr(args, "layout", "legacy") == "research-tool":
+        from .layouts.research_tool_query import dispatch
+        return dispatch(args)
     if getattr(args, "semantic", False) and getattr(args, "text", None) and not (
         getattr(args, "entity", None) or getattr(args, "doc_type", None) or getattr(args, "status", None) or getattr(args, "raw", False)
     ):
@@ -184,6 +187,9 @@ def cmd_query(args) -> dict:
 # ---------------- sources ----------------
 
 def cmd_sources(args) -> dict:
+    if getattr(args, "layout", "legacy") == "research-tool":
+        from .layouts.research_tool_query import dispatch
+        return dispatch(args)
     conn = _connect(args.db)
     try:
         owner = args.owner
@@ -260,6 +266,9 @@ def cmd_sources(args) -> dict:
 
 def cmd_impact(args) -> dict:
     """查询逆向依赖与下游影响链（方案 §19 核心命令）。"""
+    if getattr(args, "layout", "legacy") == "research-tool":
+        from .layouts.research_tool_query import dispatch
+        return dispatch(args)
     conn = _connect(args.db)
     try:
         target = args.entity
@@ -474,6 +483,9 @@ def cmd_impact(args) -> dict:
 # ---------------- trace ----------------
 
 def cmd_trace(args) -> dict:
+    if getattr(args, "layout", "legacy") == "research-tool":
+        from .layouts.research_tool_query import dispatch
+        return dispatch(args)
     conn = _connect(args.db)
     try:
         entity = args.entity
@@ -554,6 +566,9 @@ def cmd_trace(args) -> dict:
 # ---------------- history ----------------
 
 def cmd_history(args) -> dict:
+    if getattr(args, "layout", "legacy") == "research-tool":
+        from .layouts.research_tool_query import dispatch
+        return dispatch(args)
     conn = _connect(args.db)
     try:
         # 所有报告（当前 + 历史）

@@ -1,0 +1,6 @@
+node_modules/
+lib/
+*.tsbuildinfo
+*.tgz
+# 日志主目录不可写时的仓库内降级目录
+.dsh-logs/

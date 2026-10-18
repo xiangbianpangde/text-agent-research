@@ -28,8 +28,8 @@ def main(argv=None) -> int:
     sub = p.add_subparsers(dest="command", required=True)
 
     sp = sub.add_parser("index", help="构建/重建派生 SQLite 索引")
-    sp.add_argument("--commit", default="HEAD", help="git commit 引用（默认 HEAD）")
-    sp.add_argument("--semantic", action="store_true", help="P1-C: 原子全量重建 semantic 派生索引")
+    sp.add_argument("--commit", default="HEAD", help="legacy git commit 引用；research-tool 忽略")
+    sp.add_argument("--semantic", action="store_true", help="P1-C: 原子全量重建 semantic 派生索引（research-tool layout 拒绝）")
     sp.set_defaults(func=cmd_index)
 
     sp = sub.add_parser("query", help="结构化查询（SQLite）+ lexical 关键词检索")
@@ -38,32 +38,38 @@ def main(argv=None) -> int:
     sp.add_argument("--status", help="按状态查询（valid/invalid/completed/...）")
     sp.add_argument("--raw", action="store_true", help="列出所有 raw 实体")
     sp.add_argument("--text", help="lexical 关键词检索（匹配文件内容/路径/实体名）")
-    sp.add_argument("--semantic", action="store_true", help="P1-C: semantic fallback 检索")
+    sp.add_argument("--topic", help="research-tool topic_slug（多 topic 根下必须显式指定）")
+    sp.add_argument("--semantic", action="store_true", help="P1-C: semantic fallback 检索（research-tool layout 拒绝）")
     sp.add_argument("--limit", type=int, default=50, help="限制返回结果数（默认 50）")
     sp.set_defaults(func=cmd_query)
 
     sp = sub.add_parser("sources", help="查询实体来源并校验（含精确版本）")
     sp.add_argument("owner", help="实体 ID：CURRENT / REPORT-001 / ORG-EXP017 / ...")
-    sp.add_argument("--semantic", action="store_true", help="P1-C: 忽略该开关（closed table）")
+    sp.add_argument("--topic", help="research-tool topic_slug（多 topic 根下必须显式指定）")
+    sp.add_argument("--semantic", action="store_true", help="P1-C: research-tool layout 拒绝 semantic")
     sp.set_defaults(func=cmd_sources)
 
     sp = sub.add_parser("trace", help="provenance 追踪链")
     sp.add_argument("entity", help="起点实体 ID")
-    sp.add_argument("--semantic", action="store_true", help="P1-C: 忽略该开关（closed table）")
+    sp.add_argument("--topic", help="research-tool topic_slug（多 topic 根下必须显式指定）")
+    sp.add_argument("--semantic", action="store_true", help="P1-C: research-tool layout 拒绝 semantic")
     sp.set_defaults(func=cmd_trace)
 
     sp = sub.add_parser("history", help="历史报告 / 结论演化")
-    sp.add_argument("--as-of", dest="as_of", default=None, help="只返回该 ISO-8601 时刻及之前的历史状态")
-    sp.add_argument("--semantic", action="store_true", help="P1-C: 忽略该开关（closed table）")
+    sp.add_argument("--as-of", dest="as_of", default=None, help="只返回明确 UTC ISO 时刻及之前的运行")
+    sp.add_argument("--topic", help="research-tool topic_slug（多 topic 根下过滤主题）")
+    sp.add_argument("--semantic", action="store_true", help="P1-C: research-tool layout 拒绝 semantic")
     sp.set_defaults(func=cmd_history)
 
-    sp = sub.add_parser("impact", help="逆向依赖与下游影响链分析（方案 §19）")
-    sp.add_argument("entity", help="目标实体 ID 或路径（如 R051, ORG-EXP017, H003@v1）")
-    sp.add_argument("--change-type", help="可选：预演语义变更类型（如 contract_tightened），计算推演影响分类")
-    sp.add_argument("--semantic", action="store_true", help="P1-C: 忽略该开关（closed table）")
+    sp = sub.add_parser("impact", help="逆向依赖与下游影响链分析（方案 §19；research-tool 未实现）")
+    sp.add_argument("entity", help="目标实体 ID 或路径")
+    sp.add_argument("--change-type", help="legacy 兼容参数")
+    sp.add_argument("--topic", help="research-tool topic_slug")
+    sp.add_argument("--semantic", action="store_true", help="research-tool layout 拒绝 semantic")
     sp.set_defaults(func=cmd_impact)
 
     sp = sub.add_parser("reconcile", help="完整性检测（断链/hash/漂移/缺失/orphan）")
+    sp.add_argument("--topic", help="research-tool topic_slug")
     sp.set_defaults(func=cmd_reconcile)
 
     # ---- P1-A Evented Freeze ----
@@ -103,7 +109,8 @@ def main(argv=None) -> int:
     sp.set_defaults(func=cmd_revise_definition)
 
     # ---- 方案 §12: 导航层 INDEX.md 生成 ----
-    sp = sub.add_parser("generate-index", help="自动生成/刷新全局导航 index/INDEX.md（方案 §12）")
+    sp = sub.add_parser("generate-index", help="自动生成/刷新全局导航 index/INDEX.md（research-tool 为派生展示页）")
+    sp.add_argument("--topic", help="research-tool topic_slug")
     sp.set_defaults(func=cmd_generate_index)
 
     # ---- 方案 §14: Raw Ingest Hook ----
@@ -133,11 +140,30 @@ def main(argv=None) -> int:
     args.gitdir = args.root
 
     if not os.path.isdir(args.root):
-        print(f"error: 项目根目录不存在: {args.root}", file=sys.stderr)
+        if args.layout == "research-tool":
+            from .layouts.research_tool import error_result, LayoutError
+            print(json.dumps(error_result(args.command, LayoutError(
+                f"项目根目录不存在: {args.root}", "SOURCE_UNAVAILABLE")), ensure_ascii=False, indent=2))
+        else:
+            print(f"error: 项目根目录不存在: {args.root}", file=sys.stderr)
         return 1
 
     try:
-        out = args.func(args)
+        if args.layout == "research-tool":
+            allowed = {"index", "query", "sources", "trace", "history", "impact", "reconcile", "generate-index"}
+            if args.command not in allowed:
+                from .layouts.research_tool import error_result, LayoutError
+                out = error_result(args.command, LayoutError(
+                    f"research-tool layout 仅允许: {', '.join(sorted(allowed))}",
+                    "UNSUPPORTED_OPERATION",
+                ))
+            elif args.command == "index":
+                out = args.func(args)
+            else:
+                from .layouts.research_tool_query import dispatch
+                out = dispatch(args)
+        else:
+            out = args.func(args)
     except Exception as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -148,23 +174,24 @@ def main(argv=None) -> int:
         return int(out)
 
     print(json.dumps(out, ensure_ascii=False, indent=2))
+    if args.layout == "research-tool" and isinstance(out, dict) and out.get("status") in {"error", "fail_closed"}:
+        return 1
     return 0
 
 
 def cmd_index(args):
     if getattr(args, "layout", "legacy") == "research-tool":
-        from .layouts.research_tool import build_research_tool_index
-        wm = build_research_tool_index(args.root, args.db, git_commit=args.commit)
-    else:
+        from .layouts.research_tool import build_research_tool_index, error_result, LayoutError
         if getattr(args, "semantic", False):
-            from .semantic import build_semantic_index
-            return build_semantic_index(args.root, args.db)
-        wm = build_index(args.root, args.db, git_commit=args.commit)
+            return error_result("reindex", LayoutError(
+                "research-tool layout 不支持 semantic identity/provenance", "UNSUPPORTED_OPERATION"))
+        return build_research_tool_index(args.root, args.db, git_commit=args.commit)
+    if getattr(args, "semantic", False):
+        from .semantic import build_semantic_index
+        return build_semantic_index(args.root, args.db)
+    wm = build_index(args.root, args.db, git_commit=args.commit)
     return {
-        "query_id": "index",
-        "query_type": "reindex",
-        "status": "success",
-        "authority": "derived",
+        "query_id": "index", "query_type": "reindex", "status": "success", "authority": "derived",
         "source_watermark": wm,
         "results": [{"detail": f"派生索引已构建: {args.db}", "watermark": wm}],
         "warnings": [], "errors": [], "error_semantic": None,
