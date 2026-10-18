@@ -11,14 +11,18 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import {
+	ACTIONS,
 	buildArgv,
 	layoutActionError,
 	normalizeLayout,
 } from "../../dsh-researchctl/lib/core/actions.js";
 import {
+	classifyEnvelope,
+	deriveSignals,
 	runResearchctl,
 	summarizeEnvelope,
 } from "../../dsh-researchctl/lib/core/runner.js";
+import { createLogger, sanitizeArgs } from "../../dsh-researchctl/lib/core/logger.js";
 
 const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const PYTHON = process.env.RESEARCHCTL_PYTHON || "python3";
@@ -154,11 +158,10 @@ export default function (pi: ExtensionAPI) {
 				signal: _signal,
 			});
 			const envelope = summarizeEnvelope(result.stdout);
-			const failClosed = envelope.parsed && ["error", "fail_closed"].includes(envelope.status);
 			// A parsed fail-closed envelope proves the CLI ran, even when the CLI
 			// deliberately exits non-zero. Keep that transport fact separate.
-			const processOk = result.ok || failClosed;
-			const ok = processOk && !failClosed;
+			const outcome = classifyEnvelope(result, envelope);
+			const { processOk, ok } = outcome;
 			let parsed: unknown;
 			try {
 				parsed = JSON.parse(result.stdout);
