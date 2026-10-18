@@ -146,7 +146,9 @@ test('research_log：从日志聚合出统计与信号', { skip: !HAS_FIXTURE },
 })
 
 
-test('wiki 工具：只读动作可用，写动作缺 args 时报 bad_args', { skip: !HAS_WIKI_CLI }, async () => {
+test('wiki 工具：只读动作可用，写动作缺 args 时报 bad_args', {
+  skip: !HAS_WIKI_CLI ? 'isolated worktree does not contain tools/wiki.py; main-worktree uncommitted Wiki CLI is intentionally not used' : false,
+}, async () => {
   assert.ok(WIKI_ACTION_NAMES.includes('issue_add') && WIKI_ACTION_NAMES.includes('suggest'))
   assert.deepEqual(buildWikiArgv('issue_list', ['--status', 'open']).argv, ['issue', 'list', '--status', 'open'])
   assert.equal(buildWikiArgv('issue_add', []).errors.length, 1)

@@ -28,7 +28,7 @@
   },
   "license": "MIT",
   "scripts": {
-    "test": "node --test test/smoke.test.mjs test/plugin.e2e.test.mjs",
+    "test": "node --test test/smoke.test.mjs test/plugin.e2e.test.mjs test/layout.integration.test.mjs",
     "log-report": "node lib/core/analyze.js --scope stats",
     "log-signals": "node lib/core/analyze.js --scope signals",
     "log-paths": "node lib/core/analyze.js --scope paths"
