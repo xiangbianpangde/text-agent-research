@@ -26,6 +26,7 @@ def _connect(db_path: str) -> sqlite3.Connection:
 def get_watermark(conn: sqlite3.Connection) -> dict:
     rows = dict(conn.execute("SELECT key,value FROM index_metadata").fetchall())
     return {
+        "layout": rows.get("layout", "legacy"),
         "index_built_at": rows.get("index_built_at"),
         "last_event_id": rows.get("last_event_id") or None,
         "index_complete": rows.get("index_complete") == "1",
@@ -34,8 +35,16 @@ def get_watermark(conn: sqlite3.Connection) -> dict:
     }
 
 
-def current_fingerprint(root: str) -> str:
-    """对当前文件系统重新计算 scan fingerprint。"""
+def current_fingerprint(root: str, layout: str = "legacy") -> str:
+    """对当前文件系统重新计算 scan fingerprint。
+
+    ``research-tool`` owns ``index/`` as a derived navigation directory as
+    well as ``.index/`` for SQLite.  Excluding both prevents generating
+    ``INDEX.md`` from making an otherwise fresh index stale.
+    """
+    if layout == "research-tool":
+        from .layouts.research_tool import research_tool_fingerprint
+        return research_tool_fingerprint(root)
     import hashlib
     from .hashing import file_hash
     lines = []
@@ -63,7 +72,7 @@ def _query_envelope(qt: str, conn: sqlite3.Connection, root: str, results=None,
     wm = get_watermark(conn)
     drift = False
     if wm.get("scan_fingerprint"):
-        drift = current_fingerprint(root) != wm["scan_fingerprint"]
+        drift = current_fingerprint(root, layout=wm.get("layout", "legacy")) != wm["scan_fingerprint"]
     wm["drift"] = drift
     if drift and index_dependent:
         status = "fail_closed"

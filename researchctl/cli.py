@@ -22,6 +22,8 @@ def main(argv=None) -> int:
     )
     p.add_argument("--version", action="version", version=f"researchctl {__version__}")
     p.add_argument("--root", default="fixture", help="fixture 项目根目录（默认 fixture）")
+    p.add_argument("--layout", choices=("legacy", "research-tool"), default="legacy",
+                   help="canonical 输出布局（默认 legacy；支持 research-tool）")
     p.add_argument("--db", default=None, help="SQLite 派生索引路径（默认 <root>/.index/research.sqlite）")
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -150,10 +152,14 @@ def main(argv=None) -> int:
 
 
 def cmd_index(args):
-    if getattr(args, "semantic", False):
-        from .semantic import build_semantic_index
-        return build_semantic_index(args.root, args.db)
-    wm = build_index(args.root, args.db, git_commit=args.commit)
+    if getattr(args, "layout", "legacy") == "research-tool":
+        from .layouts.research_tool import build_research_tool_index
+        wm = build_research_tool_index(args.root, args.db, git_commit=args.commit)
+    else:
+        if getattr(args, "semantic", False):
+            from .semantic import build_semantic_index
+            return build_semantic_index(args.root, args.db)
+        wm = build_index(args.root, args.db, git_commit=args.commit)
     return {
         "query_id": "index",
         "query_type": "reindex",
@@ -166,7 +172,10 @@ def cmd_index(args):
 
 
 def cmd_reconcile(args):
-    return run_reconcile(args.root, args.db, args.gitdir)
+    if getattr(args, "layout", "legacy") == "research-tool":
+        from .layouts.research_tool import reconcile_research_tool
+        return reconcile_research_tool(args.root, args.db, args.gitdir)
+    return run_reconcile(args.root, args.db, args.gitdir, layout=getattr(args, "layout", "legacy"))
 
 
 # ---- P1-A 命令 ----------------
@@ -239,8 +248,12 @@ def cmd_revise_definition(args):
 
 def cmd_generate_index(args):
     import uuid
-    from .navigator import generate_index_md
-    content = generate_index_md(args.root, args.db, write_file=True)
+    if getattr(args, "layout", "legacy") == "research-tool":
+        from .layouts.research_tool import generate_research_tool_index
+        content = generate_research_tool_index(args.root, args.db, write_file=True)
+    else:
+        from .navigator import generate_index_md
+        content = generate_index_md(args.root, args.db, write_file=True)
     if isinstance(content, dict) and content.get("status") == "fail_closed":
         return {
             "query_id": uuid.uuid4().hex[:12],

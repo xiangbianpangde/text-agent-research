@@ -152,8 +152,15 @@ def _check_orphans(conn, root) -> List[dict]:
     return issues
 
 
-def run_reconcile(root: str, db_path: str, gitdir: str) -> dict:
-    """执行完整性检测，返回 reconcile 报告。"""
+def run_reconcile(root: str, db_path: str, gitdir: str, layout: str = "legacy") -> dict:
+    """执行完整性检测，返回 reconcile 报告。
+
+    ``layout`` 默认保持 legacy；research-tool 由其布局适配器执行不带
+    ``.sources.yaml`` 规则的 canonical/provenance 校验。
+    """
+    if layout == "research-tool":
+        from .layouts.research_tool import reconcile_research_tool
+        return reconcile_research_tool(root, db_path, gitdir)
     conn = _connect(db_path)
     try:
         issues = []
