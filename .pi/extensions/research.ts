@@ -26,6 +26,12 @@ export default function (pi: ExtensionAPI) {
 		description:
 			"超长程实验 Agent 检索系统（方案 §19）。用于确定性查询当前结论、依据来源、历史演化、逆向影响链与完整性检测。支持 actions: query, trace, sources, history, impact, reconcile, index, generate-index, ingest-raw。",
 		parameters: Type.Object({
+			layout: Type.Optional(
+				Type.Union([
+					Type.Literal("legacy"),
+					Type.Literal("research-tool"),
+				], { description: "canonical 输出布局；默认 legacy，research-tool 用于 research-output/<topic>/" })
+			),
 			action: Type.Union(
 				[
 					Type.Literal("query"),
@@ -129,7 +135,15 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_id, params, _signal) {
 			const projectRoot = params.root || process.cwd();
-			const cmdArgs: string[] = ["-m", "researchctl", "--root", projectRoot];
+			const layout = params.layout || "legacy";
+			const cmdArgs: string[] = ["-m", "researchctl", "--layout", layout, "--root", projectRoot];
+
+			if (layout === "research-tool" && params.action === "ingest-raw") {
+				return {
+					content: [{ type: "text", text: "Error: ingest-raw is unavailable for research-tool layout; research-tool owns canonical run writes." }],
+					details: { ok: false, error: "ingest-raw unavailable for research-tool layout" },
+				};
+			}
 
 			switch (params.action) {
 				case "query": {
