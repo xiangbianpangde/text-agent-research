@@ -35,6 +35,7 @@ function structuredBadArgs(
 	layout: string | null,
 	root: string,
 	notes: string[],
+	extra: Record<string, unknown> = {},
 ) {
 	const details = {
 		ok: false,
@@ -46,6 +47,7 @@ function structuredBadArgs(
 		exit_code: null,
 		argv: [],
 		notes,
+		...extra,
 	};
 	return {
 		content: [{ type: "text", text: JSON.stringify(details, null, 2) }],
