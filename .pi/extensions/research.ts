@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import {
+	ACTIONS,
 	buildArgv,
 	layoutActionError,
 	normalizeLayout,
