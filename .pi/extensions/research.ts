@@ -11,14 +11,13 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import {
-	ACTIONS,
 	buildArgv,
 	layoutActionError,
 	normalizeLayout,
 } from "../../dsh-researchctl/lib/core/actions.js";
 import {
+	buildResearchctlArgv,
 	classifyEnvelope,
-	deriveSignals,
 	runResearchctl,
 	summarizeEnvelope,
 } from "../../dsh-researchctl/lib/core/runner.js";
@@ -170,9 +169,10 @@ export default function (pi: ExtensionAPI) {
 			} catch {
 				parsed = { raw: result.stdout, stderr: result.stderr };
 			}
+			const cliArgv = buildResearchctlArgv({ root: projectRoot, argv: built.argv, layout });
 			const details = isRecord(parsed)
-				? { ...parsed, ok, process_ok: processOk, action, layout, argv: ["-m", "researchctl", "--layout", layout, "--root", projectRoot, ...built.argv] }
-				: { ok, process_ok: processOk, action, layout, argv: built.argv, envelope: parsed };
+				? { ...parsed, ok, process_ok: processOk, action, layout, argv: cliArgv }
+				: { ok, process_ok: processOk, action, layout, argv: cliArgv, envelope: parsed };
 			return {
 				content: [{ type: "text", text: JSON.stringify(details, null, 2) }],
 				details,
