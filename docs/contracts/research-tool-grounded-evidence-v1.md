@@ -4,7 +4,7 @@ Date: 2026-10-23. This reader adds capabilities; it does not certify clinical tr
 
 ## Capability handshake
 
-`python -m researchctl --layout research-tool --root ROOT capabilities` returns `retrieval-manifest/v1`, `report-review/v1`, and `evidence-snapshot/v1`. An older reader or a legacy layout must not silently satisfy these contracts.
+`python -m researchctl --layout research-tool --root ROOT capabilities` returns `retrieval-manifest/v1`, `report-review/v1`, `evidence-snapshot/v1`, and `issue-evaluation/v1`. An older reader or a legacy layout must not silently satisfy these contracts.
 
 ## Final manifest compatibility
 
@@ -31,6 +31,18 @@ Companion producer branch `feat/researchctl-grounded-report-20261023` generated 
 The frozen ten-public-fulltext acceptance covers 2070 ledger facts, 60 Chinese template observations plus 27 required original anchors, 147 report claims and 125 final-file hashes. An independent Agent source rereading record passed within explicit limits; current Agent adoption succeeds while human clinical adoption fails closed. All 107 unresolved findings and 28 limitations remain. This is not new-search coverage, latest systematic review or clinical validation. Previous machine successes rejected by source review remain rejected. Zero-model resume, index/trace/sources/reconcile and exact report hash were rechecked.
 
 Local producer evidence stays in its ignored implementation output and the authorized medical workspace; no papers, private patients or credentials are part of either repository. Reader layout/body tests11 and legacy443checks pass; three existing benchmark attestation/public-root failures reproduce on the unchanged baseline and are not re-certified here.
+
+## Explicit reviewed issue evaluation (I1–I4)
+
+The companion producer keeps `disposition.policy=raw` by default without changing runtime19 input identity. Explicit reviewed consumption pins a single registry HEAD, the reader implementation/interpreter identity and `issue-evaluation/v1` capability before collection. No legacy/unknown reader fallback is permitted.
+
+`final/issue-evaluation.json` is report-runtime committed and byte-equal to its envelope value. It embeds `issue-ledger-snapshot/v1` with the single content-addressed HEAD chain, state digest and exact hash-pinned original audit/graph artifact bytes. The reader verifies every revision/event hash, fully replays initialize/import/proposal/review/network/history transitions in a pure read-only projection, checks each intermediate state digest and recomputes effective required issues/counts from raw findings and children/canonical links. It never writes a second registry or lets SQLite become authority. Network/policy changes invalidate old approvals; current closure evidence cannot disappear merely because an inspection omits a finding.
+
+Summary and per-run manifest required_contracts must exactly match the committed sidecar, including historical runs without a current summary. Raw manifests stay v1; explicit reviewed manifests use schema_version=2 so real pinned old v1 readers reject rather than silently ignoring added fields. Report review additionally pins issue-evaluation SHA, HEAD, network and policy digests. Unknown schema, changed proposal/state/counts, missing review version, symlink/hash/span failures fail closed. Raw verdicts and the four canonical final record fields are unchanged; extra final sidecars remain in the full committed file set.
+
+Issue closure is an Agent decision, not medical truth: scientific_answered, administratively_disposed and new_scientific_evidence_added remain separate. Synonym grouping, same-register papers, secondary citations and context containment do not automatically create independent scientific evidence or close issues. The actual medical rehearsal imported107 findings +28 limitations, created135 classification proposals and238 mapping candidates without approving them;135 required issues remain unresolved and scientific/new-evidence counts are zero. Original173 run files remain unchanged.
+
+Implementation checkpoint: reader `1602bd48bcefb921b0a20fc2614fd646429c1d6e` and producer `b1c25a58dc5e12f1c55a2d71fe1b4012a257ed79`, on non-main feature branches. Existing Pi /review replay/evidence and evaluation/projection scopes both approve0 after adverse-case fixes; actual producer pre-push1381 passed/3 skipped, reader11 and legacy443checks passed. No package version/tag/main change.
 
 ## Verification
 
