@@ -24,6 +24,14 @@ Append-only `runs/<id>/reviews/*.json` records use `report-review/v1`. Each is b
 
 `query --entity CURRENT --require-review agent_source_review` only adopts that exact current successful report when its latest unambiguous pinned review passed. Missing/rejected review or failed current execution cannot fall back to an earlier machine success. `human_clinical` does not match an Agent review.
 
+## Cross-repository accepted scope (2026-10-23)
+
+Companion producer branch `feat/researchctl-grounded-report-20261023` generated independent run `d672f7fb457b4d4eaa00ba4f8c60847a` using runtime19/source commit `6dcbd99`; resume stage projection was subsequently fixed by `eb9f232` without changing report bytes. The report SHA is `1952b47401b0b7113aaddaed9dea83531844097dd7d4c722b0bfc950660ce585`.
+
+The frozen ten-public-fulltext acceptance covers 2070 ledger facts, 60 Chinese template observations plus 27 required original anchors, 147 report claims and 125 final-file hashes. An independent Agent source rereading record passed within explicit limits; current Agent adoption succeeds while human clinical adoption fails closed. All 107 unresolved findings and 28 limitations remain. This is not new-search coverage, latest systematic review or clinical validation. Previous machine successes rejected by source review remain rejected. Zero-model resume, index/trace/sources/reconcile and exact report hash were rechecked.
+
+Local producer evidence stays in its ignored implementation output and the authorized medical workspace; no papers, private patients or credentials are part of either repository. Reader layout/body tests11 and legacy443checks pass; three existing benchmark attestation/public-root failures reproduce on the unchanged baseline and are not re-certified here.
+
 ## Verification
 
 Producer integration tests live in research-tool and execute its actual nine-stage pipeline with only external search/model I/O replaced. Reader-specific tests are `researchctl/tests/test_grounded_evidence_queries.py` and `test_research_tool_layout.py`. Full-source counterexamples, snapshot recovery and malicious numerical rewrites are exercised by the producer tests.
