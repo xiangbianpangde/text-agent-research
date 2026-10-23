@@ -1,5 +1,7 @@
 # ResearchCTL · 文字 Agent 检索与超长程实验状态系统
 
+research-tool布局新增成文前全量证据查询及独立审校采用状态，合同与验证边界见[grounded evidence v1](docs/contracts/research-tool-grounded-evidence-v1.md)。它不把机器成功、来源哈希通过或Agent审校当成人类临床验收。
+
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](#技术架构与引擎实现)
 [![Tests Status](https://img.shields.io/badge/tests-152%20passed-success.svg)](#基准测试与自动化验证)

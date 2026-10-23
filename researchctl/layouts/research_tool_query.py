@@ -49,7 +49,9 @@ def _run_item(run, *, kind=None, path=None, suffix=None):
         "section": None,
         "status": {
             "execution": run["record"]["verdict"],
-            "research": "fresh" if run["success"] else "incomplete",
+            "research": ("source_review_passed" if run["review"]["status"] == "passed"
+                         else "source_review_rejected" if run["review"]["status"] == "rejected"
+                         else "execution_success" if run["success"] else "incomplete"),
         },
         "relation_type": None,
         "is_stale": False,
@@ -65,6 +67,7 @@ def _run_item(run, *, kind=None, path=None, suffix=None):
         "latest_success": run["is_latest_success"],
         "report_type": run["report_type"],
         "current_run": run["current_run"],
+        "review": run["review"],
     }
     return value
 
@@ -251,6 +254,14 @@ def query(args):
             rows.extend(candidates)
         if entity == "CURRENT":
             current = _resolve_current(selected, topic)
+            required_review = _args(args, "require_review")
+            if required_review:
+                approved = (current["success"] and current["review"].get("status") == "passed"
+                            and current["review"].get("level") == required_review)
+                if not approved:
+                    return _envelope("current", snapshot, wm, status="fail_closed", authority="unresolved",
+                                     errors=[{"code": "REVIEW_REQUIRED", "detail": "当前精确报告未通过指定审校；禁止回退旧success"}],
+                                     error_semantic="REVIEW_REQUIRED")
             if current["success"]:
                 rows = [_report_item(current)]
             else:
@@ -263,6 +274,17 @@ def query(args):
         if entity and not rows:
             return _envelope("current", snapshot, wm, status="error", authority="unresolved",
                              errors=[{"code": "NOT_FOUND", "detail": f"实体不存在: {entity}"}], error_semantic="NOT_FOUND")
+        required_review = _args(args, "require_review")
+        if required_review and entity != "CURRENT":
+            rows = [item for item in rows if item["entity_id"].startswith("report:")
+                    and item.get("current") is True
+                    and item.get("verdict") == "STOP_SUCCESS"
+                    and item.get("review", {}).get("status") == "passed"
+                    and item.get("review", {}).get("level") == required_review]
+            if not rows:
+                return _envelope("current", snapshot, wm, status="fail_closed", authority="unresolved",
+                                 errors=[{"code": "REVIEW_REQUIRED", "detail": "无满足审校级别的精确报告"}],
+                                 error_semantic="REVIEW_REQUIRED")
         rows.sort(key=lambda item: (item.get("topic_slug", ""), item.get("finished_at", ""), item["entity_id"]))
         return _envelope("current", snapshot, wm, rows[:limit])
 

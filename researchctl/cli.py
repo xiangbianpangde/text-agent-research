@@ -26,6 +26,18 @@ def main(argv=None) -> int:
                    help="canonical 输出布局（默认 legacy；支持 research-tool）")
     p.add_argument("--db", default=None, help="SQLite 派生索引路径（默认 <root>/.index/research.sqlite）")
     sub = p.add_subparsers(dest="command", required=True)
+    sp = sub.add_parser("capabilities", help="Return versioned reader capabilities")
+    sp.set_defaults(func=lambda args: {"status": "error", "error_semantic": "UNSUPPORTED_OPERATION"})
+
+    sp = sub.add_parser("evidence", help="Read exact full source bodies before report completion")
+    sp.add_argument("--snapshot", required=True)
+    sp.add_argument("--snapshot-hash", required=True)
+    sp.add_argument("--view", choices=("graph", "body"), default="body")
+    sp.add_argument("--source-id", default=None)
+    sp.add_argument("--text", default=None)
+    sp.add_argument("--offset", type=int, default=0)
+    sp.add_argument("--limit", type=int, default=50)
+    sp.set_defaults(func=lambda args: {"status": "error", "error_semantic": "UNSUPPORTED_OPERATION"})
 
     sp = sub.add_parser("index", help="构建/重建派生 SQLite 索引")
     sp.add_argument("--commit", default="HEAD", help="legacy git commit 引用；research-tool 忽略")
@@ -34,6 +46,7 @@ def main(argv=None) -> int:
 
     sp = sub.add_parser("query", help="结构化查询（SQLite）+ lexical 关键词检索")
     sp.add_argument("--entity", help="按 entity_id 查询")
+    sp.add_argument("--require-review", help="Adopt only the exact current report with this review level")
     sp.add_argument("--doc-type", dest="doc_type", help="按 doc_type 查询（organized/raw/run_manifest/...）")
     sp.add_argument("--status", help="按状态查询（valid/invalid/completed/...）")
     sp.add_argument("--raw", action="store_true", help="列出所有 raw 实体")
@@ -150,13 +163,20 @@ def main(argv=None) -> int:
 
     try:
         if args.layout == "research-tool":
-            allowed = {"index", "query", "sources", "trace", "history", "impact", "reconcile", "generate-index"}
+            allowed = {"capabilities", "evidence", "index", "query", "sources", "trace", "history", "impact", "reconcile", "generate-index"}
             if args.command not in allowed:
                 from .layouts.research_tool import error_result, LayoutError
                 out = error_result(args.command, LayoutError(
                     f"research-tool layout 仅允许: {', '.join(sorted(allowed))}",
                     "UNSUPPORTED_OPERATION",
                 ))
+            elif args.command == "capabilities":
+                out = {"status": "success", "layout": "research-tool", "contracts": [
+                    "retrieval-manifest/v1", "report-review/v1", "evidence-snapshot/v1"
+                ]}
+            elif args.command == "evidence":
+                from .layouts.evidence_snapshot import execute
+                out = execute(args)
             elif args.command == "index":
                 out = args.func(args)
             else:

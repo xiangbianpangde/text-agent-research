@@ -425,10 +425,20 @@ def _evidence(snapshot, run):
         final_map[sid] = source
     for source in manifest["citation_sources"]:
         object_value(source, "citation_source")
-        require({"clean_path", "clean_artifact_sha256", "body_sha256", "source_id", "locator", "title", "raw_path"} <= set(source),
+        require({"clean_path", "clean_artifact_sha256", "body_sha256", "source_id", "locator", "raw_path"} <= set(source),
                 "citation_source 缺少规范字段")
         sid = text(source.get("source_id"), "citation_source.source_id")
         require(sid in final_map and sid not in run["clean"], "citation_sources 身份重复或不在 final.sources")
+        # v1 producer omitted title; derive only from the same pinned final source.
+        source = dict(source)
+        expected_title = final_map[sid].get("title")
+        if expected_title is not None:
+            require(source.get("title", expected_title) == expected_title,
+                    "citation_source title 与 final 不符")
+            source["title"] = expected_title
+        else:
+            # Older v1 graphs omitted title; it is descriptive metadata, never identity.
+            source["title"] = source.get("title", "")
         path = relative(source.get("clean_path"))
         raw_path = relative(source.get("raw_path"))
         raw = run["raw"].get(raw_path)
@@ -503,6 +513,33 @@ def _span(span, sources):
     require(text(span.get("text"), "citation.text") == source["text"][start:end], "citation clean span 与正文不符", "HASH_MISMATCH")
 
 
+def _review(snapshot, run):
+    """Read append-only review records without changing execution or final identity."""
+    directory = run["prefix"] + f"runs/{run['run_id']}/reviews/"
+    records = []
+    for path in sorted(snapshot.blobs):
+        if not path.startswith(directory) or not path.endswith(".json"):
+            continue
+        value = object_value(snapshot.json(path), "report review")
+        require(value.get("schema") == "report-review/v1" and value.get("run_id") == run["run_id"],
+                "review identity/schema 无效")
+        report_pin = digest(run["manifest"]["artifact_hashes"].get("report"), "report hash", True)
+        require(value.get("report_sha256") == report_pin, "review report hash 不符", "HASH_MISMATCH")
+        evidence = relative(value.get("evidence_path"))
+        require(evidence.startswith(f"runs/{run['run_id']}/"), "review evidence 越界", "UNSAFE_PATH")
+        evidence_pin = digest(value.get("evidence_sha256"), "review evidence")
+        require(run['pins'].get(evidence) == evidence_pin,
+                'review evidence 未绑定runtime', 'HASH_MISMATCH')
+        snapshot.bytes(run["prefix"] + evidence, evidence_pin)
+        require(value.get("status") in {"passed", "rejected"}
+                and value.get("level") == "agent_source_review", "review level/status 无效")
+        text(value.get("reviewer"), "reviewer")
+        text(value.get("reason"), "review reason")
+        records.append((utc_time(value.get("reviewed_at"), "reviewed_at"), value))
+    require(len({r[0] for r in records}) == len(records), "review 时间歧义", "AMBIGUOUS_VERSION")
+    return max(records, key=lambda x: x[0])[1] if records else {"status": "not_reviewed", "level": None}
+
+
 def scan(root):
     snapshot = Snapshot(root)
     topics = []
@@ -538,8 +575,16 @@ def scan(root):
             state = object_value(snapshot.json(state_path), state_path)
             require(summary.get("run_id") == current["run_id"] and state.get("run_id") == current["run_id"],
                     f"当前运行未完成快照或与最新 record 不一致。{REBUILD}", "SOURCE_UNAVAILABLE")
-            for key in ("topic", "topic_slug", "verdict", "pipeline_complete", "stages", "stages_completed", "stages_skipped", "failed_stage", "files"):
+            for key in ("topic", "topic_slug", "verdict", "pipeline_complete", "stages", "stages_completed", "stages_skipped", "failed_stage"):
                 require(key in summary and summary[key] == current["record"][key], f"current summary.{key} 与 record 不符")
+            finals = {p: h for p, h in current["pins"].items()
+                      if p.startswith(f"runs/{current['run_id']}/final/")} if current["success"] else {}
+            actual_final = {p[len(prefix):] for p in snapshot.blobs
+                            if p.startswith(prefix + f"runs/{current['run_id']}/final/")}
+            require(actual_final == set(finals), "final 含未提交文件或缺失文件")
+            require(summary.get("files") == finals, "current summary.files 与 runtime final 集合不符")
+            require(all(finals.get(p) == h for p, h in current["record"]["files"].items()),
+                    "record canonical final pins 不在 summary 中")
             require(state == current["record"]["runtime"], "current runtime 与当前 run-record 不符")
         state_info = {k: current["record"][k] for k in ("run_id", "verdict", "pipeline_complete", "finished_at")}
         for run in topic_runs:
@@ -547,6 +592,7 @@ def scan(root):
             run["is_current"] = run is current
             run["is_latest_success"] = run is latest_success
             run["report_type"] = "report_current" if run is current else "report_latest_success" if run is latest_success else "report_historical"
+            run["review"] = _review(snapshot, run) if run["success"] else {"status": "not_reviewed", "level": None}
         runs.extend(topic_runs)
     snapshot.unchanged()
     return snapshot, runs
