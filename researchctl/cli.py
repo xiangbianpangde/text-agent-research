@@ -172,7 +172,7 @@ def main(argv=None) -> int:
                 ))
             elif args.command == "capabilities":
                 out = {"status": "success", "layout": "research-tool", "contracts": [
-                    "retrieval-manifest/v1", "report-review/v1", "evidence-snapshot/v1"
+                    "retrieval-manifest/v1", "report-review/v1", "evidence-snapshot/v1", "issue-evaluation/v1"
                 ]}
             elif args.command == "evidence":
                 from .layouts.evidence_snapshot import execute

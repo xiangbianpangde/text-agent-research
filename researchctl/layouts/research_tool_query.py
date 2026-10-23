@@ -68,6 +68,10 @@ def _run_item(run, *, kind=None, path=None, suffix=None):
         "report_type": run["report_type"],
         "current_run": run["current_run"],
         "review": run["review"],
+        "issue_evaluation": ({k: run['issue_evaluation'][k] for k in [
+            'schema', 'issue_head_sha256', 'registry_id', 'required_unresolved_total',
+            'network_sha256', 'policy_sha256', 'counts']}
+            if run.get('issue_evaluation') is not None else None),
     }
     return value
 

@@ -272,8 +272,11 @@ def _record(snapshot, topic_path, slug, rid):
     record = object_value(snapshot.json(prefix + record_path), record_path)
     manifest = object_value(snapshot.json(prefix + manifest_path), manifest_path)
     require(type(record.get("version")) is int and record["version"] == 1, "run-record.version 必须为1")
-    require(type(manifest.get("schema_version")) is int and manifest["schema_version"] == 1
-            and manifest.get("producer") == "research-tool", "仅支持 research-tool manifest v1")
+    require(type(manifest.get('schema_version')) is int and manifest['schema_version'] in {1, 2}
+            and manifest.get('producer') == 'research-tool', 'unsupported research-tool manifest version')
+    if manifest['schema_version'] == 2:
+        require(manifest.get('required_contracts') == ['issue-evaluation/v1'],
+                'manifest v2 requires explicit issue-evaluation/v1')
     for key in ("topic", "topic_slug", "run_id", "verdict", "pipeline_complete", "started_at", "finished_at", "input_fingerprint"):
         require(key in record and manifest.get(key) == record[key], f"manifest/record {key} 不一致")
     require(record["run_id"] == rid and record["topic_slug"] == slug, "运行/主题身份与目录不符")
@@ -398,6 +401,14 @@ def _record(snapshot, topic_path, slug, rid):
         _evidence(snapshot, record_data)
     else:
         require(not citations, "未成功运行不能发布 citation_sources")
+    expected_contracts = ['issue-evaluation/v1'] if record_data.get('issue_evaluation') is not None else []
+    require(manifest.get('required_contracts', []) == expected_contracts,
+            'unknown or missing manifest consumer contract')
+    require(manifest['schema_version'] == (2 if expected_contracts else 1),
+            'manifest schema does not match explicit reviewed contract')
+    if expected_contracts:
+        require(manifest.get('issue_head_sha256') == record_data['issue_evaluation']['issue_head_sha256'],
+                'manifest issue HEAD differs from committed sidecar')
     return record_data
 
 
@@ -499,6 +510,39 @@ def _evidence(snapshot, run):
         object_value(heading, "heading")
         require(text(heading.get("text"), "heading.text") in markdown, "heading 不在报告")
         require(set(_string_list(heading.get("claim_ids"), "heading.claim_ids")) <= set(run["facts"]), "heading 引用未知 claim")
+    issue_evaluation = report.get('issue_evaluation')
+    issue_path = f"runs/{run['run_id']}/final/issue-evaluation.json"
+    if issue_evaluation is not None:
+        from .issue_evaluation import verify
+        inputs = report.get('issue_inputs')
+        require(isinstance(inputs, dict) and inputs.get('schema') == 'issue-evaluation-inputs/v1',
+                'missing reviewed evaluation inputs')
+        inspect_keys = [key for key in run['envelopes'] if key.startswith('inspect:')]
+        require(inspect_keys, 'reviewed report has no committed inspection')
+        current_key = max(inspect_keys, key=lambda key: int(key.split(':')[1]))
+        current_entry = run['record']['runtime']['completed_stages'][current_key]
+        current_inspection = run['envelopes'][current_key]['result']
+        require(inputs.get('inspection_stage_key') == current_key
+                and inputs.get('inspection_artifact_sha256') == current_entry['artifact_digest']
+                and inputs.get('inspection_sha256') == sha(json_text(current_inspection).encode())
+                and inputs.get('raw_findings') == current_inspection.get('findings'),
+                'issue inputs differ from authoritative latest committed inspection')
+        audit = report.get('evidence_audit')
+        require(isinstance(audit, dict), 'reviewed report requires committed evidence audit')
+        audit_path = f"runs/{run['run_id']}/final/evidence-audit.json"
+        require(audit_path in run['pins'] and snapshot.json(prefix + audit_path) == audit,
+                'reviewed evidence audit not committed or differs from envelope')
+        require(inputs.get('raw_findings') == audit.get('unresolved_findings')
+                and inputs.get('known_limitations') == audit.get('known_limitations'),
+                'reviewed inputs differ from report evidence audit')
+        verify(issue_evaluation, graph, inputs)
+        require(issue_path in run['pins'], 'issue evaluation was not committed to report')
+        require(snapshot.json(prefix + issue_path) == issue_evaluation,
+                'issue evaluation envelope/file mismatch')
+        digest(issue_evaluation.get('issue_head_sha256'), 'issue head')
+        require(issue_evaluation.get('hard_evidence_checks_waivable') is False,
+                'issue decisions cannot waive source integrity')
+    run['issue_evaluation'] = issue_evaluation
     run["report_claims"], run["nodes"] = paragraphs, nodes
 
 
@@ -531,6 +575,14 @@ def _review(snapshot, run):
         require(run['pins'].get(evidence) == evidence_pin,
                 'review evidence 未绑定runtime', 'HASH_MISMATCH')
         snapshot.bytes(run["prefix"] + evidence, evidence_pin)
+        evaluation = run.get('issue_evaluation')
+        if evaluation is not None:
+            issue_path = f"runs/{run['run_id']}/final/issue-evaluation.json"
+            require(value.get('issue_evaluation_sha256') == run['pins'].get(issue_path)
+                    and value.get('issue_head_sha256') == evaluation['issue_head_sha256']
+                    and value.get('network_sha256') == evaluation['network_sha256']
+                    and value.get('policy_sha256') == evaluation['policy_sha256'],
+                    'report review does not bind disposition versions')
         require(value.get("status") in {"passed", "rejected"}
                 and value.get("level") == "agent_source_review", "review level/status 无效")
         text(value.get("reviewer"), "reviewer")
@@ -585,6 +637,13 @@ def scan(root):
             require(summary.get("files") == finals, "current summary.files 与 runtime final 集合不符")
             require(all(finals.get(p) == h for p, h in current["record"]["files"].items()),
                     "record canonical final pins 不在 summary 中")
+            evaluation = current.get('issue_evaluation')
+            expected_contracts = ['issue-evaluation/v1'] if evaluation is not None else []
+            require(summary.get('required_contracts', []) == expected_contracts,
+                    'unknown or missing required consumer contract')
+            if evaluation is not None:
+                require(summary.get('issue_head_sha256') == evaluation['issue_head_sha256'],
+                        'summary issue head differs from committed evaluation')
             require(state == current["record"]["runtime"], "current runtime 与当前 run-record 不符")
         state_info = {k: current["record"][k] for k in ("run_id", "verdict", "pipeline_complete", "finished_at")}
         for run in topic_runs:
