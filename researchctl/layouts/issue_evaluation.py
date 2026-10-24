@@ -153,8 +153,13 @@ def _verify(evaluation, graph=None, inputs=None):
         evaluation.get("counts") == expected_counts, "evaluation counts differ from verified state"
     )
     expected_active = [i for i in active if i["required"]]
+    supplied_active = evaluation.get('active_required_issues')
+    require(isinstance(supplied_active, list)
+            and len({i['issue_id'] for i in supplied_active}) == len(supplied_active),
+            'invalid or duplicate active requirements')
     require(
-        evaluation.get("active_required_issues") == expected_active,
+        {i['issue_id']: i for i in supplied_active}
+        == {i['issue_id']: i for i in expected_active},
         "evaluation hides or invents active requirements",
     )
     require(
