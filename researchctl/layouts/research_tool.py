@@ -511,6 +511,10 @@ def _evidence(snapshot, run):
         require(text(heading.get("text"), "heading.text") in markdown, "heading 不在报告")
         require(set(_string_list(heading.get("claim_ids"), "heading.claim_ids")) <= set(run["facts"]), "heading 引用未知 claim")
     issue_evaluation = report.get('issue_evaluation')
+    grounding = report.get('grounding_audit', {})
+    semantics = grounding.get('reviewed_semantics')
+    require(semantics is None or issue_evaluation is not None,
+            'reviewed semantic extension requires issue evaluation')
     issue_path = f"runs/{run['run_id']}/final/issue-evaluation.json"
     if issue_evaluation is not None:
         from .issue_evaluation import verify
@@ -536,6 +540,13 @@ def _evidence(snapshot, run):
                 and inputs.get('known_limitations') == audit.get('known_limitations'),
                 'reviewed inputs differ from report evidence audit')
         verify(issue_evaluation, graph, inputs)
+        if semantics is not None:
+            from .issue_semantics import verify_semantics
+            verify_semantics(semantics, issue_evaluation, graph)
+            grounding_path = f"runs/{run['run_id']}/final/grounding-audit.json"
+            require(grounding_path in run['pins']
+                    and snapshot.json(prefix + grounding_path) == grounding,
+                    'report semantic grounding audit not committed or differs')
         require(issue_path in run['pins'], 'issue evaluation was not committed to report')
         require(snapshot.json(prefix + issue_path) == issue_evaluation,
                 'issue evaluation envelope/file mismatch')
