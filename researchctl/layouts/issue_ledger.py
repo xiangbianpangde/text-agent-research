@@ -174,7 +174,9 @@ def replay(state, event):
             from .issue_rules import transition
 
             transition(state, issue, op, payload)
-            if op == "classify":
+            if op == "revalidate":
+                issue["last_revalidation"] = data
+            elif op == "classify":
                 issue.update(
                     kind=payload["kind"],
                     scope=payload["scope"],
@@ -264,9 +266,10 @@ def replay(state, event):
                         "evidence_refs": payload["evidence_refs"],
                         "applicability": "active",
                     }
+            if op not in {"link_history", "revalidate"}:
+                issue["last_decision"] = data
             if op != "link_history":
                 issue.update(
-                    last_decision=data,
                     decision_scope_sha256=pin(issue["scope"]),
                     decision_network_sha256=pin(state["network"]),
                     decision_policy_sha256=pin(state["policy"]),

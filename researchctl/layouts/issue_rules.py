@@ -46,6 +46,7 @@ def transition(state, issue, operation, payload):
         "classify": {"kind", "scope"},
         "reopen": set(),
         "link_history": {"relation", "target_ref"},
+        "revalidate": {"prior_decision_sha256"},
         "decomposed": {"parts"},
         "duplicate": {"target_issue_id"},
         "superseded": {"target_issue_id"},
@@ -81,9 +82,26 @@ def transition(state, issue, operation, payload):
         "invalid scientific answer",
     )
     require(
-        issue["lifecycle"] == "closed" if operation == "reopen" else issue["lifecycle"] != "closed",
+        issue["lifecycle"] == "closed"
+        if operation == "reopen"
+        else issue["lifecycle"] != "pending_review"
+        if operation == "revalidate"
+        else issue["lifecycle"] != "closed",
         "invalid lifecycle transition",
     )
+    if operation == "revalidate":
+        from .issue_ledger import pin
+
+        prior = issue.get("last_decision")
+        require(
+            prior is not None and payload.get("prior_decision_sha256") == pin(prior),
+            "revalidation prior decision mismatch",
+        )
+        original = state["proposals"][prior["proposal_id"]]
+        require(
+            refs == original["payload"].get("evidence_refs", []) and not answered and not novel,
+            "revalidation replaces evidence/science",
+        )
     if operation == "assess":
         require(payload.get("assessment") in ASSESSMENTS, "invalid assessment")
     if operation == "classify":
